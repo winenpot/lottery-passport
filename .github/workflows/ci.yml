@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+asyncpg://lottery_passport:lottery_passport@localhost:5432/lottery_passport
+      TEST_DATABASE_URL: postgresql+asyncpg://lottery_passport:lottery_passport@localhost:5432/lottery_passport
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Start PostgreSQL
+        uses: docker://postgres:16-bookworm
+        env:
+          POSTGRES_DB: lottery_passport
+          POSTGRES_USER: lottery_passport
+          POSTGRES_PASSWORD: lottery_passport
+        options: >-
+          --health-cmd "pg_isready -U lottery_passport -d lottery_passport"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+          -p 5432:5432
+      - run: uv sync --locked
+      - run: uv run alembic upgrade head
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy app main.py
+      - run: uv run pytest
+      - run: docker build --tag lottery-passport-api:ci .

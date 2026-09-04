@@ -1,0 +1,27 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# Virtual environments
+.venv/
+
+# Local configuration and databases
+.env
+*.db
+
+# IDE and operating-system files
+.vscode/
+.idea/
+.DS_Store
+
+# Docker and deployment artifacts
+*.tar
