@@ -2,7 +2,7 @@ from functools import lru_cache
 from typing import Self
 from urllib.parse import urlparse
 
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     environment: str = "development"
     port: int = Field(default=8000, ge=1, le=65535)
     forwarded_allow_ips: str = "127.0.0.1"
+    api_key: SecretStr | None = None
+    log_level: str = "INFO"
+    log_json: bool = True
+    rate_limit_requests: int = Field(default=60, ge=1, le=10_000)
+    rate_limit_window_seconds: int = Field(default=60, ge=1, le=3_600)
     database_url: str = Field(
         default="postgresql+asyncpg://postgres:postgres@localhost:5432/lottery_passport"
     )
@@ -24,6 +29,15 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalize_async_database_url(cls, value: str) -> str:
+        if value.startswith("postgres://"):
+            return value.replace("postgres://", "postgresql+asyncpg://", 1)
+        if value.startswith("postgresql://"):
+            return value.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return value
+
     @model_validator(mode="after")
     def reject_local_database_outside_development(self) -> Self:
         deployment_environments = {"demo", "staging", "production"}
@@ -36,6 +50,8 @@ class Settings(BaseSettings):
             raise ValueError(
                 "DATABASE_URL must reference an external database outside development"
             )
+        if self.environment.lower() in deployment_environments and self.api_key is None:
+            raise ValueError("API_KEY must be configured outside development")
         return self
 
 

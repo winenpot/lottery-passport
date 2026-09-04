@@ -34,6 +34,19 @@ Production-like environments reject local hosts such as `localhost` and
 service. Credentials are supplied by the database provider through the URI;
 they are not committed to this repository.
 
+Render generates `API_KEY` as a secret environment variable. CORS origins and
+rate-limit settings are also environment-driven. The API key is reserved for
+future internal/admin routes; public health endpoints remain unauthenticated.
+Set `CORS_ORIGINS` in Render to a JSON array containing the exact frontend
+origins, for example `["https://frontend.example.com"]`; do not use `*` when
+credentials or authenticated browser requests are introduced.
+
+Logs are emitted as structured JSON to stdout using the standard Python logging
+API. Render can collect these logs directly, and a Logfire integration can be
+added later as an output/telemetry adapter without coupling application code to
+that vendor. Request logs contain correlation IDs and operational metadata, but
+never API keys, authorization headers, request bodies, or exception messages.
+
 The Blueprint uses Render's Free PostgreSQL plan for demonstration and public
 validation only. Free Postgres is temporary/demo-only storage and must not be
 treated as durable production data. Before production use, select a durable

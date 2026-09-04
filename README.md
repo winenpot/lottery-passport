@@ -59,6 +59,22 @@ Format code with `uv run ruff format .`.
 
 Configuration is read from environment variables or `.env`. See
 [`.env.example`](.env.example). Secrets must remain outside source control.
+`CORS_ORIGINS` is a JSON array of explicitly permitted origins. `API_KEY` is a
+secret for future internal/admin routes and is compared in constant time; it is
+not required for `/health` or `/ready`. Demo, staging, and production require
+`API_KEY` and an external `DATABASE_URL`. Render's standard `postgresql://`
+URI is normalized to the async `asyncpg` driver automatically.
+
+The current rate limiter is process-local and keyed by the direct client IP.
+It is appropriate for the single-container demo, but distributed deployments
+should move rate-limit state to a shared store such as Redis before scaling the
+API horizontally.
+
+Application logs use standard Python logging and structured JSON on stdout.
+Each HTTP response includes an `X-Request-ID`, and request logs include that ID,
+method, path, status, latency, and client IP. Credentials and request headers
+are deliberately excluded. This output can be collected by Render or forwarded
+to Logfire later without adding a Logfire dependency to the application.
 
 ## Architecture
 

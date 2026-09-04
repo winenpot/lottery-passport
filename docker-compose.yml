@@ -21,6 +21,11 @@ services:
       APP_NAME: Lottery Passport API
       ENVIRONMENT: development
       PORT: 8000
+      API_KEY: local_development_only
+      LOG_LEVEL: INFO
+      LOG_JSON: "true"
+      RATE_LIMIT_REQUESTS: 60
+      RATE_LIMIT_WINDOW_SECONDS: 60
       DATABASE_URL: postgresql+asyncpg://lottery_passport:local_development_only@postgres:5432/lottery_passport
       DB_CONNECT_TIMEOUT_SECONDS: 5
       FORWARDED_ALLOW_IPS: 127.0.0.1
