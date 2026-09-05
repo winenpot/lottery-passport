@@ -18,6 +18,16 @@ services:
       - key: API_KEY
         generateValue: true
         sync: false
+      - key: EMAIL_PROVIDER
+        value: unconfigured
+      - key: AUTH_CHALLENGE_TTL_SECONDS
+        value: 600
+      - key: AUTH_SESSION_TTL_SECONDS
+        value: 2592000
+      - key: AUTH_MAX_VERIFICATION_ATTEMPTS
+        value: 5
+      - key: SESSION_COOKIE_NAME
+        value: lottery_passport_session
       - key: LOG_LEVEL
         value: INFO
       - key: LOG_JSON

@@ -1,7 +1,12 @@
 from typing import Self
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from app.application.ports import ReadinessPort
 from app.core.config import Settings
@@ -13,6 +18,9 @@ class PostgreSQLAdapter(ReadinessPort):
             settings.database_url,
             connect_args={"timeout": settings.db_connect_timeout_seconds},
             pool_pre_ping=True,
+        )
+        self.session_factory = async_sessionmaker(
+            self.engine, class_=AsyncSession, expire_on_commit=False
         )
 
     async def check_connection(self) -> None:

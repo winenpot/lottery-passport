@@ -12,6 +12,12 @@ depend on those technologies; the dependency direction points inward through
 protocols. SQLAlchemy uses async PostgreSQL access; Alembic is an explicit
 deployment step rather than an application-startup side effect.
 
+Phase 2 adds a framework-free identity and authentication application service.
+It depends on ports for users, challenges, sessions, clocks, code generation,
+and email delivery. PostgreSQL repositories and the development email adapter
+implement those ports under `app/infrastructure`; FastAPI only maps HTTP and
+cookies to the service.
+
 The intended deployment boundary is:
 
 ```text
@@ -42,4 +48,11 @@ The product domain will contain seven campaign/product passports:
 A user may have progress in multiple passports. Future modeling should use a
 `UserPassport[]` relationship or equivalent campaign-scoped structure, not one
 generic `User.passport_points` field. Passport scoring and prize logic are
-intentionally not implemented in Phase 1.
+intentionally not implemented in Phase 2.
+
+## Authentication terminology
+
+User authentication is passwordless and session-based. The future campaign
+domain must not use a single generic API key or a singular passport score as a
+user identity or progress model. Machine-to-machine API keys remain a separate
+integration concern.

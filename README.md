@@ -1,9 +1,10 @@
 # Lottery Passport
 
-Phase 1 provides the deployable backend foundation for the campaign platform:
+Phase 2 provides identity and passwordless authentication on top of the
+deployable Phase 1 backend foundation:
 FastAPI, typed settings, async PostgreSQL access, Alembic, health/readiness
-checks, and CI quality gates. Product behavior is intentionally deferred to
-later phases.
+checks, CI quality gates, lightweight users, sessions, and authentication
+challenges. Campaign and product behavior is intentionally deferred.
 
 ## Local setup
 
@@ -41,6 +42,11 @@ uv run uvicorn main:app --reload
 The API is available at `http://127.0.0.1:8000`. OpenAPI is at
 `http://127.0.0.1:8000/docs`.
 
+For development authentication, call `POST /api/v1/auth/request`, then read
+the generated code from the in-memory development email adapter in tests. A
+real email provider must be configured before enabling passwordless login for
+deployed users.
+
 ## Checks
 
 Unit and API tests do not require PostgreSQL. To run the PostgreSQL integration
@@ -59,7 +65,8 @@ Format code with `uv run ruff format .`.
 
 Configuration is read from environment variables or `.env`. See
 [`.env.example`](.env.example). Secrets must remain outside source control.
-`CORS_ORIGINS` is a JSON array of explicitly permitted origins. `API_KEY` is a
+`CORS_ORIGINS` is a JSON array of explicitly permitted origins or `*` for
+machine-to-machine use without browser credentials. `API_KEY` is a
 secret for future internal/admin routes and is compared in constant time; it is
 not required for `/health` or `/ready`. Demo, staging, and production require
 `API_KEY` and an external `DATABASE_URL`. Render's standard `postgresql://`

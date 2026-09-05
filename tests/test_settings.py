@@ -9,6 +9,13 @@ def test_settings_use_typed_defaults() -> None:
     assert settings.environment == "development"
     assert settings.db_connect_timeout_seconds == 5
     assert settings.database_url.startswith("postgresql+asyncpg://")
+    assert settings.allowed_cors_origins == ["http://localhost:3000"]
+
+
+def test_wildcard_cors_origin_is_supported() -> None:
+    settings = Settings(cors_origins="*")
+
+    assert settings.allowed_cors_origins == ["*"]
 
 
 def test_development_can_use_local_database() -> None:

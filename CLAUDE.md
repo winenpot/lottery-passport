@@ -30,9 +30,11 @@ adapters in integration tests.
 
 ## Current boundaries
 
-The Phase 1 readiness check demonstrates the pattern: `ReadinessChecker` owns
-the application behavior, `ReadinessPort` defines the required capability, and
-`PostgreSQLAdapter` supplies the infrastructure implementation.
+The Phase 1 readiness check and Phase 2 authentication service demonstrate the
+pattern: application behavior owns use cases, protocols define required
+capabilities, and PostgreSQL/email adapters supply infrastructure
+implementations. `AuthenticationService` must remain independent of FastAPI,
+SQLAlchemy, and email vendors.
 
 The future model has seven campaign/product passports: Paris, Berlin, Pattaya,
 Mexico, Madrid, Tokyo, and Moscow. Model progress as multiple user passports,

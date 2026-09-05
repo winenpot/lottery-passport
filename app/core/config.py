@@ -1,3 +1,4 @@
+import json
 from functools import lru_cache
 from typing import Self
 from urllib.parse import urlparse
@@ -12,6 +13,11 @@ class Settings(BaseSettings):
     port: int = Field(default=8000, ge=1, le=65535)
     forwarded_allow_ips: str = "127.0.0.1"
     api_key: SecretStr | None = None
+    email_provider: str = "development"
+    auth_challenge_ttl_seconds: int = Field(default=600, ge=60, le=3_600)
+    auth_session_ttl_seconds: int = Field(default=2_592_000, ge=300, le=31_536_000)
+    auth_max_verification_attempts: int = Field(default=5, ge=1, le=20)
+    session_cookie_name: str = "lottery_passport_session"
     log_level: str = "INFO"
     log_json: bool = True
     rate_limit_requests: int = Field(default=60, ge=1, le=10_000)
@@ -20,7 +26,7 @@ class Settings(BaseSettings):
         default="postgresql+asyncpg://postgres:postgres@localhost:5432/lottery_passport"
     )
     db_connect_timeout_seconds: int = Field(default=5, ge=1, le=60)
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    cors_origins: str = '["http://localhost:3000"]'
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -53,6 +59,24 @@ class Settings(BaseSettings):
         if self.environment.lower() in deployment_environments and self.api_key is None:
             raise ValueError("API_KEY must be configured outside development")
         return self
+
+    @property
+    def allowed_cors_origins(self) -> list[str]:
+        if self.cors_origins.strip() == "*":
+            return ["*"]
+        try:
+            parsed = json.loads(self.cors_origins)
+        except json.JSONDecodeError:
+            return [origin.strip() for origin in self.cors_origins.split(",")]
+        if not isinstance(parsed, list) or not all(
+            isinstance(origin, str) for origin in parsed
+        ):
+            raise ValueError("CORS_ORIGINS must be '*' or a JSON array of strings")
+        return parsed
+
+    @property
+    def secure_session_cookies(self) -> bool:
+        return self.environment.lower() != "development"
 
 
 @lru_cache

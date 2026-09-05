@@ -22,6 +22,11 @@ services:
       ENVIRONMENT: development
       PORT: 8000
       API_KEY: local_development_only
+      EMAIL_PROVIDER: development
+      AUTH_CHALLENGE_TTL_SECONDS: 600
+      AUTH_SESSION_TTL_SECONDS: 2592000
+      AUTH_MAX_VERIFICATION_ATTEMPTS: 5
+      SESSION_COOKIE_NAME: lottery_passport_session
       LOG_LEVEL: INFO
       LOG_JSON: "true"
       RATE_LIMIT_REQUESTS: 60
