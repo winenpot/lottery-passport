@@ -18,6 +18,9 @@ services:
       - key: API_KEY
         generateValue: true
         sync: false
+      - key: REDEMPTION_CODE_PEPPER
+        generateValue: true
+        sync: false
       - key: EMAIL_PROVIDER
         value: unconfigured
       - key: AUTH_CHALLENGE_TTL_SECONDS

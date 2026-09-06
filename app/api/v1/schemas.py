@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.domain.passports import PassportProgress
 from app.domain.users import User
 
 
@@ -43,3 +44,21 @@ class UserResponse(BaseModel):
 
 class UserUpdate(BaseModel):
     display_name: str | None = Field(default=None, max_length=100)
+
+
+class PassportProgressResponse(BaseModel):
+    campaign: str
+    points: int
+    updated_at: datetime
+
+    @classmethod
+    def from_domain(cls, progress: PassportProgress) -> "PassportProgressResponse":
+        return cls(
+            campaign=progress.campaign.value,
+            points=progress.points,
+            updated_at=progress.updated_at,
+        )
+
+
+class RedeemCodeRequest(BaseModel):
+    code: str = Field(min_length=9, max_length=9)

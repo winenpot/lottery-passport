@@ -8,7 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.middleware import RateLimitMiddleware, RequestLoggingMiddleware
 from app.api.routes import router
 from app.application.authentication import AuthenticationService, AuthenticationSettings
+from app.application.passports import PassportService
 from app.application.ports import ReadinessChecker
+from app.application.redemption_codes import RedemptionService
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.infrastructure.authentication import (
@@ -19,6 +21,8 @@ from app.infrastructure.email import DevelopmentEmailSender, UnavailableEmailSen
 from app.infrastructure.postgres.database import PostgreSQLAdapter
 from app.infrastructure.postgres.repositories import (
     PostgreSQLChallengeRepository,
+    PostgreSQLPassportRepository,
+    PostgreSQLRedemptionCodeRepository,
     PostgreSQLSessionRepository,
     PostgreSQLUserRepository,
 )
@@ -49,6 +53,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             max_verification_attempts=resolved_settings.auth_max_verification_attempts,
         ),
     )
+    passport_repository = PostgreSQLPassportRepository(database.session_factory)
+    passport_service = PassportService(passports=passport_repository)
+    redemption_service = RedemptionService(
+        codes=PostgreSQLRedemptionCodeRepository(database.session_factory),
+        passports=passport_repository,
+        clock=SystemClock(),
+        pepper=(
+            resolved_settings.redemption_code_pepper.get_secret_value()
+            if resolved_settings.redemption_code_pepper is not None
+            else None
+        ),
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -75,6 +91,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(router)
     application.state.readiness_checker = readiness_checker
     application.state.authentication_service = authentication_service
+    application.state.passport_service = passport_service
+    application.state.redemption_service = redemption_service
     application.state.email_sender = email_sender
     application.state.settings = resolved_settings
     return application

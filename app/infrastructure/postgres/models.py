@@ -1,7 +1,15 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Uuid
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    Uuid,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -88,3 +96,46 @@ class SessionModel(Base):
         Index("ix_auth_sessions_user_id", "user_id"),
         Index("ix_auth_sessions_expiration", "expires_at", "revoked_at"),
     )
+
+
+class PassportProgressModel(Base):
+    __tablename__ = "passport_progress"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    campaign: Mapped[str] = mapped_column(String(20), nullable=False)
+    points: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_passport_progress_user_id", "user_id"),
+        UniqueConstraint(
+            "user_id", "campaign", name="uq_passport_progress_user_campaign"
+        ),
+    )
+
+
+class RedemptionCodeModel(Base):
+    __tablename__ = "redemption_codes"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    city: Mapped[str] = mapped_column(String(2), nullable=False)
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    redeemed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    redeemed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    __table_args__ = (Index("ix_redemption_codes_city", "city"),)

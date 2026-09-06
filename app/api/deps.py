@@ -4,7 +4,9 @@ from fastapi import Depends, HTTPException, Request, Security, status
 from fastapi.security import APIKeyCookie
 
 from app.application.authentication import AuthenticationError, AuthenticationService
+from app.application.passports import PassportService
 from app.application.ports import ReadinessChecker
+from app.application.redemption_codes import RedemptionService
 from app.domain.users import User
 
 session_cookie = APIKeyCookie(
@@ -20,6 +22,14 @@ def get_readiness_checker(request: Request) -> ReadinessChecker:
 
 def get_authentication_service(request: Request) -> AuthenticationService:
     return cast(AuthenticationService, request.app.state.authentication_service)
+
+
+def get_passport_service(request: Request) -> PassportService:
+    return cast(PassportService, request.app.state.passport_service)
+
+
+def get_redemption_service(request: Request) -> RedemptionService:
+    return cast(RedemptionService, request.app.state.redemption_service)
 
 
 async def get_current_user(

@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     port: int = Field(default=8000, ge=1, le=65535)
     forwarded_allow_ips: str = "127.0.0.1"
     api_key: SecretStr | None = None
+    redemption_code_pepper: SecretStr | None = None
     email_provider: str = "development"
     auth_challenge_ttl_seconds: int = Field(default=600, ge=60, le=3_600)
     auth_session_ttl_seconds: int = Field(default=2_592_000, ge=300, le=31_536_000)
@@ -58,6 +59,13 @@ class Settings(BaseSettings):
             )
         if self.environment.lower() in deployment_environments and self.api_key is None:
             raise ValueError("API_KEY must be configured outside development")
+        if (
+            self.environment.lower() in deployment_environments
+            and self.redemption_code_pepper is None
+        ):
+            raise ValueError(
+                "REDEMPTION_CODE_PEPPER must be configured outside development"
+            )
         return self
 
     @property

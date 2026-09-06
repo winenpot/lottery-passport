@@ -18,6 +18,9 @@ htmlcov/
 .env
 *.db
 
+# Manufacturing exports contain raw, unhashed redemption codes
+var/redemption-codes/
+
 # IDE and operating-system files
 .vscode/
 .idea/
