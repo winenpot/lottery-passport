@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.application.app_config import AppConfig
 from app.application.redemption_codes import RedemptionResult
 from app.application.wallets import WalletView
 from app.domain.passports import CAMPAIGN_BY_CITY, PassportProgress
@@ -40,6 +41,9 @@ class UserResponse(BaseModel):
     id: UUID
     identifier: str
     display_name: str | None
+    nickname: str | None
+    terms_accepted: bool
+    profile_complete: bool
     account_status: str
     verification_status: str
     role: str
@@ -52,6 +56,9 @@ class UserResponse(BaseModel):
             id=user.id,
             identifier=user.identifier,
             display_name=user.display_name,
+            nickname=user.nickname,
+            terms_accepted=user.terms_accepted_at is not None,
+            profile_complete=user.profile_complete,
             account_status=user.account_status.value,
             verification_status=user.verification_status.value,
             role=user.role.value,
@@ -68,7 +75,55 @@ class UserPageResponse(BaseModel):
 
 
 class UserUpdate(BaseModel):
+    """Every field is optional; only the ones sent are changed."""
+
     display_name: str | None = Field(default=None, max_length=100)
+    nickname: str | None = Field(
+        default=None,
+        max_length=64,
+        description="3-16 characters; rules in docs/SECURITY.md.",
+    )
+    accept_terms_version: str | None = Field(
+        default=None, max_length=20, description="Must equal ``terms_version``."
+    )
+
+
+class NicknameLimits(BaseModel):
+    min_length: int
+    max_length: int
+
+
+class ConfigLimits(BaseModel):
+    scans_per_day: int
+
+
+class ConfigResponse(BaseModel):
+    server_time: datetime
+    timezone: str
+    day_key: str
+    week_key: str
+    day_ends_at: datetime
+    week_ends_at: datetime
+    terms_version: str
+    limits: ConfigLimits
+    nickname: NicknameLimits
+
+    @classmethod
+    def from_domain(cls, config: AppConfig) -> "ConfigResponse":
+        return cls(
+            server_time=config.server_time,
+            timezone=config.timezone,
+            day_key=config.period.day_key,
+            week_key=config.period.week_key,
+            day_ends_at=config.period.day_ends_at,
+            week_ends_at=config.period.week_ends_at,
+            terms_version=config.terms_version,
+            limits=ConfigLimits(scans_per_day=config.scans_per_day),
+            nickname=NicknameLimits(
+                min_length=config.nickname_min_length,
+                max_length=config.nickname_max_length,
+            ),
+        )
 
 
 class PassportProgressResponse(BaseModel):

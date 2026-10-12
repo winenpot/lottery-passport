@@ -71,6 +71,73 @@
         "title": "AuthenticationVerification",
         "type": "object"
       },
+      "ConfigLimits": {
+        "properties": {
+          "scans_per_day": {
+            "title": "Scans Per Day",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "scans_per_day"
+        ],
+        "title": "ConfigLimits",
+        "type": "object"
+      },
+      "ConfigResponse": {
+        "properties": {
+          "day_ends_at": {
+            "format": "date-time",
+            "title": "Day Ends At",
+            "type": "string"
+          },
+          "day_key": {
+            "title": "Day Key",
+            "type": "string"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/ConfigLimits"
+          },
+          "nickname": {
+            "$ref": "#/components/schemas/NicknameLimits"
+          },
+          "server_time": {
+            "format": "date-time",
+            "title": "Server Time",
+            "type": "string"
+          },
+          "terms_version": {
+            "title": "Terms Version",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "week_ends_at": {
+            "format": "date-time",
+            "title": "Week Ends At",
+            "type": "string"
+          },
+          "week_key": {
+            "title": "Week Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "server_time",
+          "timezone",
+          "day_key",
+          "week_key",
+          "day_ends_at",
+          "week_ends_at",
+          "terms_version",
+          "limits",
+          "nickname"
+        ],
+        "title": "ConfigResponse",
+        "type": "object"
+      },
       "ErrorDetail": {
         "properties": {
           "code": {
@@ -161,6 +228,24 @@
           "created_at"
         ],
         "title": "LedgerEntryResponse",
+        "type": "object"
+      },
+      "NicknameLimits": {
+        "properties": {
+          "max_length": {
+            "title": "Max Length",
+            "type": "integer"
+          },
+          "min_length": {
+            "title": "Min Length",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "min_length",
+          "max_length"
+        ],
+        "title": "NicknameLimits",
         "type": "object"
       },
       "PassportProgressResponse": {
@@ -304,9 +389,28 @@
             "title": "Identifier",
             "type": "string"
           },
+          "nickname": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nickname"
+          },
+          "profile_complete": {
+            "title": "Profile Complete",
+            "type": "boolean"
+          },
           "role": {
             "title": "Role",
             "type": "string"
+          },
+          "terms_accepted": {
+            "title": "Terms Accepted",
+            "type": "boolean"
           },
           "updated_at": {
             "format": "date-time",
@@ -322,6 +426,9 @@
           "id",
           "identifier",
           "display_name",
+          "nickname",
+          "terms_accepted",
+          "profile_complete",
           "account_status",
           "verification_status",
           "role",
@@ -332,7 +439,21 @@
         "type": "object"
       },
       "UserUpdate": {
+        "description": "Every field is optional; only the ones sent are changed.",
         "properties": {
+          "accept_terms_version": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Must equal ``terms_version``.",
+            "title": "Accept Terms Version"
+          },
           "display_name": {
             "anyOf": [
               {
@@ -344,6 +465,19 @@
               }
             ],
             "title": "Display Name"
+          },
+          "nickname": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "3-16 characters; rules in docs/SECURITY.md.",
+            "title": "Nickname"
           }
         },
         "title": "UserUpdate",
@@ -662,6 +796,28 @@
         ]
       }
     },
+    "/api/v1/config": {
+      "get": {
+        "description": "No sign-in needed. Server time, the Tehran day and week keys and the limits clients must use instead of the phone clock. Lounges and the avatar/game catalogues are not included yet.",
+        "operationId": "get_config",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Client configuration",
+        "tags": [
+          "config"
+        ]
+      }
+    },
     "/api/v1/me": {
       "get": {
         "operationId": "get_me",
@@ -698,7 +854,7 @@
         ]
       },
       "patch": {
-        "description": "Only ``display_name`` can be changed here today.",
+        "description": "Send any of ``display_name``, ``nickname`` and ``accept_terms_version``; only the fields sent change. ``profile_complete`` becomes true once a nickname is set and the terms are accepted.",
         "operationId": "update_me",
         "requestBody": {
           "content": {
@@ -731,15 +887,25 @@
             },
             "description": "Not signed in"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "NICKNAME_TAKEN"
+          },
           "422": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "NICKNAME_INVALID or TERMS_VERSION_INVALID"
           }
         },
         "security": [
@@ -979,6 +1145,10 @@
     {
       "description": "Sign-in and session lifecycle. See API_CONTRACT.md#authentication.",
       "name": "authentication"
+    },
+    {
+      "description": "Client configuration. See API_CONTRACT.md#config-and-profile.",
+      "name": "config"
     },
     {
       "description": "The signed-in player's own profile. See API_CONTRACT.md#config-and-profile.",

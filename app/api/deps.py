@@ -5,9 +5,11 @@ from fastapi.security import APIKeyCookie
 
 from app.api.errors import ApiError
 from app.application.admin_users import AdminUserService
+from app.application.app_config import AppConfigService
 from app.application.authentication import AuthenticationError, AuthenticationService
 from app.application.passports import PassportService
 from app.application.ports import ReadinessChecker
+from app.application.profile import ProfileService
 from app.application.redemption_codes import RedemptionService
 from app.application.wallets import WalletService
 from app.domain.users import User, UserRole
@@ -21,6 +23,14 @@ session_cookie = APIKeyCookie(
 
 def get_readiness_checker(request: Request) -> ReadinessChecker:
     return cast(ReadinessChecker, request.app.state.readiness_checker)
+
+
+def get_profile_service(request: Request) -> ProfileService:
+    return cast(ProfileService, request.app.state.profile_service)
+
+
+def get_app_config_service(request: Request) -> AppConfigService:
+    return cast(AppConfigService, request.app.state.app_config_service)
 
 
 def get_admin_user_service(request: Request) -> AdminUserService:

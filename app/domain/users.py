@@ -35,3 +35,10 @@ class User:
     role: UserRole
     created_at: datetime
     updated_at: datetime
+    nickname: str | None = None
+    terms_version: str | None = None
+    terms_accepted_at: datetime | None = None
+
+    @property
+    def profile_complete(self) -> bool:
+        return self.nickname is not None and self.terms_accepted_at is not None

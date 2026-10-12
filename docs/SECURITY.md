@@ -107,7 +107,7 @@ Nicknames are public on leaderboards and lounge screens, so they are the main in
 1. Normalize to NFC; trim; collapse internal whitespace.
 2. Allowed characters: Latin letters, digits, `_` `.` `-`, Persian letters, and the zero-width non-joiner (U+200C, needed in Persian words) but never at the start, end, or twice in a row.
 3. Reject: bidirectional control characters (U+202A–U+202E, U+2066–U+2069, U+200E, U+200F), other zero-width characters (U+200B, U+200D, U+FEFF), emoji, and anything else not allowed above.
-4. Length 3–20 grapheme clusters.
+4. Length 3–16 characters (the API contract's limit; every allowed character is a single code point, so this equals grapheme clusters).
 5. Uniqueness on a comparison key: case-folded, Arabic yeh/kaf mapped to Persian (`ي`→`ی`, `ك`→`ک`), so `Ali` and `ALI` are one name.
 6. Reserved names: `admin`, `support`, staff names, brand and lounge names; a short profanity list (Persian and English) maintained by Mehdi.
 

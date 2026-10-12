@@ -56,7 +56,7 @@ the item is closed; reopening it later goes through the swap rule.
 | B12 | D2 | Staging: Docker Compose (nginx, api, worker, postgres), TLS, `.env` from the password manager | `https://staging.../health` returns ok |
 | B13 | D4 | First **test** batch (never printed), activated on staging; give Arman 20 QR URLs | Arman redeems one from his phone |
 | B14 | D4 | First **print** batch per agreed quantities; encrypt; send; confirm checksum; record chain of custody ([CODES.md](CODES.md#handing-codes-to-the-printer)) | Factory confirms the checksum; batch stays `generated` |
-| B15 | D5 | Profile: nickname (rules in [SECURITY.md](SECURITY.md#user-generated-text)), home lounge, consent version + timestamp; `GET /api/v1/config` (cities, lounges, server time, current day/week keys) | Nickname with RTL-override or zero-width tricks is rejected |
+| B15 | D5 | **Partly done (nickname, consent, `GET /config` without lounges; lounge needs B16)** — Profile: nickname (rules in [SECURITY.md](SECURITY.md#user-generated-text)), home lounge, consent version + timestamp; `GET /api/v1/config` (cities, lounges, server time, current day/week keys) | Nickname with RTL-override or zero-width tricks is rejected |
 | B16 | D5 | `venues` table with the three lounges (name, city, public IP if known) | Shown in the profile picker |
 | B17 | D6 | Challenges: model, progress computed from data, `POST /claim` idempotent via the ledger key `challenge:<id>:<period>:<user>` | Double claim pays once (test) |
 | B18 | D7 | Manual/social submissions: URL validation (Instagram domains), status machine, approve/reject with reason, payout on approve | Approve twice pays once (test) |

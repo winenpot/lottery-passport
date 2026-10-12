@@ -99,6 +99,7 @@ Switch on `code` and show your own Persian copy. `message` is for developers and
 | `AUTH_REQUIRED` | 401 | No session, or it expired | Go to sign-in, then come back |
 | `ADMIN_REQUIRED` | 403 | Signed in, but not an admin (admin routes only) | Show "not allowed" |
 | `CURSOR_INVALID` | 400 | The `cursor` was not issued by the server | Restart from the first page |
+| `TERMS_VERSION_INVALID` | 422 | `accept_terms_version` is not the current one | Reload `/config`, show the new terms |
 | `VALIDATION_FAILED` | 422 | Body or query failed validation; `error.fields` lists the fields | Highlight the fields |
 | `PHONE_INVALID` | 422 | Not an Iranian mobile number | Highlight the field |
 | `OTP_COOLDOWN` | 429 | A code was sent less than a minute ago | Countdown from `Retry-After` |
@@ -206,7 +207,12 @@ profile setup before anything else. Errors: `OTP_INVALID`.
 
 ## Config and profile
 
-### `GET /api/v1/config` (planned, B15; no authentication)
+### `GET /api/v1/config` (live, partial; no authentication)
+
+Live today: `server_time`, `timezone`, `day_key`, `week_key`, `day_ends_at`, `week_ends_at`,
+`terms_version`, `limits.scans_per_day` and `nickname` limits. The rest of the example below
+(other limits, `avatars`, `favorite_games`, `venues`, social and support fields) is planned
+with the lounge and catalogue work (B16 and later).
 
 ```json
 {
@@ -255,9 +261,11 @@ The demo's favourite-games list is `cs, wz, fifa, dota, lol, val, wow, r6, df, b
 }
 ```
 
-Live today: `{"id", "identifier", "display_name", "account_status", "verification_status", "created_at", "updated_at"}`.
+Live today: `{"id", "identifier", "display_name", "nickname", "terms_accepted", "profile_complete",
+"account_status", "verification_status", "role", "created_at", "updated_at"}`. `avatar_id`,
+`favorite_games`, `coin_balance` and `unread_activity` come with their own tasks.
 
-### `PATCH /api/v1/me` (live for `display_name`; target fields with B15)
+### `PATCH /api/v1/me` (live for `display_name`, `nickname`, `accept_terms_version`)
 
 ```json
 {"nickname": "NightOwl", "avatar_id": "avatar-3", "favorite_games": ["val"], "accept_terms_version": "2026-10-01"}
@@ -265,13 +273,20 @@ Live today: `{"id", "identifier", "display_name", "account_status", "verificatio
 
 All fields are optional; the response is the Me object.
 
+- Only the fields sent change; `{}` changes nothing.
+- `accept_terms_version` must equal `terms_version` from `/config`; the server stores the
+  version and the time it was accepted.
 - Nickname: 3–16 characters. Allowed: Latin letters, digits, `_` `.` `-`, Persian
   letters and ZWNJ. Unique ignoring case and Arabic/Persian letter variants. No bidi
   control characters.
 - `favorite_games`: up to 5 ids from `/config`.
 - `profile_complete` becomes true once the nickname is set and the terms are accepted.
 
-Errors: `NICKNAME_INVALID`, `NICKNAME_TAKEN`, `CATALOGUE_UNKNOWN`.
+Errors: `NICKNAME_INVALID` (422), `NICKNAME_TAKEN` (409), `TERMS_VERSION_INVALID` (422, reload
+`/config`), `CATALOGUE_UNKNOWN` (with avatars and games).
+
+`POST /redemptions` does not check `profile_complete` yet; the frontend should send players
+through profile setup first, and the server-side check is a separate decision.
 
 The demo's setup has no T&C checkbox. Add one to step 3 (or replace the "points are demo"
 checkbox in step 1) and send `accept_terms_version`.

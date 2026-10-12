@@ -14,9 +14,11 @@ from app.application.authentication import (
     UserRepository,
 )
 from app.application.passports import PassportRepository
+from app.application.profile import NicknameTaken
 from app.application.wallets import WalletReader
 from app.domain.authentication import AuthenticatedSession, AuthenticationChallenge
 from app.domain.ledger import LedgerEntry, LedgerReason, Wallet
+from app.domain.nickname import Nickname
 from app.domain.passports import Campaign, PassportProgress
 from app.domain.users import AccountStatus, User, UserRole, VerificationStatus
 from app.infrastructure.postgres.models import (
@@ -39,6 +41,9 @@ def user_from_model(model: UserModel) -> User:
         role=UserRole(model.role),
         created_at=model.created_at,
         updated_at=model.updated_at,
+        nickname=model.nickname,
+        terms_version=model.terms_version,
+        terms_accepted_at=model.terms_accepted_at,
     )
 
 
@@ -164,6 +169,34 @@ class PostgreSQLUserRepository(UserRepository):
                 )
             result = await session.get(UserModel, user_id)
             return user_from_model(result) if result else None
+
+    async def update_profile(
+        self,
+        user_id: UUID,
+        now: datetime,
+        *,
+        nickname: Nickname | None,
+        terms_version: str | None,
+    ) -> User | None:
+        values: dict[str, Any] = {"updated_at": now}
+        if nickname is not None:
+            values["nickname"] = nickname.display
+            values["nickname_key"] = nickname.key
+        if terms_version is not None:
+            values["terms_version"] = terms_version
+            values["terms_accepted_at"] = now
+        try:
+            async with self._factory() as session:
+                async with session.begin():
+                    await session.execute(
+                        update(UserModel)
+                        .where(UserModel.id == user_id)
+                        .values(**values)
+                    )
+                result = await session.get(UserModel, user_id)
+                return user_from_model(result) if result else None
+        except IntegrityError as error:
+            raise NicknameTaken(nickname.display if nickname else "") from error
 
 
 class PostgreSQLChallengeRepository(AuthenticationChallengeRepository):

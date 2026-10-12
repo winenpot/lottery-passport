@@ -10,10 +10,12 @@ from app.api.errors import ApiError, api_error_handler, unhandled_error_handler
 from app.api.middleware import RateLimitMiddleware, RequestLoggingMiddleware
 from app.api.routes import router
 from app.application.admin_users import AdminUserService
+from app.application.app_config import AppConfigService
 from app.application.authentication import AuthenticationService, AuthenticationSettings
 from app.application.failure_throttle import ThrottleSettings
 from app.application.passports import PassportService
 from app.application.ports import ReadinessChecker
+from app.application.profile import ProfileService
 from app.application.redemption_codes import RedemptionService
 from app.application.unit_of_work import UnitOfWork
 from app.application.wallets import WalletService
@@ -47,6 +49,10 @@ OPENAPI_TAGS = [
         "description": (
             "Sign-in and session lifecycle. See API_CONTRACT.md#authentication."
         ),
+    },
+    {
+        "name": "config",
+        "description": "Client configuration. See API_CONTRACT.md#config-and-profile.",
     },
     {
         "name": "users",
@@ -102,6 +108,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     admin_user_service = AdminUserService(
         users=PostgreSQLUserRepository(database.session_factory)
+    )
+    profile_service = ProfileService(
+        store=PostgreSQLUserRepository(database.session_factory),
+        clock=SystemClock(),
+        current_terms_version=resolved_settings.terms_version,
+    )
+    app_config_service = AppConfigService(
+        clock=SystemClock(),
+        zone=resolved_settings.campaign_zone,
+        terms_version=resolved_settings.terms_version,
+        scans_per_day=resolved_settings.redemption_daily_limit_per_user,
     )
     passport_service = PassportService(
         passports=PostgreSQLPassportRepository(database.session_factory)
@@ -186,6 +203,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.redemption_service = redemption_service
     application.state.wallet_service = wallet_service
     application.state.admin_user_service = admin_user_service
+    application.state.profile_service = profile_service
+    application.state.app_config_service = app_config_service
     application.state.sms_sender = sms_sender
     application.state.settings = resolved_settings
     return application

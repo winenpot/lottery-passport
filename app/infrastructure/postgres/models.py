@@ -33,6 +33,14 @@ class UserModel(Base):
         String(20), nullable=False, default="unverified"
     )
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="player")
+    nickname: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    nickname_key: Mapped[str | None] = mapped_column(
+        String(64), unique=True, nullable=True
+    )
+    terms_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    terms_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )

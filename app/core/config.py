@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     redemption_daily_limit_per_user: int = Field(default=20, ge=1, le=1_000)
     redemption_max_invalid_attempts_per_hour: int = Field(default=10, ge=1, le=1_000)
     campaign_timezone: str = "Asia/Tehran"
+    # Current terms of service; players accept it by sending this exact value.
+    terms_version: str = "2026-10-01"
     kavenegar_otp_api_key: SecretStr | None = None
     kavenegar_template_login: str = "login"
     kavenegar_template_signup: str = "signup"
