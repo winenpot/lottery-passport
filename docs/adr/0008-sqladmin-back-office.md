@@ -1,6 +1,6 @@
 # ADR-0008: SQLAdmin for the back office
 
-**Status:** Accepted
+**Status:** Accepted, amended 2026-10-12 (sign-in and roles; see "Amendment" below)
 **Date:** 2026-10-07
 **Deciders:** Backend developer; Mehdi (main user)
 
@@ -15,10 +15,39 @@ custom admin frontend, and Arman's time is reserved for the player app.
 Use **SQLAdmin** (version 0.32 at the time of writing), mounted at `/admin`, served on the same
 VM but reachable only from allow-listed IPs (office, VPN, lounges) through nginx, with:
 
-- separate `admin_users` (not player accounts), passwords hashed with a slow hash, roles: `owner`, `marketing`, `venue_staff`, `support`;
+- staff sign in with their own phone number (SMS code), not with a password; who may use the panel is the `admin` role on `users` (see Amendment, which replaces the original separate `admin_users` table with passwords and four roles);
 - read-only views for the ledger, codes and redemptions;
 - custom actions for "approve/reject submission", "enter tournament results" and "adjust coins" that call the same application services as the API (never raw edits of balances);
 - an audit log row for every admin write.
+
+## Amendment (2026-10-12): staff sign in with the phone session, one `admin` role
+
+The original text planned a separate `admin_users` table (username, password hash, TOTP) and
+four roles. Before any of it was built, the project shipped phone-OTP sign-in and a
+`users.role` column (`player` / `admin`, migration 0008, `require_admin`, `scripts.admins`).
+Building a second identity system beside it would add password storage, reset flows and
+a second set of secrets for a handful of staff. So:
+
+- **Identity:** an admin is a normal user with `role = admin`. Roles are made and removed only
+  with `scripts.admins promote/demote` (database access); no API route can grant them.
+- **Panel sign-in:** entering `/admin` asks for a fresh SMS code even if the player session is
+  active. It issues a separate admin session cookie (`Path=/admin`, `HttpOnly`, `Secure`,
+  `SameSite=Strict`, about 1 hour), so a player-app XSS or a leaked player cookie does not
+  open the panel. Every request re-checks that the user still has `role = admin`
+  and is active, so demoting someone takes effect immediately.
+- **Roles:** only `admin` for now. `marketing`, `venue_staff` and `support` come back only
+  when a second real person needs fewer powers; until then every admin can do everything an
+  admin can do, so the audit log and the IP allow-list carry the weight.
+- **Unchanged:** the nginx IP allow-list, read-only ledger/codes/redemptions views, actions
+  that call the application services, and the audit log row for every admin write.
+- **Build order:** (1) the SQLAdmin mount with the sign-in above and read-only views;
+  (2) `audit_log`; (3) write actions (approve submission, adjust coins), each through its
+  application service; (4) a second factor (TOTP) if the owner wants one.
+
+**What this trades away:** SMS is a weaker second factor than password plus TOTP. A SIM swap or
+SMS interception would let someone sign in as that admin. The allow-list (they must also be on an
+office or VPN address), the 1-hour admin session, keeping the admin count small and the audit log
+are the compensating controls. Passwords, reset flows and hashes disappear from the system.
 
 ## Options considered
 
@@ -48,5 +77,7 @@ and audit log are the point, not the forms.
 
 ## Action items
 
-1. [ ] `admin_users`, `audit_log`, SQLAdmin views and actions, nginx allow-list (B20).
-2. [ ] Train Mehdi and lounge staff (B30).
+1. [ ] SQLAdmin mount with fresh-SMS admin session, read-only views (B20, step 1).
+2. [ ] `audit_log` table and a hook for every admin write (B20, step 2).
+3. [ ] Write actions through the application services; nginx allow-list (B20, steps 3 and infra).
+4. [ ] Train Mehdi and lounge staff (B30).

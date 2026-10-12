@@ -61,7 +61,7 @@ the item is closed; reopening it later goes through the swap rule.
 | B17 | D6 | Challenges: model, progress computed from data, `POST /claim` idempotent via the ledger key `challenge:<id>:<period>:<user>` | Double claim pays once (test) |
 | B18 | D7 | Manual/social submissions: URL validation (Instagram domains), status machine, approve/reject with reason, payout on approve | Approve twice pays once (test) |
 | B19 | D7 | Failed-redemption throttle per account (for example 10 `CODE_INVALID` per hour, then 429) | Test proves the 11th is refused |
-| B20 | D8 | Admin panel (SQLAdmin): separate admin accounts with roles, IP allow-list in nginx, audit log of every admin write, coin adjustment form writing ledger entries | Mehdi approves a submission himself; audit row exists |
+| B20 | D8 | Admin panel (SQLAdmin, [ADR-0008](adr/0008-sqladmin-back-office.md) as amended): `admin` role + fresh-SMS admin session (no separate admin accounts), IP allow-list in nginx, audit log of every admin write, coin adjustment form writing ledger entries | Mehdi approves a submission himself; audit row exists |
 | B21 | D8 | Weekly leaderboard per lounge and overall (coins earned, Saturday-to-Friday Tehran week), top 50 + my rank, 30–60 s in-process cache | Matches a hand-computed SQL result |
 | B22 | D11 | Tournaments: admin creates, staff enters results, payouts via ledger key `tournament:<id>:<place>` | Results entered twice pay once |
 | B23 | D9 | Production VM, deploy script (build, migrate, restart), release tags | Deploy of a tag takes under 10 minutes and is repeatable |

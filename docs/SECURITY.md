@@ -27,7 +27,7 @@ Item IDs (B10, B19, ...) refer to [TODO.md](TODO.md).
 | Coin balances and the ledger | Prizes; trust in fairness | PostgreSQL |
 | Player data: mobile numbers, nicknames | Privacy; many players are teenagers | PostgreSQL, backups |
 | Sessions and OTPs | Account takeover | Hashes in PostgreSQL; cookie in the player's browser |
-| Admin accounts | Can approve, adjust, void | `admin_users` (B20) |
+| Admin accounts | Can approve, adjust, void | `users.role = admin` (phone sign-in), B20 |
 | Backups | Contain all of the above | Off-site encrypted repository |
 
 ## Trust boundaries
@@ -84,7 +84,7 @@ Everything that crosses into the core is validated there, even from staff and ev
 | T10 | **XSS through nicknames or URLs** | Nickname allow-list (below); submission URLs parsed and re-built from an allow-listed pattern; React escaping; strict CSP (no inline scripts); no `dangerouslySetInnerHTML` | B15, B18, A15 |
 | T11 | **Unicode tricks** (right-to-left override, zero-width characters, look-alike letters) in nicknames | Rules in [User-generated text](#user-generated-text) | B15 |
 | T12 | **Reading other players' data** (IDOR) | Player endpoints use the session's user only (`/me/...`); no user IDs in player URLs | ✅ pattern; keep it |
-| T13 | **Admin account compromise** | Separate admin accounts, IP allow-list in nginx, password manager + TOTP for owner/marketing, short admin sessions, audit log | B20 |
+| T13 | **Admin account compromise** | `admin` role granted only from the command line, fresh SMS code and a separate 1-hour admin cookie for the panel, IP allow-list in nginx, role re-checked per request, audit log; TOTP optional later | B20 |
 | T14 | **Insider abuse** (coins for friends, fake approvals, tournament results for a cousin) | Every coin movement is a ledger row with the admin's ID and a reason; admin adjustments do not count on leaderboards; daily report of adjustments and approvals by person; public tournament results | Ledger ✅; B20, B21, B26 |
 | T15 | **Collusion and bots on leaderboards** | Rank by coins earned, not balance; human review of the top 20 before prizes; anomaly queries (many accounts sharing a device or a non-lounge IP) | B21, B30 |
 | T16 | **Denial of service / floods** | nginx `limit_req`, request body size limit, timeouts; FastAPI workers bounded; PostgreSQL `statement_timeout`; a domestic CDN/WAF in front if attacked | B25 |
@@ -116,8 +116,8 @@ Submission URLs: parse, accept only `https://instagram.com` or `https://www.inst
 ## Admin panel
 
 - Reachable only from allow-listed IPs (office, VPN, lounge networks) through nginx, at a path not linked from the player app.
-- Separate `admin_users` with roles: `owner` (everything), `marketing` (challenges, approvals, tournaments, adjustments up to a limit), `venue_staff` (their lounge's tournaments and results), `support` (read users and history).
-- Passwords from a password manager, hashed with a slow hash; TOTP for `owner` and `marketing`.
+- Admins are players with `role = admin` ([ADR-0008](adr/0008-sqladmin-back-office.md), amended 2026-10-12): made only with `scripts.admins promote`, no API route grants it. More roles (`marketing`, `venue_staff`, `support`) arrive when a second real person needs fewer powers.
+- No passwords. Entering the panel needs a fresh SMS code and issues a separate admin cookie (`Path=/admin`, `SameSite=Strict`, about 1 hour); the role is re-checked on every request. SMS is a weaker factor than TOTP (SIM swap), so keep the admin list short and add TOTP if the owner wants it.
 - Every write goes through the same application services as the API and writes an `audit_log` row (who, what, before/after, IP, time).
 - No raw editing of balances, ledger rows, codes or redemptions (read-only views).
 

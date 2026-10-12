@@ -237,8 +237,7 @@ erDiagram
     }
 ```
 
-Not drawn, all *planned*: `admin_users` (username, password hash, role, optional venue, TOTP),
-`audit_log` (actor, action, entity, JSON diff, IP, time), `jobs` (kind, payload, status,
+Not drawn, all *planned*: `audit_log` (actor, action, entity, JSON diff, IP, time), `jobs` (kind, payload, status,
 run_at, attempts, expires_at), `redemption_failures` (user, IP, time; for the throttle),
 `role_change_events` (actor, target user, from_role, to_role, reason, when — append-only;
 see T1.1b in the implementation plan).
