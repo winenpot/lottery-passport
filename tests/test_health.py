@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app.app import create_app
@@ -8,8 +9,26 @@ def test_health_returns_ok(client: TestClient) -> None:
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {
+        "status": "ok",
+        "version": "0.1.0",
+        "commit": None,
+        "environment": "development",
+    }
     assert response.headers["x-request-id"]
+
+
+def test_health_shows_the_deployed_commit_shortened() -> None:
+    settings = Settings(git_commit="579f8f1d2c3b4a5e6f708192a3b4c5d6e7f80912")
+    with TestClient(create_app(settings)) as test_client:
+        body = test_client.get("/health").json()
+
+    assert body["commit"] == "579f8f1"
+
+
+def test_render_commit_variable_is_the_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RENDER_GIT_COMMIT", "abcdef1234567")
+    assert Settings(_env_file=None).git_commit == "abcdef1234567"  # type: ignore[call-arg]
 
 
 def test_ready_reports_unavailable_database(client: TestClient) -> None:

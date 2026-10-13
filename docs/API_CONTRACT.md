@@ -828,9 +828,12 @@ never shift or repeat rows. Errors: `CURSOR_INVALID`, `ADMIN_REQUIRED`, `AUTH_RE
 
 ## Health
 
-`GET /health` → `{"status": "ok"}` (process is up). `GET /ready` → `{"status": "ready"}`, or
-503 if the database is unreachable. Not under `/api/v1`; used by monitoring and the Render
-health check.
+`GET /health` → `{"status": "ok", "version": "0.1.0", "commit": "579f8f1", "environment": "demo"}`
+(process is up; `commit` is the deployed git commit, so you can tell whether a backend change is
+live yet; null when unknown). `GET /ready` → `{"status": "ready"}`, or `503 SERVICE_UNAVAILABLE`
+if the database is unreachable. Not under `/api/v1`; used by monitoring and the Render health
+check. The first call after a quiet period on the free Render plan can take about a minute
+(the service sleeps); call `/health` once before a test session.
 
 ## OpenAPI
 

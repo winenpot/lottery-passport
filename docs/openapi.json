@@ -296,6 +296,51 @@
         "title": "LedgerEntryResponse",
         "type": "object"
       },
+      "LivenessResponse": {
+        "properties": {
+          "commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Deployed git commit (first 7 characters); null when unknown.",
+            "examples": [
+              "579f8f1"
+            ],
+            "title": "Commit"
+          },
+          "environment": {
+            "examples": [
+              "demo"
+            ],
+            "title": "Environment",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "examples": [
+              "0.1.0"
+            ],
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "version",
+          "commit",
+          "environment"
+        ],
+        "title": "LivenessResponse",
+        "type": "object"
+      },
       "NicknameLimits": {
         "properties": {
           "max_length": {
@@ -1169,21 +1214,21 @@
     },
     "/health": {
       "get": {
-        "description": "Always 200 once the process has started. Used by load balancers.",
+        "description": "Always 200 once the process has started. Used by load balancers. `commit` tells a frontend developer whether their requested change is deployed yet.",
         "operationId": "health",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HealthResponse"
+                  "$ref": "#/components/schemas/LivenessResponse"
                 }
               }
             },
             "description": "Successful Response"
           }
         },
-        "summary": "Process liveness",
+        "summary": "Process liveness and deployed version",
         "tags": [
           "health"
         ]
