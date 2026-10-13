@@ -353,12 +353,12 @@ async def test_a_delivery_failure_does_not_start_the_cooldown() -> None:
 async def test_a_test_number_gets_its_code_in_the_response_without_sms() -> None:
     service, _, sms, _ = build_service(test_numbers_enabled=True)
 
-    result = await service.request_challenge("0900 000 0007")
-    signed_in = await service.verify_challenge("+989000000007", result.test_code or "")
+    result = await service.request_challenge("0969 000 0007")
+    signed_in = await service.verify_challenge("+989690000007", result.test_code or "")
 
     assert result.test_code == "123456"
     assert sms.send_count == 0
-    assert signed_in.user.identifier == "+989000000007"
+    assert signed_in.user.identifier == "+989690000007"
 
 
 @pytest.mark.asyncio
@@ -367,7 +367,7 @@ async def test_real_numbers_and_disabled_test_numbers_use_sms_only() -> None:
     disabled, _, disabled_sms, _ = build_service(test_numbers_enabled=False)
 
     real = await enabled.request_challenge("0912 345 6789")
-    off = await disabled.request_challenge("0900 000 0007")
+    off = await disabled.request_challenge("0969 000 0007")
 
     assert real.test_code is None and enabled_sms.send_count == 1
     assert off.test_code is None and disabled_sms.send_count == 1

@@ -185,7 +185,7 @@ field is named `identifier` (kept for one release so an older client sending a
 The response is the same for new and known numbers. Errors: `PHONE_INVALID`,
 `OTP_COOLDOWN`, `OTP_DAILY_LIMIT`.
 
-Test numbers (demo only, never in production): `0900 000 0001` to `0900 000 0040`.
+Test numbers (demo only, never in production): any number starting `0969` (`0969 xxx xxxx`).
 No SMS is sent; the response carries the code, then verify as usual. Cooldown and
 daily limit still apply per number.
 

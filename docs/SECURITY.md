@@ -158,3 +158,7 @@ Run on D12 (B25) and before every major release.
 - [ ] Logs checked for codes, OTPs, phone numbers (grep a day of logs)
 - [ ] Rate-limit and abuse tests pass (B10, B19)
 - [ ] Concurrency tests pass on the production database version
+- [ ] OTP test numbers removed: delete `app/application/otp_test_numbers.py` and the
+      `# TODO: remove this on production` blocks (`app/application/authentication.py`,
+      `app/app.py`). They are already off when `ENVIRONMENT` is staging/production;
+      `grep -rn "TODO: remove this on production" app` must print nothing

@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Protocol
 from uuid import UUID, uuid4
 
-from app.application.otp_test_numbers import TEST_PHONE_NUMBERS
+from app.application.otp_test_numbers import is_test_phone_number
 from app.domain.authentication import AuthenticatedSession, AuthenticationChallenge
 from app.domain.phone import PhoneNumberError, normalize_iranian_mobile
 from app.domain.users import AccountStatus, User, VerificationStatus
@@ -192,7 +192,7 @@ class AuthenticationService:
         purpose = "signup" if is_new_user else "login"
         # TODO: remove this on production. Test numbers: same random code and
         # limits, but no SMS; the code goes back in the response instead.
-        if self._settings.test_numbers_enabled and phone in TEST_PHONE_NUMBERS:
+        if self._settings.test_numbers_enabled and is_test_phone_number(phone):
             await self._challenges.create(challenge)
             return replace(result, test_code=code)
         # Send before persisting: a delivery failure must not start the

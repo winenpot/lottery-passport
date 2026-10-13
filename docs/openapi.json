@@ -45,7 +45,7 @@
                 "type": "null"
               }
             ],
-            "description": "Demo only: the code itself, for the 40 test numbers 0900 000 0001-0040 (no SMS is sent). Absent for real numbers and always absent in production.",
+            "description": "Demo only: the code itself, for test numbers starting 0969 (no SMS is sent). Absent for real numbers and always absent in production.",
             "title": "Test Code"
           }
         },

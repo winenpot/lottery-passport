@@ -38,8 +38,8 @@ class AuthenticationRequested(BaseModel):
     test_code: str | None = Field(
         default=None,
         description=(
-            "Demo only: the code itself, for the 40 test numbers "
-            "0900 000 0001-0040 (no SMS is sent). Absent for real numbers and "
+            "Demo only: the code itself, for test numbers "
+            "starting 0969 (no SMS is sent). Absent for real numbers and "
             "always absent in production."
         ),
     )
