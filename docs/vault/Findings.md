@@ -189,6 +189,28 @@ Findings:
   strict/private may drop the third-party cookie). Lasting fix stays same-site
   hosting (test.torshx.com proxy, or play./api. subdomains).
 
+## Logging: tools and plain-file sizing (2026-10-13)
+
+**Status: INVESTIGATED — decision in plan C3.**
+
+- Today: JSON lines to stdout (app/core/logging.py): timestamp, level, logger,
+  request_id, method, path, status, latency_ms, client_ip. SMS logs mask phones.
+- Render: dashboard log explorer, Hobby retention 7 days, max 6,000 app log
+  lines/min per instance (excess dropped). Log streams: syslog/HTTPS to Better
+  Stack, Papertrail, Datadog, etc. (render.com/docs/logging, /log-streams).
+- Free tools: Better Stack free 3 GB logs/month, 3-day retention, 100k
+  exceptions; Grafana Cloud free 50 GB/month, 14 days (not a direct Render
+  syslog target). Foreign SaaS is risky for the domestic production server
+  (sanctions, filtering): production should not depend on it.
+- Plain files at 1M users: volume scales with requests, not users. Assume
+  100-200k daily actives x ~30 requests = 3-6M lines/day x ~260 B = 0.8-1.6 GB/day
+  raw, ~0.1-0.2 GB gzipped; peak ~500-1,000 lines/s (~0.3 MB/s). Writing and
+  storing that as text is trivial; grep over one day takes seconds. Text files
+  do not give alerts or dashboards: pair with uptime checks and an error
+  tracker (B26). Logs hold phone (masked) and IPs: set a retention limit.
+- Gap: deploy/compose.prod.yml json-file 20m x 5 keeps only ~100 MB per
+  container, about 2 hours at that peak. Raise it or rotate to daily files.
+
 ---
 
 ## Instagram and X API availability (2026-10-10)
