@@ -40,7 +40,9 @@ adapters in integration tests.
 - Printed codes: format v2 in `app/domain/codes.py` (frozen once printed);
   codes belong to `code_batches` and are redeemable only while `active`.
 - Seven city passports (Paris, Berlin, Pattaya, Mexico, Madrid, Tokyo,
-  Moscow); `passport_progress.points` counts entries in that city's draw.
+  Moscow); a passport city is a TorshX flavor (SKU, «طعم»), not a place.
+  Lounges sit in real location cities (Tehran, Ahvaz, Mashhad, Isfahan); see
+  `docs/GLOSSARY.md`. `passport_progress.points` counts entries in that city's draw.
   Parked for the MVP (ADR 0009): keep writing it, keep it out of the player
   contract.
 - Simple reads and admin CRUD do not need a port per table; add one when a
