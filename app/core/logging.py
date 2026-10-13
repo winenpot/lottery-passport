@@ -22,6 +22,7 @@ class JsonFormatter(logging.Formatter):
             "status_code",
             "latency_ms",
             "client_ip",
+            "forwarded_for",
             "error_type",
             "error_code",
             "reason",

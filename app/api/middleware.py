@@ -198,6 +198,10 @@ class RequestLoggingMiddleware:
             "latency_ms": round((monotonic() - started_at) * 1000, 2),
             "client_ip": client[0] if client else "unknown",
         }
+        # The proxy chain as received, to debug "which IP is the real client".
+        forwarded_for = Headers(scope=scope).get("x-forwarded-for")
+        if forwarded_for:
+            fields["forwarded_for"] = forwarded_for[:200]
         error_code = (scope.get("state") or {}).get("error_code")
         if error_code is not None:
             fields["error_code"] = error_code
