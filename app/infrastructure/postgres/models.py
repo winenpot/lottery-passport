@@ -64,6 +64,7 @@ class VenueModel(Base):
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     city: Mapped[str] = mapped_column(String(40), nullable=False)
     public_ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(300), nullable=True)
     active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true"
     )

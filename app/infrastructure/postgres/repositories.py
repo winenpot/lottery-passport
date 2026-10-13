@@ -212,6 +212,7 @@ def venue_from_model(model: VenueModel) -> Venue:
         city=model.city,
         public_ip=model.public_ip,
         active=model.active,
+        address=model.address,
     )
 
 

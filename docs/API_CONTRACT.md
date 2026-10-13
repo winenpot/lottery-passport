@@ -20,8 +20,8 @@ Check `GET /health` → `commit` to see which backend commit is deployed on the 
 **2026-10-13**
 - Demo data: `GET /config` now returns 5 lounges (OxinGame branches in Tehran, Ahvaz and
   Isfahan; ids `punak`, `ahvaz-golestan`, `ahvaz-kianpars`, `isfahan-khane`,
-  `isfahan-mirfenderski`; `city` is a lowercase slug, show the Persian label yourself).
-  Which of them are in the campaign is not final.
+  `isfahan-mirfenderski`) with their addresses. Mashhad is a supported city but has no lounge
+  yet. Which lounges are in the campaign is not final.
 - **Breaking:** every error now uses `{"error": {"code", "message", "request_id"}}`. Unknown
   paths (404), wrong methods (405), validation (422, with `fields`) and `/ready` 503 used to be
   FastAPI's `{"detail": ...}`.
@@ -29,8 +29,9 @@ Check `GET /health` → `commit` to see which backend commit is deployed on the 
   `X-Requested-With` (any value), or it gets `403 CSRF_REJECTED` ([rule 6](#hosts-cors-and-cookies)).
 - Added: test phone numbers `0969 xxx xxxx` (demo only): the response of `POST /auth/request`
   carries `test_code`, no SMS is sent.
-- Added: `GET /config` returns `venues` (`[{id, name, city}]`, empty until the lounges are
-  entered); `PATCH /me` accepts `home_venue_id` (`CATALOGUE_UNKNOWN` if not an active venue);
+- Added: `GET /config` returns `cities` (tehran, ahvaz, mashhad, isfahan, with Persian names)
+  and `venues` (`[{id, name, city, address}]`, `city` is one of the city ids, `address` is
+  Persian text or null); `PATCH /me` accepts `home_venue_id` (`CATALOGUE_UNKNOWN` if not an active venue);
   `GET /me` returns `home_venue_id`.
 - Added: `GET /health` returns `version`, `commit` and `environment`.
 - Demo hosting: the session cookie is `SameSite=None; Secure`; CORS also allows
@@ -282,7 +283,8 @@ profile setup before anything else. Errors: `OTP_INVALID`.
 ### `GET /api/v1/config` (live, partial; no authentication)
 
 Live today: `server_time`, `timezone`, `day_key`, `week_key`, `day_ends_at`, `week_ends_at`,
-`terms_version`, `limits.scans_per_day`, `nickname` limits and `venues` (active lounges,
+`terms_version`, `limits.scans_per_day`, `nickname` limits, `cities` (the four supported
+cities, `[{id, name}]` with Persian names: `tehran`, `ahvaz`, `mashhad`, `isfahan`) and `venues` (active lounges,
 ordered by name, each `{"id", "name", "city"}`; empty until the lounges are entered). The rest
 of the example below (other limits, `avatars`, `favorite_games`, social and support fields) is
 planned with the catalogue work.
@@ -307,7 +309,8 @@ planned with the catalogue work.
   "nickname": {"min_length": 3, "max_length": 16},
   "avatars": [{"id": "avatar-1"}, {"id": "avatar-2"}],
   "favorite_games": [{"id": "cs", "name": "CS", "short": "CS"}, {"id": "val", "name": "Valorant", "short": "VAL"}],
-  "venues": [{"id": "parsa", "name": "گیم‌سنتر پارسا", "city": "tehran"}],
+  "cities": [{"id": "tehran", "name": "تهران"}, {"id": "ahvaz", "name": "اهواز"}, {"id": "mashhad", "name": "مشهد"}, {"id": "isfahan", "name": "اصفهان"}],
+  "venues": [{"id": "parsa", "name": "گیم‌سنتر پارسا", "city": "tehran", "address": "تهران، پونک، ..."}],
   "social_platforms": ["instagram", "x"],
   "brand_accounts": {"instagram": "torshx", "x": "torshx"},
   "support": {"email": "support@torshx.com", "phone": null, "telegram": null}

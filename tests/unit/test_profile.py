@@ -125,7 +125,7 @@ class FakeClock:
 class FakeVenues:
     def __init__(self) -> None:
         self.venues = [
-            Venue(id="parsa", name="Parsa", city="tehran"),
+            Venue(id="parsa", name="Parsa", city="tehran", address="تهران، پونک"),
             Venue(id="old", name="Old", city="tehran", active=False),
         ]
 
@@ -272,7 +272,20 @@ def test_config_is_public_and_matches_the_contract() -> None:
         "terms_version": "2026-10-01",
         "limits": {"scans_per_day": 20},
         "nickname": {"min_length": 3, "max_length": 16},
-        "venues": [{"id": "parsa", "name": "Parsa", "city": "tehran"}],
+        "cities": [
+            {"id": "tehran", "name": "تهران"},
+            {"id": "ahvaz", "name": "اهواز"},
+            {"id": "mashhad", "name": "مشهد"},
+            {"id": "isfahan", "name": "اصفهان"},
+        ],
+        "venues": [
+            {
+                "id": "parsa",
+                "name": "Parsa",
+                "city": "tehran",
+                "address": "تهران، پونک",
+            }
+        ],
     }
 
 

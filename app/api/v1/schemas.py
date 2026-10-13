@@ -112,10 +112,18 @@ class ConfigLimits(BaseModel):
     scans_per_day: int
 
 
+class CityResponse(BaseModel):
+    id: str = Field(examples=["tehran"])
+    name: str = Field(description="Persian name.", examples=["تهران"])
+
+
 class VenueResponse(BaseModel):
     id: str
     name: str
     city: str
+    address: str | None = Field(
+        description="Street address in Persian; null when unknown."
+    )
 
 
 class ConfigResponse(BaseModel):
@@ -128,6 +136,7 @@ class ConfigResponse(BaseModel):
     terms_version: str
     limits: ConfigLimits
     nickname: NicknameLimits
+    cities: list[CityResponse]
     venues: list[VenueResponse]
 
     @classmethod
@@ -145,8 +154,14 @@ class ConfigResponse(BaseModel):
                 min_length=config.nickname_min_length,
                 max_length=config.nickname_max_length,
             ),
+            cities=[CityResponse(id=c.id, name=c.name) for c in config.cities],
             venues=[
-                VenueResponse(id=venue.id, name=venue.name, city=venue.city)
+                VenueResponse(
+                    id=venue.id,
+                    name=venue.name,
+                    city=venue.city,
+                    address=venue.address,
+                )
                 for venue in config.venues
             ],
         )

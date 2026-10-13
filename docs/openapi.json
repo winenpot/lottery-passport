@@ -83,6 +83,31 @@
         "title": "AuthenticationVerification",
         "type": "object"
       },
+      "CityResponse": {
+        "properties": {
+          "id": {
+            "examples": [
+              "tehran"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "description": "Persian name.",
+            "examples": [
+              "\u062a\u0647\u0631\u0627\u0646"
+            ],
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "CityResponse",
+        "type": "object"
+      },
       "ConfigLimits": {
         "properties": {
           "scans_per_day": {
@@ -98,6 +123,13 @@
       },
       "ConfigResponse": {
         "properties": {
+          "cities": {
+            "items": {
+              "$ref": "#/components/schemas/CityResponse"
+            },
+            "title": "Cities",
+            "type": "array"
+          },
           "day_ends_at": {
             "format": "date-time",
             "title": "Day Ends At",
@@ -153,6 +185,7 @@
           "terms_version",
           "limits",
           "nickname",
+          "cities",
           "venues"
         ],
         "title": "ConfigResponse",
@@ -621,6 +654,18 @@
       },
       "VenueResponse": {
         "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Street address in Persian; null when unknown.",
+            "title": "Address"
+          },
           "city": {
             "title": "City",
             "type": "string"
@@ -637,7 +682,8 @@
         "required": [
           "id",
           "name",
-          "city"
+          "city",
+          "address"
         ],
         "title": "VenueResponse",
         "type": "object"
