@@ -284,6 +284,19 @@ def run(client: Client, report: Report, code: str | None, rng: random.Random) ->
         "PATCH /me nickname + terms -> profile_complete",
         f"HTTP {profile.status} {profile.error_code() or ''}",
     )
+    venues = cfg.get("venues") or []
+    if venues:
+        picked = client.call(
+            "PATCH", "/api/v1/me", {"home_venue_id": venues[0]["id"]}, csrf=True
+        )
+        add(
+            picked.status == 200
+            and picked.json().get("home_venue_id") == venues[0]["id"],
+            "PATCH /me home_venue_id from /config venues",
+            f"HTTP {picked.status} {venues[0]['id']}",
+        )
+    else:
+        add(None, "PATCH /me home_venue_id from /config venues", "no venues yet")
     bad_venue = client.call(
         "PATCH", "/api/v1/me", {"home_venue_id": "no-such-lounge"}, csrf=True
     )
