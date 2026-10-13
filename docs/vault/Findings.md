@@ -189,6 +189,22 @@ Findings:
   strict/private may drop the third-party cookie). Lasting fix stays same-site
   hosting (test.torshx.com proxy, or play./api. subdomains).
 
+## Client IP behind Render (2026-10-13)
+
+**Status: FIXED on the demo (FORWARDED_ALLOW_IPS), verified in Render logs.**
+
+- Before: every request logged `client_ip` 10.x (Render's proxy), so the in-process
+  rate limit (60/min) was one shared bucket for all testers.
+- Chain seen in `forwarded_for`: `<client>, <Cloudflare edge>, <Render 10.x>`; the
+  direct peer of uvicorn is 127.0.0.1. Fix: trust 127.0.0.1, 10.0.0.0/8 and
+  Cloudflare's published ranges; uvicorn then returns the right-most untrusted
+  address = the real client. A spoofed `X-Forwarded-For: 9.9.9.9` is ignored.
+- The Cloudflare list can change (cloudflare.com/ips-v4, ips-v6): if client_ip
+  turns into a 104.x/172.x address again, refresh the value in render.yaml and
+  on Render. Production behind our own nginx only needs the nginx address.
+- /ready takes 17-24 ms server-side (Render logs), so Frankfurt API <-> Supabase is
+  fast; the ~1 s seen from outside is network and TLS, not the database.
+
 ## Logging: tools and plain-file sizing (2026-10-13)
 
 **Status: INVESTIGATED — decision in plan C3.**
