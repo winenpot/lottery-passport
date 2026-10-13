@@ -83,7 +83,7 @@ Docker Hub refuses Iranian IP addresses, and other foreign registries can be blo
   ```
   If no mirror works, pull on a machine that can, then `docker save postgres:16-bookworm | gzip > pg.tar.gz`, copy it, and `docker load < pg.tar.gz` on the server.
 - **Pin images by digest** after the first successful pull (`docker images --digests`), so a mirror cannot hand you something else later.
-- **Python packages**: the image installs `requirements.txt`, exported from `uv.lock` **with hashes**. Set `PIP_INDEX_URL` in `deploy/.env` to a PyPI mirror if PyPI is slow; pip rejects any file whose hash differs, so the mirror does not need to be trusted. Regenerate the file whenever dependencies change: `uv export --locked --no-dev --no-emit-project --no-header --format requirements-txt -o requirements.txt` (CI fails if you forget).
+- **Python packages**: the image installs `requirements.txt`, exported from `uv.lock` **with hashes**. Set `PIP_INDEX_URL` in `deploy/.env` to a PyPI mirror if PyPI is slow; pip rejects any file whose hash differs, so the mirror does not need to be trusted. Regenerate the file whenever dependencies change: `uv export --locked --no-default-groups --no-emit-project --no-header --format requirements-txt -o requirements.txt` (CI fails if you forget).
 - **Frontend**: Arman builds `dist/` on his machine (or in CI) and you copy the files; the server never runs `npm`.
 
 ## nginx

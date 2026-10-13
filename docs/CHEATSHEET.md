@@ -105,5 +105,5 @@ need a gitmoji, a type and a description, e.g. `✨ feat(auth): add login`.
 
 ```bash
 uv add <package>
-uv export --locked --no-dev --no-emit-project --no-header --format requirements-txt -o requirements.txt
+uv export --locked --no-default-groups --no-emit-project --no-header --format requirements-txt -o requirements.txt
 ```

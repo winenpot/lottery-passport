@@ -139,7 +139,8 @@ actually on sale: codes found early (factory staff, warehouse) are worthless unt
 
 ## Printing QR sheets for a test run
 
-`scripts/qr_sheets.py` turns a batch CSV into a cut-ready PDF: one QR per code (encoding
+Needs the `codes-print` dependency group (`uv sync` includes it; the production image
+does not, so run it on an operator machine). `scripts/qr_sheets.py` turns a batch CSV into a cut-ready PDF: one QR per code (encoding
 the exact `qr_url` column), the printed code underneath as a manual-entry fallback, crop
 marks at every cell, and the batch id plus `sheet n/N` in the page header. It is for test
 prints and planning (a factory print run still works from the CSV directly, per section 1);

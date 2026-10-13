@@ -64,8 +64,10 @@ changing behavior; update them (and any diagram) in the same commit.
   `TEST_DATABASE_URL` pointing at a migrated database so the integration and
   concurrency tests run) before completing changes.
 - Run scripts as modules: `uv run python -m scripts.<name>`.
+- Dependency groups: `dependencies` is the production runtime only (keep it
+  lean); tooling lives in groups `lint`, `test`, `dev` and `codes-print`.
 - After dependency changes, regenerate `requirements.txt` with
-  `uv export --locked --no-dev --no-emit-project --no-header --format requirements-txt -o requirements.txt`.
+  `uv export --locked --no-default-groups --no-emit-project --no-header --format requirements-txt -o requirements.txt`.
 - Migrations during the campaign are additive only (expand, migrate, contract).
 - If `app/domain/codes.py` changes, update `docs/frontend/codes.js` and
   `docs/frontend/code-test-vectors.json` together.

@@ -36,7 +36,7 @@ jobs:
       - run: uv sync --locked
       - name: requirements.txt matches uv.lock (the Docker image installs it)
         run: >-
-          uv export --locked --no-dev --no-emit-project --no-header
+          uv export --locked --no-default-groups --no-emit-project --no-header
           --format requirements-txt | diff -u requirements.txt -
       - run: uv run alembic upgrade head
       - run: uv run ruff check .

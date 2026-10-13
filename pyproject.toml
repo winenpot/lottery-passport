@@ -4,27 +4,47 @@ version = "0.1.0"
 description = "Backend foundation for a campaign passport platform"
 readme = "README.md"
 requires-python = ">=3.13,<3.15"
+# Production runtime only: this is what requirements.txt / the image installs.
+# uvicorn without [standard]: just its fast loop + HTTP parser; no reloader
+# (watchfiles), websockets or dotenv CLI in production.
 dependencies = [
 	"alembic>=1.16,<2.0",
 	"asyncpg>=0.30,<1.0",
 	"fastapi>=0.116,<1.0",
+	"httptools>=0.6",
 	"pydantic-settings>=2.10,<3.0",
-	"reportlab>=5.0.1",
-	"segno>=1.6.6",
 	"sqlalchemy[asyncio]>=2.0,<3.0",
 	"tzdata>=2026.1",
-	"uvicorn[standard]>=0.35,<1.0",
+	"uvicorn>=0.35,<1.0",
+	"uvloop>=0.21; sys_platform != 'win32' and platform_python_implementation == 'CPython'",
 ]
 
+# Local/CI only, never in the image. All are synced by default (see
+# [tool.uv] default-groups); pick one with `uv sync --only-group lint`.
 [dependency-groups]
-dev = [
-	"httpx>=0.28,<1.0",
+lint = [
 	"mypy>=1.17,<2.0",
-	"pytest>=8.4,<9.0",
-	"pytest-asyncio>=1.1,<2.0",
 	"ruff>=0.12,<1.0",
 	"types-reportlab>=5.0.0.20261008",
 ]
+test = [
+	"httpx>=0.28,<1.0",
+	"pytest>=8.4,<9.0",
+	"pytest-asyncio>=1.1,<2.0",
+]
+# Printing codes and QR sheets (scripts.qr_sheets), run on an operator's
+# machine, not on the server.
+codes-print = [
+	"reportlab>=5.0.1",
+	"segno>=1.6.6",
+]
+# `uvicorn --reload` for local development.
+dev = [
+	"watchfiles>=1.0",
+]
+
+[tool.uv]
+default-groups = ["dev", "lint", "test", "codes-print"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"

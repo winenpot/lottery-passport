@@ -38,7 +38,7 @@ FastAPI + PostgreSQL, hexagonal architecture, deployed on a domestic VM with Doc
 Requirements: Python 3.13+ and [`uv`](https://docs.astral.sh/uv/); Docker for the local database.
 
 ```bash
-uv sync
+uv sync                           # all groups: dev, lint, test, codes-print
 cp .env.example .env              # PowerShell: Copy-Item .env.example .env
 docker compose up -d postgres     # or any local PostgreSQL 16
 uv run alembic upgrade head
@@ -93,7 +93,7 @@ uv run python -m scripts.code_batches list       # batches and how many codes we
 
 Integration tests run against a real, migrated PostgreSQL: see [docs/TESTING.md](docs/TESTING.md#running-the-tests).
 After changing dependencies, regenerate the hash-locked file the Docker image uses:
-`uv export --locked --no-dev --no-emit-project --no-header --format requirements-txt -o requirements.txt`.
+`uv export --locked --no-default-groups --no-emit-project --no-header --format requirements-txt -o requirements.txt`.
 
 ## Project layout
 
