@@ -172,6 +172,23 @@ Findings:
 - CORS_ORIGINS now set to ["http://86.104.82.71:8000","http://localhost:5173"]
   for development only; production will use same-origin proxy.
 
+## Cross-site cookie + CSRF on the demo (2026-10-13)
+
+**Status: VERIFIED on Render (curl, not a browser yet).**
+→ Fed into: `../API_CONTRACT.md` "Hosts, CORS and cookies" rules 6-7, error `CSRF_REJECTED`.
+
+- Arman (2026-10-13): CORS preflight OK from http://86.104.82.71:8000; local
+  127.0.0.1:5173/5174 were rejected → added (with localhost) to Render CORS_ORIGINS.
+- Default SameSite=Lax would not send the cookie cross-site → Render demo set to
+  SESSION_COOKIE_SAMESITE=none (cookie: HttpOnly; Secure; SameSite=none).
+- CSRF guard (579f8f1): cookie-carrying POST/PATCH/DELETE need X-Requested-With
+  and an allowed Origin. Live check with test number 0969 000 0002 and Origin =
+  demo: verify 200, GET /me 200, PATCH without header 403 CSRF_REJECTED, foreign
+  origin 403, with header 200, preflight allows x-requested-with, logout 204.
+- Still open: a real browser test by Arman (Chrome should work; Safari/Firefox
+  strict/private may drop the third-party cookie). Lasting fix stays same-site
+  hosting (test.torshx.com proxy, or play./api. subdomains).
+
 ---
 
 ## Instagram and X API availability (2026-10-10)
