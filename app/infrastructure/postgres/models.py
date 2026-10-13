@@ -3,6 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -41,6 +42,11 @@ class UserModel(Base):
     terms_accepted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    home_venue_id: Mapped[str | None] = mapped_column(
+        String(40),
+        ForeignKey("venues.id", name="fk_users_home_venue_id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
@@ -49,6 +55,21 @@ class UserModel(Base):
     )
 
     __table_args__ = (Index("ix_users_identifier", "identifier"),)
+
+
+class VenueModel(Base):
+    __tablename__ = "venues"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    city: Mapped[str] = mapped_column(String(40), nullable=False)
+    public_ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
 
 class AuthenticationChallengeModel(Base):

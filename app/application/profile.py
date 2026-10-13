@@ -3,6 +3,7 @@ from typing import Protocol
 from uuid import UUID
 
 from app.application.authentication import AuthenticationError, Clock
+from app.application.venues import VenueCatalogue
 from app.domain.nickname import Nickname, parse_nickname
 from app.domain.users import User
 
@@ -15,6 +16,10 @@ class TermsVersionMismatch(Exception):
     """The client accepted a terms version that is not the current one."""
 
 
+class VenueUnknown(Exception):
+    """The picked home lounge does not exist or is no longer active."""
+
+
 class ProfileStore(Protocol):
     async def update_profile(
         self,
@@ -23,6 +28,7 @@ class ProfileStore(Protocol):
         *,
         nickname: Nickname | None,
         terms_version: str | None,
+        home_venue_id: str | None = None,
     ) -> User | None:
         """Apply the given fields in one statement; ``None`` for no such user.
 
@@ -33,9 +39,14 @@ class ProfileStore(Protocol):
 
 class ProfileService:
     def __init__(
-        self, store: ProfileStore, clock: Clock, current_terms_version: str
+        self,
+        store: ProfileStore,
+        clock: Clock,
+        current_terms_version: str,
+        venues: VenueCatalogue,
     ) -> None:
         self._store = store
+        self._venues = venues
         self._clock = clock
         self._terms_version = current_terms_version
 
@@ -45,19 +56,26 @@ class ProfileService:
         *,
         nickname: str | None,
         accept_terms_version: str | None,
+        home_venue_id: str | None = None,
     ) -> User:
-        """Raises ``NicknameError``, ``NicknameTaken`` or ``TermsVersionMismatch``."""
+        """Raises ``NicknameError``, ``NicknameTaken``, ``TermsVersionMismatch``
+        or ``VenueUnknown``."""
         parsed = parse_nickname(nickname) if nickname is not None else None
         if (
             accept_terms_version is not None
             and accept_terms_version != self._terms_version
         ):
             raise TermsVersionMismatch(accept_terms_version)
+        if home_venue_id is not None and not await self._venues.exists_active(
+            home_venue_id
+        ):
+            raise VenueUnknown(home_venue_id)
         user = await self._store.update_profile(
             user_id,
             self._clock.now(),
             nickname=parsed,
             terms_version=accept_terms_version,
+            home_venue_id=home_venue_id,
         )
         if user is None:
             raise AuthenticationError("authentication required")

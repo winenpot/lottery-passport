@@ -21,12 +21,14 @@ from app.domain.ledger import LedgerEntry, LedgerReason, Wallet
 from app.domain.nickname import Nickname
 from app.domain.passports import Campaign, PassportProgress
 from app.domain.users import AccountStatus, User, UserRole, VerificationStatus
+from app.domain.venues import Venue
 from app.infrastructure.postgres.models import (
     AuthenticationChallengeModel,
     CoinLedgerEntryModel,
     PassportProgressModel,
     SessionModel,
     UserModel,
+    VenueModel,
     WalletModel,
 )
 
@@ -44,6 +46,7 @@ def user_from_model(model: UserModel) -> User:
         nickname=model.nickname,
         terms_version=model.terms_version,
         terms_accepted_at=model.terms_accepted_at,
+        home_venue_id=model.home_venue_id,
     )
 
 
@@ -177,8 +180,11 @@ class PostgreSQLUserRepository(UserRepository):
         *,
         nickname: Nickname | None,
         terms_version: str | None,
+        home_venue_id: str | None = None,
     ) -> User | None:
         values: dict[str, Any] = {"updated_at": now}
+        if home_venue_id is not None:
+            values["home_venue_id"] = home_venue_id
         if nickname is not None:
             values["nickname"] = nickname.display
             values["nickname_key"] = nickname.key
@@ -197,6 +203,41 @@ class PostgreSQLUserRepository(UserRepository):
                 return user_from_model(result) if result else None
         except IntegrityError as error:
             raise NicknameTaken(nickname.display if nickname else "") from error
+
+
+def venue_from_model(model: VenueModel) -> Venue:
+    return Venue(
+        id=model.id,
+        name=model.name,
+        city=model.city,
+        public_ip=model.public_ip,
+        active=model.active,
+    )
+
+
+class PostgreSQLVenueRepository:
+    """Implements ``VenueCatalogue``."""
+
+    def __init__(self, factory: async_sessionmaker[AsyncSession]) -> None:
+        self._factory = factory
+
+    async def list_active(self) -> list[Venue]:
+        async with self._factory() as session:
+            rows = await session.scalars(
+                select(VenueModel)
+                .where(VenueModel.active.is_(True))
+                .order_by(VenueModel.name, VenueModel.id)
+            )
+            return [venue_from_model(row) for row in rows]
+
+    async def exists_active(self, venue_id: str) -> bool:
+        async with self._factory() as session:
+            found = await session.scalar(
+                select(VenueModel.id).where(
+                    VenueModel.id == venue_id, VenueModel.active.is_(True)
+                )
+            )
+            return found is not None
 
 
 class PostgreSQLChallengeRepository(AuthenticationChallengeRepository):

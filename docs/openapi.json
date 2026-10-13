@@ -114,6 +114,13 @@
             "title": "Timezone",
             "type": "string"
           },
+          "venues": {
+            "items": {
+              "$ref": "#/components/schemas/VenueResponse"
+            },
+            "title": "Venues",
+            "type": "array"
+          },
           "week_ends_at": {
             "format": "date-time",
             "title": "Week Ends At",
@@ -133,7 +140,8 @@
           "week_ends_at",
           "terms_version",
           "limits",
-          "nickname"
+          "nickname",
+          "venues"
         ],
         "title": "ConfigResponse",
         "type": "object"
@@ -380,6 +388,17 @@
             ],
             "title": "Display Name"
           },
+          "home_venue_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Venue Id"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -427,6 +446,7 @@
           "identifier",
           "display_name",
           "nickname",
+          "home_venue_id",
           "terms_accepted",
           "profile_complete",
           "account_status",
@@ -465,6 +485,19 @@
               }
             ],
             "title": "Display Name"
+          },
+          "home_venue_id": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An ``id`` from ``GET /config`` ``venues``.",
+            "title": "Home Venue Id"
           },
           "nickname": {
             "anyOf": [
@@ -521,6 +554,29 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VenueResponse": {
+        "properties": {
+          "city": {
+            "title": "City",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "city"
+        ],
+        "title": "VenueResponse",
         "type": "object"
       },
       "WalletResponse": {
@@ -798,7 +854,7 @@
     },
     "/api/v1/config": {
       "get": {
-        "description": "No sign-in needed. Server time, the Tehran day and week keys and the limits clients must use instead of the phone clock. Lounges and the avatar/game catalogues are not included yet.",
+        "description": "No sign-in needed. Server time, the Tehran day and week keys and the limits clients must use instead of the phone clock, and the active lounges for the profile picker. Avatar/game catalogues are not included yet.",
         "operationId": "get_config",
         "responses": {
           "200": {
@@ -854,7 +910,7 @@
         ]
       },
       "patch": {
-        "description": "Send any of ``display_name``, ``nickname`` and ``accept_terms_version``; only the fields sent change. ``profile_complete`` becomes true once a nickname is set and the terms are accepted.",
+        "description": "Send any of ``display_name``, ``nickname``, ``accept_terms_version`` and ``home_venue_id``; only the fields sent change. ``profile_complete`` becomes true once a nickname is set and the terms are accepted.",
         "operationId": "update_me",
         "requestBody": {
           "content": {
@@ -905,7 +961,7 @@
                 }
               }
             },
-            "description": "NICKNAME_INVALID or TERMS_VERSION_INVALID"
+            "description": "NICKNAME_INVALID, TERMS_VERSION_INVALID or CATALOGUE_UNKNOWN"
           }
         },
         "security": [

@@ -16,7 +16,12 @@ from app.api.v1.schemas import (
 )
 from app.application.authentication import AuthenticationService
 from app.application.passports import PassportService
-from app.application.profile import NicknameTaken, ProfileService, TermsVersionMismatch
+from app.application.profile import (
+    NicknameTaken,
+    ProfileService,
+    TermsVersionMismatch,
+    VenueUnknown,
+)
 from app.domain.nickname import NicknameError
 from app.domain.users import User
 
@@ -44,16 +49,18 @@ async def get_me(
     response_model=UserResponse,
     summary="Update the signed-in user",
     description=(
-        "Send any of ``display_name``, ``nickname`` and ``accept_terms_version``; "
-        "only the fields sent change. ``profile_complete`` becomes true once a "
-        "nickname is set and the terms are accepted."
+        "Send any of ``display_name``, ``nickname``, ``accept_terms_version`` and "
+        "``home_venue_id``; only the fields sent change. ``profile_complete`` "
+        "becomes true once a nickname is set and the terms are accepted."
     ),
     responses={
         **_AUTH_REQUIRED,
         409: {"model": ErrorResponse, "description": "NICKNAME_TAKEN"},
         422: {
             "model": ErrorResponse,
-            "description": "NICKNAME_INVALID or TERMS_VERSION_INVALID",
+            "description": (
+                "NICKNAME_INVALID, TERMS_VERSION_INVALID or CATALOGUE_UNKNOWN"
+            ),
         },
     },
 )
@@ -66,11 +73,12 @@ async def update_me(
     user = current_user
     sent = payload.model_fields_set
     try:
-        if "nickname" in sent or "accept_terms_version" in sent:
+        if sent & {"nickname", "accept_terms_version", "home_venue_id"}:
             user = await profile_service.update(
                 current_user.id,
                 nickname=payload.nickname,
                 accept_terms_version=payload.accept_terms_version,
+                home_venue_id=payload.home_venue_id,
             )
     except NicknameError as error:
         raise ApiError(422, "NICKNAME_INVALID", f"nickname {error}") from error
@@ -80,6 +88,8 @@ async def update_me(
         raise ApiError(
             422, "TERMS_VERSION_INVALID", "terms version is not current"
         ) from error
+    except VenueUnknown as error:
+        raise ApiError(422, "CATALOGUE_UNKNOWN", "unknown lounge") from error
     if "display_name" in sent:
         user = await auth_service.update_display_name(
             current_user.id, payload.display_name

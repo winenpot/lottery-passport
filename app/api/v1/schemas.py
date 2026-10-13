@@ -42,6 +42,7 @@ class UserResponse(BaseModel):
     identifier: str
     display_name: str | None
     nickname: str | None
+    home_venue_id: str | None
     terms_accepted: bool
     profile_complete: bool
     account_status: str
@@ -57,6 +58,7 @@ class UserResponse(BaseModel):
             identifier=user.identifier,
             display_name=user.display_name,
             nickname=user.nickname,
+            home_venue_id=user.home_venue_id,
             terms_accepted=user.terms_accepted_at is not None,
             profile_complete=user.profile_complete,
             account_status=user.account_status.value,
@@ -86,6 +88,11 @@ class UserUpdate(BaseModel):
     accept_terms_version: str | None = Field(
         default=None, max_length=20, description="Must equal ``terms_version``."
     )
+    home_venue_id: str | None = Field(
+        default=None,
+        max_length=40,
+        description="An ``id`` from ``GET /config`` ``venues``.",
+    )
 
 
 class NicknameLimits(BaseModel):
@@ -95,6 +102,12 @@ class NicknameLimits(BaseModel):
 
 class ConfigLimits(BaseModel):
     scans_per_day: int
+
+
+class VenueResponse(BaseModel):
+    id: str
+    name: str
+    city: str
 
 
 class ConfigResponse(BaseModel):
@@ -107,6 +120,7 @@ class ConfigResponse(BaseModel):
     terms_version: str
     limits: ConfigLimits
     nickname: NicknameLimits
+    venues: list[VenueResponse]
 
     @classmethod
     def from_domain(cls, config: AppConfig) -> "ConfigResponse":
@@ -123,6 +137,10 @@ class ConfigResponse(BaseModel):
                 min_length=config.nickname_min_length,
                 max_length=config.nickname_max_length,
             ),
+            venues=[
+                VenueResponse(id=venue.id, name=venue.name, city=venue.city)
+                for venue in config.venues
+            ],
         )
 
 

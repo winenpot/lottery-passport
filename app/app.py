@@ -33,6 +33,7 @@ from app.infrastructure.postgres.repositories import (
     PostgreSQLPassportRepository,
     PostgreSQLSessionRepository,
     PostgreSQLUserRepository,
+    PostgreSQLVenueRepository,
     PostgreSQLWalletReader,
 )
 from app.infrastructure.postgres.unit_of_work import SqlAlchemyUnitOfWork
@@ -113,12 +114,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         store=PostgreSQLUserRepository(database.session_factory),
         clock=SystemClock(),
         current_terms_version=resolved_settings.terms_version,
+        venues=PostgreSQLVenueRepository(database.session_factory),
     )
     app_config_service = AppConfigService(
         clock=SystemClock(),
         zone=resolved_settings.campaign_zone,
         terms_version=resolved_settings.terms_version,
         scans_per_day=resolved_settings.redemption_daily_limit_per_user,
+        venues=PostgreSQLVenueRepository(database.session_factory),
     )
     passport_service = PassportService(
         passports=PostgreSQLPassportRepository(database.session_factory)

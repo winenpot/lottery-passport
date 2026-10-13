@@ -3,8 +3,10 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from app.application.authentication import Clock
+from app.application.venues import VenueCatalogue
 from app.domain.calendar import CampaignPeriod, campaign_period
 from app.domain.nickname import NICKNAME_MAX_LENGTH, NICKNAME_MIN_LENGTH
+from app.domain.venues import Venue
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,6 +18,7 @@ class AppConfig:
     scans_per_day: int
     nickname_min_length: int
     nickname_max_length: int
+    venues: list[Venue]
 
 
 class AppConfigService:
@@ -27,13 +30,15 @@ class AppConfigService:
         zone: ZoneInfo,
         terms_version: str,
         scans_per_day: int,
+        venues: VenueCatalogue,
     ) -> None:
+        self._venues = venues
         self._clock = clock
         self._zone = zone
         self._terms_version = terms_version
         self._scans_per_day = scans_per_day
 
-    def current(self) -> AppConfig:
+    async def current(self) -> AppConfig:
         now = self._clock.now()
         return AppConfig(
             server_time=now,
@@ -43,4 +48,5 @@ class AppConfigService:
             scans_per_day=self._scans_per_day,
             nickname_min_length=NICKNAME_MIN_LENGTH,
             nickname_max_length=NICKNAME_MAX_LENGTH,
+            venues=await self._venues.list_active(),
         )

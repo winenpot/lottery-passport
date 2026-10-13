@@ -210,9 +210,10 @@ profile setup before anything else. Errors: `OTP_INVALID`.
 ### `GET /api/v1/config` (live, partial; no authentication)
 
 Live today: `server_time`, `timezone`, `day_key`, `week_key`, `day_ends_at`, `week_ends_at`,
-`terms_version`, `limits.scans_per_day` and `nickname` limits. The rest of the example below
-(other limits, `avatars`, `favorite_games`, `venues`, social and support fields) is planned
-with the lounge and catalogue work (B16 and later).
+`terms_version`, `limits.scans_per_day`, `nickname` limits and `venues` (active lounges,
+ordered by name, each `{"id", "name", "city"}`; empty until the lounges are entered). The rest
+of the example below (other limits, `avatars`, `favorite_games`, social and support fields) is
+planned with the catalogue work.
 
 ```json
 {
@@ -234,7 +235,7 @@ with the lounge and catalogue work (B16 and later).
   "nickname": {"min_length": 3, "max_length": 16},
   "avatars": [{"id": "avatar-1"}, {"id": "avatar-2"}],
   "favorite_games": [{"id": "cs", "name": "CS", "short": "CS"}, {"id": "val", "name": "Valorant", "short": "VAL"}],
-  "venues": [{"id": "parsa", "name": "گیم‌سنتر پارسا"}, {"id": "nexus", "name": "گیم‌سنتر نکسوس"}],
+  "venues": [{"id": "parsa", "name": "گیم‌سنتر پارسا", "city": "tehran"}],
   "social_platforms": ["instagram", "x"],
   "brand_accounts": {"instagram": "torshx", "x": "torshx"},
   "support": {"email": "support@torshx.com", "phone": null, "telegram": null}
@@ -261,11 +262,11 @@ The demo's favourite-games list is `cs, wz, fifa, dota, lol, val, wow, r6, df, b
 }
 ```
 
-Live today: `{"id", "identifier", "display_name", "nickname", "terms_accepted", "profile_complete",
+Live today: `{"id", "identifier", "display_name", "nickname", "home_venue_id", "terms_accepted", "profile_complete",
 "account_status", "verification_status", "role", "created_at", "updated_at"}`. `avatar_id`,
 `favorite_games`, `coin_balance` and `unread_activity` come with their own tasks.
 
-### `PATCH /api/v1/me` (live for `display_name`, `nickname`, `accept_terms_version`)
+### `PATCH /api/v1/me` (live for `display_name`, `nickname`, `accept_terms_version`, `home_venue_id`)
 
 ```json
 {"nickname": "NightOwl", "avatar_id": "avatar-3", "favorite_games": ["val"], "accept_terms_version": "2026-10-01"}
@@ -280,10 +281,13 @@ All fields are optional; the response is the Me object.
   letters and ZWNJ. Unique ignoring case and Arabic/Persian letter variants. No bidi
   control characters.
 - `favorite_games`: up to 5 ids from `/config`.
+- `home_venue_id`: an active venue `id` from `/config` (the player's home lounge). If the venue
+  is later removed, it reads back as `null`.
 - `profile_complete` becomes true once the nickname is set and the terms are accepted.
 
 Errors: `NICKNAME_INVALID` (422), `NICKNAME_TAKEN` (409), `TERMS_VERSION_INVALID` (422, reload
-`/config`), `CATALOGUE_UNKNOWN` (with avatars and games).
+`/config`), `CATALOGUE_UNKNOWN` (422, unknown or inactive `home_venue_id`; later also avatars
+and games).
 
 `POST /redemptions` does not check `profile_complete` yet; the frontend should send players
 through profile setup first, and the server-side check is a separate decision.

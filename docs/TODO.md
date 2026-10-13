@@ -57,7 +57,7 @@ the item is closed; reopening it later goes through the swap rule.
 | B13 | D4 | First **test** batch (never printed), activated on staging; give Arman 20 QR URLs | Arman redeems one from his phone |
 | B14 | D4 | First **print** batch per agreed quantities; encrypt; send; confirm checksum; record chain of custody ([CODES.md](CODES.md#handing-codes-to-the-printer)) | Factory confirms the checksum; batch stays `generated` |
 | B15 | D5 | **Partly done (nickname, consent, `GET /config` without lounges; lounge needs B16)** — Profile: nickname (rules in [SECURITY.md](SECURITY.md#user-generated-text)), home lounge, consent version + timestamp; `GET /api/v1/config` (cities, lounges, server time, current day/week keys) | Nickname with RTL-override or zero-width tricks is rejected |
-| B16 | D5 | `venues` table with the three lounges (name, city, public IP if known) | Shown in the profile picker |
+| B16 | D5 | **Done (code; lounges not entered yet)** — `venues` table with the three lounges (name, city, public IP if known) | Shown in the profile picker |
 | B17 | D6 | Challenges: model, progress computed from data, `POST /claim` idempotent via the ledger key `challenge:<id>:<period>:<user>` | Double claim pays once (test) |
 | B18 | D7 | Manual/social submissions: URL validation (Instagram domains), status machine, approve/reject with reason, payout on approve | Approve twice pays once (test) |
 | B19 | D7 | Failed-redemption throttle per account (for example 10 `CODE_INVALID` per hour, then 429) | Test proves the 11th is refused |

@@ -15,11 +15,17 @@ from app.api.deps import (
 from app.app import create_app
 from app.application.app_config import AppConfigService
 from app.application.authentication import AuthenticationError
-from app.application.profile import NicknameTaken, ProfileService, TermsVersionMismatch
+from app.application.profile import (
+    NicknameTaken,
+    ProfileService,
+    TermsVersionMismatch,
+    VenueUnknown,
+)
 from app.core.config import Settings
 from app.domain.calendar import campaign_period
 from app.domain.nickname import Nickname, NicknameError, parse_nickname
 from app.domain.users import AccountStatus, User, UserRole, VerificationStatus
+from app.domain.venues import Venue
 
 TEHRAN = ZoneInfo("Asia/Tehran")
 NOW = datetime(2026, 10, 10, 8, 30, tzinfo=UTC)
@@ -116,6 +122,20 @@ class FakeClock:
         return NOW
 
 
+class FakeVenues:
+    def __init__(self) -> None:
+        self.venues = [
+            Venue(id="parsa", name="Parsa", city="tehran"),
+            Venue(id="old", name="Old", city="tehran", active=False),
+        ]
+
+    async def list_active(self) -> list[Venue]:
+        return [venue for venue in self.venues if venue.active]
+
+    async def exists_active(self, venue_id: str) -> bool:
+        return any(v.id == venue_id and v.active for v in self.venues)
+
+
 class FakeStore:
     def __init__(self) -> None:
         self.user: User | None = make_user()
@@ -128,9 +148,12 @@ class FakeStore:
         *,
         nickname: Nickname | None,
         terms_version: str | None,
+        home_venue_id: str | None = None,
     ) -> User | None:
         if self.user is None:
             return None
+        if home_venue_id is not None:
+            self.user.home_venue_id = home_venue_id
         if nickname is not None:
             if nickname.key in self.taken:
                 raise NicknameTaken(nickname.display)
@@ -143,7 +166,7 @@ class FakeStore:
 
 def service(store: FakeStore | None = None) -> tuple[ProfileService, FakeStore]:
     store = store or FakeStore()
-    return ProfileService(store, FakeClock(), "2026-10-01"), store
+    return ProfileService(store, FakeClock(), "2026-10-01", FakeVenues()), store
 
 
 async def test_profile_is_complete_once_nickname_and_terms_are_set() -> None:
@@ -196,6 +219,22 @@ async def test_an_unknown_user_is_an_authentication_error() -> None:
         )
 
 
+async def test_home_venue_must_be_an_active_venue() -> None:
+    profile, store = service()
+
+    user = await profile.update(
+        UUID(int=1), nickname=None, accept_terms_version=None, home_venue_id="parsa"
+    )
+    assert user.home_venue_id == "parsa"
+
+    for bad in ("old", "nowhere"):
+        with pytest.raises(VenueUnknown):
+            await profile.update(
+                UUID(int=1), nickname=None, accept_terms_version=None, home_venue_id=bad
+            )
+    assert store.user is not None and store.user.home_venue_id == "parsa"
+
+
 # --- routes ---------------------------------------------------------------
 
 
@@ -208,7 +247,7 @@ def client(store: FakeStore | None = None) -> tuple[TestClient, FakeStore]:
     )
     app.dependency_overrides[get_profile_service] = lambda: profile
     app.dependency_overrides[get_app_config_service] = lambda: AppConfigService(
-        FakeClock(), TEHRAN, "2026-10-01", 20
+        FakeClock(), TEHRAN, "2026-10-01", 20, FakeVenues()
     )
     assert store.user is not None
     user = store.user
@@ -233,6 +272,7 @@ def test_config_is_public_and_matches_the_contract() -> None:
         "terms_version": "2026-10-01",
         "limits": {"scans_per_day": 20},
         "nickname": {"min_length": 3, "max_length": 16},
+        "venues": [{"id": "parsa", "name": "Parsa", "city": "tehran"}],
     }
 
 
@@ -268,6 +308,19 @@ def test_patch_me_error_codes() -> None:
     assert (stale.status_code, stale.json()["error"]["code"]) == (
         422,
         "TERMS_VERSION_INVALID",
+    )
+
+
+def test_patch_me_home_venue() -> None:
+    http, _ = client()
+
+    ok = http.patch("/api/v1/me", json={"home_venue_id": "parsa"})
+    unknown = http.patch("/api/v1/me", json={"home_venue_id": "old"})
+
+    assert ok.status_code == 200 and ok.json()["home_venue_id"] == "parsa"
+    assert (unknown.status_code, unknown.json()["error"]["code"]) == (
+        422,
+        "CATALOGUE_UNKNOWN",
     )
 
 

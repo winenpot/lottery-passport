@@ -38,6 +38,7 @@ class User:
     nickname: str | None = None
     terms_version: str | None = None
     terms_accepted_at: datetime | None = None
+    home_venue_id: str | None = None
 
     @property
     def profile_complete(self) -> bool:
