@@ -69,6 +69,7 @@ function asUser(index) {
     headers: {
       Cookie: `lottery_passport_session=${sessions[index % sessions.length]}`,
       "Content-Type": "application/json",
+      "X-Requested-With": "loadtest",
     },
   };
 }

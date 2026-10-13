@@ -388,7 +388,7 @@ async def test_redemption_api_end_to_end(test_database_url: str) -> None:
     application = create_app(settings)
     identifier = f"+989{uuid4().int % 10**9:09d}"
 
-    with TestClient(application) as client:
+    with TestClient(application, headers={"X-Requested-With": "test"}) as client:
         client.post("/api/v1/auth/request", json={"identifier": identifier})
         sender = application.state.sms_sender
         assert isinstance(sender, ConsoleSmsSender)

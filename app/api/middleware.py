@@ -4,6 +4,7 @@ from threading import Lock
 from time import monotonic
 from uuid import uuid4
 
+from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 request_logger = logging.getLogger("lottery_passport.http")
@@ -56,6 +57,73 @@ class RateLimitMiddleware:
                     (b"content-type", b"application/json"),
                     (b"retry-after", str(self.window_seconds).encode()),
                 ],
+            }
+        )
+        await send({"type": "http.response.body", "body": body})
+
+
+CSRF_HEADER = "X-Requested-With"
+_UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+
+class CsrfMiddleware:
+    """Reject cookie-authenticated writes that a foreign page could forge.
+
+    The session cookie may be ``SameSite=None`` (frontend and API on different
+    sites), so the browser attaches it to cross-site requests too. A write
+    that carries the session cookie must therefore:
+
+    * send the ``X-Requested-With`` header (any value). A plain HTML form or
+      ``<img>`` cannot set it, and a cross-site ``fetch`` that sets it needs a
+      CORS preflight that only our allowed origins pass;
+    * if the browser sent ``Origin``, have it on the CORS allow-list.
+
+    Requests without the session cookie (sign-in, anonymous calls) are not
+    affected: there is no session to ride on. OWASP: "custom request header"
+    and "verifying origin with standard headers".
+    """
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        cookie_name: str,
+        allowed_origins: list[str],
+    ) -> None:
+        self.app = app
+        self.cookie_name = cookie_name
+        self.any_origin = allowed_origins == ["*"]
+        self.allowed_origins = frozenset(allowed_origins)
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope.get("method") not in _UNSAFE_METHODS:
+            await self.app(scope, receive, send)
+            return
+        headers = Headers(scope=scope)
+        cookie = headers.get("cookie", "")
+        has_session = any(
+            part.strip().startswith(f"{self.cookie_name}=")
+            for part in cookie.split(";")
+        )
+        if has_session:
+            origin = headers.get("origin")
+            if not headers.get(CSRF_HEADER):
+                await self._reject(send, f"missing {CSRF_HEADER} header")
+                return
+            if origin and not self.any_origin and origin not in self.allowed_origins:
+                await self._reject(send, "origin not allowed")
+                return
+        await self.app(scope, receive, send)
+
+    @staticmethod
+    async def _reject(send: Send, message: str) -> None:
+        body = (
+            '{"error":{"code":"CSRF_REJECTED","message":"' + message + '"}}'
+        ).encode()
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 403,
+                "headers": [(b"content-type", b"application/json")],
             }
         )
         await send({"type": "http.response.body", "body": body})

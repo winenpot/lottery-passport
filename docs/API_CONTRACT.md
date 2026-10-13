@@ -83,6 +83,14 @@ Rules that hold whatever the final names are:
    on a real hostname with `/api` proxied (rule 1).
 5. The SMS one-time-code line is `@<frontend host> #123456`. It must match the host in the
    address bar, so it changes whenever the frontend host changes.
+6. **CSRF: send `X-Requested-With: torshx` on every POST, PATCH and DELETE** (any value
+   works; simplest is to add it to the shared fetch wrapper). A write that carries the
+   session cookie without it, or from an `Origin` not in `CORS_ORIGINS`, gets
+   `403 CSRF_REJECTED`. Sign-in calls before a session exists are not checked, but sending
+   the header everywhere is fine.
+7. **Demo only (Render):** the cookie is `SameSite=None; Secure` so the cross-site demo
+   frontend can sign in from Chrome. Safari, Firefox (strict) and private windows may still
+   drop it; rules 1-4 are the real fix and staging/production use `SameSite=Lax`.
 
 ## Errors
 
@@ -135,6 +143,7 @@ Switch on `code` and show your own Persian copy. `message` is for developers and
 | `EVENT_FULL` | 409 | No places left | Show "full" |
 | `EVENT_CLOSED` | 409 | Registration closed | Refresh |
 | `RATE_LIMITED` | 429 | Generic limit (proxy or API) | Countdown from `Retry-After` |
+| `CSRF_REJECTED` | 403 | A cookie-authenticated write without `X-Requested-With`, or from an origin not allowed | Add the header in the fetch wrapper; a bug, never shown to players |
 | `SERVICE_UNAVAILABLE` | 503 | A dependency is down or misconfigured | Generic error; we get alerted |
 | `INTERNAL_ERROR` | 500 | Bug | Generic error; we get alerted |
 

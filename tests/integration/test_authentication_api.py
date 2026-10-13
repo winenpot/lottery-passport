@@ -23,7 +23,7 @@ async def test_passwordless_authentication_api(test_database_url: str) -> None:
     application = create_app(settings)
     identifier = random_iranian_phone()
 
-    with TestClient(application) as client:
+    with TestClient(application, headers={"X-Requested-With": "test"}) as client:
         request_response = client.post(
             "/api/v1/auth/request", json={"identifier": identifier}
         )

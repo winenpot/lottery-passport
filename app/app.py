@@ -7,7 +7,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.errors import ApiError, api_error_handler, unhandled_error_handler
-from app.api.middleware import RateLimitMiddleware, RequestLoggingMiddleware
+from app.api.middleware import (
+    CSRF_HEADER,
+    CsrfMiddleware,
+    RateLimitMiddleware,
+    RequestLoggingMiddleware,
+)
 from app.api.routes import router
 from app.application.admin_users import AdminUserService
 from app.application.app_config import AppConfigService
@@ -187,12 +192,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ),
         lifespan=lifespan,
     )
+    # Added before CORS so it runs inside it: a 403 still gets CORS headers
+    # and the frontend can read the error code.
+    application.add_middleware(
+        CsrfMiddleware,
+        cookie_name=resolved_settings.session_cookie_name,
+        allowed_origins=resolved_settings.allowed_cors_origins,
+    )
     application.add_middleware(
         CORSMiddleware,
         allow_origins=resolved_settings.allowed_cors_origins,
         allow_credentials=resolved_settings.allowed_cors_origins != ["*"],
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "Authorization"],
+        allow_headers=["Content-Type", "Authorization", CSRF_HEADER],
     )
     application.add_middleware(
         RateLimitMiddleware,
