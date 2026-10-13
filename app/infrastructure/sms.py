@@ -20,17 +20,11 @@ import urllib.request
 from dataclasses import dataclass
 
 from app.application.authentication import SmsError, SmsSender
+from app.domain.phone import mask_phone
 
 logger = logging.getLogger(__name__)
 
 KAVENEGAR_TIMEOUT_SECONDS = 10
-
-
-def mask_phone(phone: str) -> str:
-    """``+989123456789`` -> ``+98912***6789``: for logs, never the full number."""
-    if len(phone) <= 8:
-        return "***"
-    return f"{phone[:6]}***{phone[-4:]}"
 
 
 @dataclass(slots=True)

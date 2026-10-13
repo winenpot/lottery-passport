@@ -23,6 +23,13 @@ class JsonFormatter(logging.Formatter):
             "latency_ms",
             "client_ip",
             "error_type",
+            "error_code",
+            "reason",
+            "origin",
+            "phone",
+            "purpose",
+            "delivery",
+            "user_id",
         ):
             value = getattr(record, field, None)
             if value is not None:

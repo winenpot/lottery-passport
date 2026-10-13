@@ -41,3 +41,10 @@ def normalize_iranian_mobile(raw: str) -> str:
     if not _SUBSCRIBER_NUMBER.match(remainder):
         raise PhoneNumberError(f"not an Iranian mobile number: {raw!r}")
     return f"+98{remainder}"
+
+
+def mask_phone(phone: str) -> str:
+    """``+989121234567`` -> ``+98912***4567``: for logs, never the full number."""
+    if len(phone) <= 8:
+        return "***"
+    return f"{phone[:6]}***{phone[-4:]}"

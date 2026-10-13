@@ -73,6 +73,13 @@ def request_id_from_scope(scope: Scope) -> str | None:
     return None
 
 
+def note_error_code(scope: Scope, code: str) -> None:
+    """Let the request log line carry the error code (``error_code``)."""
+    state = scope.get("state")
+    if isinstance(state, dict):
+        state["error_code"] = code
+
+
 def error_body(
     code: str,
     message: str,
@@ -117,6 +124,7 @@ async def api_error_handler(request: Request, error: Exception) -> JSONResponse:
         if error.retry_after_seconds is not None
         else None
     )
+    note_error_code(request.scope, error.code)
     return JSONResponse(
         status_code=error.status_code,
         content=error_body(
@@ -136,6 +144,7 @@ async def http_error_handler(request: Request, error: Exception) -> JSONResponse
         405: "method not allowed for this route",
         503: "service unavailable",
     }.get(error.status_code, str(error.detail))
+    note_error_code(request.scope, code)
     return JSONResponse(
         status_code=error.status_code,
         content=error_body(code, message, request_id_from_scope(request.scope)),
@@ -155,6 +164,7 @@ async def validation_error_handler(request: Request, error: Exception) -> JSONRe
         }
         for item in error.errors()
     ]
+    note_error_code(request.scope, "VALIDATION_FAILED")
     return JSONResponse(
         status_code=422,
         content=error_body(

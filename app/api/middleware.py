@@ -7,7 +7,7 @@ from uuid import uuid4
 from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from app.api.errors import error_bytes, request_id_from_scope
+from app.api.errors import error_bytes, note_error_code, request_id_from_scope
 
 request_logger = logging.getLogger("lottery_passport.http")
 
@@ -50,6 +50,7 @@ class RateLimitMiddleware:
         await self.app(scope, receive, send)
 
     async def _send_limited(self, scope: Scope, send: Send) -> None:
+        note_error_code(scope, "RATE_LIMITED")
         body = error_bytes(
             "RATE_LIMITED", "rate limit exceeded", request_id_from_scope(scope)
         )
@@ -120,6 +121,17 @@ class CsrfMiddleware:
 
     @staticmethod
     async def _reject(scope: Scope, send: Send, message: str) -> None:
+        note_error_code(scope, "CSRF_REJECTED")
+        request_logger.warning(
+            "csrf_rejected",
+            extra={
+                "request_id": request_id_from_scope(scope),
+                "method": scope.get("method"),
+                "path": scope.get("path"),
+                "reason": message,
+                "origin": Headers(scope=scope).get("origin"),
+            },
+        )
         body = error_bytes("CSRF_REJECTED", message, request_id_from_scope(scope))
         await send(
             {
@@ -178,7 +190,7 @@ class RequestLoggingMiddleware:
         started_at: float,
     ) -> dict[str, object]:
         client = scope.get("client")
-        return {
+        fields: dict[str, object] = {
             "request_id": request_id,
             "method": scope.get("method", "UNKNOWN"),
             "path": scope.get("path", ""),
@@ -186,3 +198,7 @@ class RequestLoggingMiddleware:
             "latency_ms": round((monotonic() - started_at) * 1000, 2),
             "client_ip": client[0] if client else "unknown",
         }
+        error_code = (scope.get("state") or {}).get("error_code")
+        if error_code is not None:
+            fields["error_code"] = error_code
+        return fields

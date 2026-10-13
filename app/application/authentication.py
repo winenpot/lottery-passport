@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import logging
 import secrets
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
@@ -8,7 +9,7 @@ from uuid import UUID, uuid4
 
 from app.application.otp_test_numbers import is_test_phone_number
 from app.domain.authentication import AuthenticatedSession, AuthenticationChallenge
-from app.domain.phone import PhoneNumberError, normalize_iranian_mobile
+from app.domain.phone import PhoneNumberError, mask_phone, normalize_iranian_mobile
 from app.domain.users import AccountStatus, User, VerificationStatus
 
 
@@ -124,6 +125,9 @@ class VerificationResult:
     session_token: str
 
 
+logger = logging.getLogger("lottery_passport.auth")
+
+
 class AuthenticationService:
     def __init__(
         self,
@@ -162,6 +166,10 @@ class AuthenticationService:
         elif user.account_status is AccountStatus.INACTIVE:
             # Same response as a real send: an inactive account must not be
             # distinguishable from a fresh number by response shape alone.
+            logger.warning(
+                "otp_request_blocked",
+                extra={"phone": mask_phone(phone), "reason": "inactive_account"},
+            )
             return result
 
         recent = await self._challenges.get_most_recent_for_user(user.id)
@@ -169,12 +177,20 @@ class AuthenticationService:
             elapsed_seconds = (now - recent.created_at).total_seconds()
             remaining = self._settings.resend_cooldown.total_seconds() - elapsed_seconds
             if remaining > 0:
+                logger.info(
+                    "otp_request_blocked",
+                    extra={"phone": mask_phone(phone), "reason": "cooldown"},
+                )
                 raise ResendCooldownError(int(remaining) + 1)
 
         sent_in_last_24h = await self._challenges.count_created_since(
             user.id, now - timedelta(hours=24)
         )
         if sent_in_last_24h >= self._settings.daily_limit:
+            logger.warning(
+                "otp_request_blocked",
+                extra={"phone": mask_phone(phone), "reason": "daily_limit"},
+            )
             raise DailyLimitError("too many codes requested for this number today")
 
         code, salt, code_hash = self._code_generator.generate()
@@ -194,6 +210,14 @@ class AuthenticationService:
         # limits, but no SMS; the code goes back in the response instead.
         if self._settings.test_numbers_enabled and is_test_phone_number(phone):
             await self._challenges.create(challenge)
+            logger.info(
+                "otp_issued",
+                extra={
+                    "phone": mask_phone(phone),
+                    "purpose": purpose,
+                    "delivery": "test_number",
+                },
+            )
             return replace(result, test_code=code)
         # Send before persisting: a delivery failure must not start the
         # resend cooldown or count against the daily limit for a code the
@@ -201,8 +225,16 @@ class AuthenticationService:
         try:
             await self._sms_sender.send_otp(phone, code, purpose)
         except SmsError as error:
+            logger.warning(
+                "otp_delivery_failed",
+                extra={"phone": mask_phone(phone), "purpose": purpose},
+            )
             raise AuthenticationError("could not send verification code") from error
         await self._challenges.create(challenge)
+        logger.info(
+            "otp_issued",
+            extra={"phone": mask_phone(phone), "purpose": purpose, "delivery": "sms"},
+        )
         return result
 
     async def verify_challenge(self, identifier: str, code: str) -> VerificationResult:
@@ -211,23 +243,31 @@ class AuthenticationService:
         except PhoneNumberError as error:
             raise AuthenticationError("invalid authentication challenge") from error
         now = self._clock.now()
+        masked = mask_phone(phone)
         user = await self._users.get_by_identifier(phone)
         if user is None or user.account_status is AccountStatus.INACTIVE:
+            self._log_verify_failed(masked, "unknown_or_inactive_user")
             raise AuthenticationError("invalid authentication challenge")
 
         challenge = await self._challenges.get_active_for_user(user.id, now)
-        if challenge is None or challenge.attempts >= challenge.max_attempts:
+        if challenge is None:
+            self._log_verify_failed(masked, "no_active_code")
+            raise AuthenticationError("invalid authentication challenge")
+        if challenge.attempts >= challenge.max_attempts:
+            self._log_verify_failed(masked, "attempts_exhausted")
             raise AuthenticationError("invalid authentication challenge")
 
         supplied_hash = self._code_generator.hash_code(code, challenge.code_salt)
         if not hmac.compare_digest(supplied_hash, challenge.code_hash):
             await self._challenges.increment_attempts(challenge.id)
+            self._log_verify_failed(masked, "wrong_code")
             raise AuthenticationError("invalid authentication challenge")
 
         consumed = await self._challenges.consume_if_matching(
             challenge.id, supplied_hash, now
         )
         if not consumed:
+            self._log_verify_failed(masked, "code_already_used")
             raise AuthenticationError("invalid authentication challenge")
 
         if user.verification_status is not VerificationStatus.VERIFIED:
@@ -243,7 +283,17 @@ class AuthenticationService:
             revoked_at=None,
         )
         await self._sessions.create(session)
+        logger.info(
+            "sign_in_succeeded",
+            extra={"phone": masked, "user_id": str(user.id)},
+        )
         return VerificationResult(user=user, session_token=session_token)
+
+    @staticmethod
+    def _log_verify_failed(masked_phone: str, reason: str) -> None:
+        logger.warning(
+            "otp_verify_failed", extra={"phone": masked_phone, "reason": reason}
+        )
 
     async def get_current_user(self, session_token: str | None) -> User:
         if not session_token:

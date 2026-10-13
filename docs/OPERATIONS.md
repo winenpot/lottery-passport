@@ -251,6 +251,34 @@ Keep it to what someone will act on.
 | SMS: credit, failures, job queue age | small script pushing to Uptime Kuma (B26) | credit under 3 days of usage; OTP job older than 60 s |
 | Abuse: `CODE_INVALID` rate, OTP requests per hour | log query or admin report (B26) | 5x the normal rate |
 
+### Reading the logs
+
+The API writes one JSON object per line to stdout (`LOG_JSON=true`). Fields: `timestamp`,
+`level`, `logger`, `message` (the event name), and when relevant `request_id`, `method`,
+`path`, `status_code`, `latency_ms`, `client_ip`, `error_code`, `reason`, `phone` (always
+masked, `+98912***6789`), `purpose`, `delivery`, `user_id`, `origin`. Only these fields are
+written; a test proves that OTP codes, session tokens and full phone numbers never are.
+
+| Event (`message`) | Level | Meaning |
+|---|---|---|
+| `request_completed` | info | Every request; `error_code` is set when we answered with an error envelope |
+| `otp_issued` | info | Code created; `delivery` is `sms` or `test_number` (demo only) |
+| `otp_request_blocked` | info/warn | `reason`: `cooldown`, `daily_limit`, `inactive_account` |
+| `otp_delivery_failed` | warn | The SMS provider failed |
+| `otp_verify_failed` | warn | `reason`: `wrong_code`, `no_active_code`, `attempts_exhausted`, `code_already_used`, `unknown_or_inactive_user` |
+| `sign_in_succeeded` | info | Session created |
+| `csrf_rejected` | warn | A cookie write without `X-Requested-With` or from a foreign `Origin` |
+
+A user's `request_id` (from an error body or the `X-Request-ID` header) finds the exact line.
+
+- **Render demo**: dashboard, service, Logs (search the `request_id`); live tail with
+  `render logs` (Render CLI). Hobby workspaces keep 7 days; over 6,000 lines a minute per
+  instance are dropped. Optional: a Log Stream to Better Stack (free: 3 GB a month, 3 days).
+- **Production VM**: `docker compose logs api --since 1h | grep csrf_rejected`. Size: roughly
+  1 GB a day uncompressed at 100k daily players, so plain files are enough for search; keep them
+  with daily rotation and gzip (the Docker default of `20m x 5` holds only about two hours at
+  peak), and decide how long phone and IP data may be kept.
+
 Alerts go to **SMS and email**. Do not rely on Telegram for alerts: it is filtered in Iran and a
 domestic server cannot reach its API. Self-host error tracking: foreign SaaS may be unreachable
 or refuse Iranian traffic.
