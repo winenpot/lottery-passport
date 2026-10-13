@@ -65,6 +65,29 @@ async def get_current_user(
         ) from error
 
 
+async def require_complete_profile(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """Gate for actions that need a finished sign-up (scanning codes).
+
+    Terms are checked first: accepting them is the first onboarding step the
+    player can still be missing, and the frontend shows that screen.
+    """
+    if current_user.terms_accepted_at is None:
+        raise ApiError(
+            status.HTTP_403_FORBIDDEN,
+            "TERMS_NOT_ACCEPTED",
+            "accept the current terms first (PATCH /me accept_terms_version)",
+        )
+    if current_user.nickname is None:
+        raise ApiError(
+            status.HTTP_403_FORBIDDEN,
+            "PROFILE_INCOMPLETE",
+            "set a nickname first (PATCH /me nickname)",
+        )
+    return current_user
+
+
 async def require_admin(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> User:

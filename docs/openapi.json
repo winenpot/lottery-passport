@@ -1163,7 +1163,7 @@
     },
     "/api/v1/redemptions": {
       "post": {
-        "description": "Redeem a printed code. Safe to retry: a repeat by the same user returns ``replayed: true`` instead of an error.",
+        "description": "Redeem a printed code. Needs a complete profile (terms accepted and a nickname). Safe to retry: a repeat by the same user returns ``replayed: true`` instead of an error.",
         "operationId": "redeem_code",
         "requestBody": {
           "content": {
@@ -1205,6 +1205,16 @@
               }
             },
             "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "TERMS_NOT_ACCEPTED or PROFILE_INCOMPLETE"
           },
           "404": {
             "content": {

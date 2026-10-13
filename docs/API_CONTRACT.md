@@ -18,6 +18,9 @@ Newest first. **Breaking** means a call that worked before needs a change on you
 Check `GET /health` → `commit` to see which backend commit is deployed on the demo.
 
 **2026-10-13**
+- **Breaking:** `POST /redemptions` now requires a complete profile: `403 TERMS_NOT_ACCEPTED`
+  (terms not accepted yet) or `403 PROFILE_INCOMPLETE` (no nickname). `GET /me/wallet` is
+  unchanged.
 - Demo data: `GET /config` now returns 5 lounges (OxinGame branches in Tehran, Ahvaz and
   Isfahan; ids `punak`, `ahvaz-golestan`, `ahvaz-kianpars`, `isfahan-khane`,
   `isfahan-mirfenderski`) with their addresses. Mashhad is a supported city but has no lounge
@@ -364,8 +367,9 @@ Errors: `NICKNAME_INVALID` (422), `NICKNAME_TAKEN` (409), `TERMS_VERSION_INVALID
 `/config`), `CATALOGUE_UNKNOWN` (422, unknown or inactive `home_venue_id`; later also avatars
 and games).
 
-`POST /redemptions` does not check `profile_complete` yet; the frontend should send players
-through profile setup first, and the server-side check is a separate decision.
+`POST /redemptions` requires `profile_complete` (live since 2026-10-13): without accepted terms
+it answers `403 TERMS_NOT_ACCEPTED`, without a nickname `403 PROFILE_INCOMPLETE`. Send players
+through profile setup before the camera opens.
 
 The demo's setup has no T&C checkbox. Add one to step 3 (or replace the "points are demo"
 checkbox in step 1) and send `accept_terms_version`.

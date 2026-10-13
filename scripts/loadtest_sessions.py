@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.application.authentication import AuthenticationService
 from app.core.config import Settings, get_settings
+from app.domain.nickname import parse_nickname
 from app.infrastructure.postgres.database import PostgreSQLAdapter
 from app.infrastructure.postgres.models import SessionModel, UserModel
 
@@ -46,12 +47,18 @@ async def create_sessions(
         for _ in range(count):
             user_id = uuid4()
             token = secrets.token_urlsafe(32)
+            # A finished profile, because scanning requires one.
+            nickname = parse_nickname(f"lt{user_id.hex[:12]}")
             session.add(
                 UserModel(
                     id=user_id,
                     identifier=f"{IDENTIFIER_PREFIX}{user_id}",
                     account_status="active",
                     verification_status="verified",
+                    nickname=nickname.display,
+                    nickname_key=nickname.key,
+                    terms_version=get_settings().terms_version,
+                    terms_accepted_at=now,
                     created_at=now,
                     updated_at=now,
                 )

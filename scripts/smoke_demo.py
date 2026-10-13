@@ -272,6 +272,14 @@ def run(client: Client, report: Report, code: str | None, rng: random.Random) ->
         "PATCH /me from a foreign Origin -> 403",
         f"HTTP {foreign.status}",
     )
+    too_early = client.call(
+        "POST", "/api/v1/redemptions", {"code": code or "hello"}, csrf=True
+    )
+    add(
+        too_early.status == 403 and too_early.error_code() == "TERMS_NOT_ACCEPTED",
+        "POST /redemptions before the profile is done -> 403",
+        f"HTTP {too_early.status} {too_early.error_code()}",
+    )
     nickname = "Smoke" + "".join(str(rng.randrange(10)) for _ in range(6))
     profile = client.call(
         "PATCH",

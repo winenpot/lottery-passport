@@ -397,12 +397,24 @@ async def test_redemption_api_end_to_end(test_database_url: str) -> None:
             json={"identifier": identifier, "code": sender.last_code},
         )
 
+        too_early = client.post("/api/v1/redemptions", json={"code": code})
+        profile = client.patch(
+            "/api/v1/me",
+            json={
+                "nickname": f"T{uuid4().hex[:10]}",
+                "accept_terms_version": settings.terms_version,
+            },
+        )
+
         first = client.post("/api/v1/redemptions", json={"code": code.lower()})
         replay = client.post("/api/v1/redemptions", json={"code": code})
         garbage = client.post("/api/v1/redemptions", json={"code": "hello"})
         wallet = client.get("/api/v1/me/wallet")
         passports = client.get("/api/v1/me/passports")
 
+    assert too_early.status_code == 403
+    assert too_early.json()["error"]["code"] == "TERMS_NOT_ACCEPTED"
+    assert profile.status_code == 200
     assert first.status_code == 200
     assert first.json() == {
         "city": "tokyo",

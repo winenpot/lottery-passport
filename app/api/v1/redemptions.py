@@ -2,7 +2,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 
-from app.api.deps import get_current_user, get_redemption_service, get_wallet_service
+from app.api.deps import (
+    get_current_user,
+    get_redemption_service,
+    get_wallet_service,
+    require_complete_profile,
+)
 from app.api.errors import ApiError, ErrorResponse
 from app.api.v1.schemas import RedeemCodeRequest, RedemptionResponse, WalletResponse
 from app.application.redemption_codes import (
@@ -52,8 +57,9 @@ _ERRORS: dict[RedemptionErrorCode, tuple[int, str]] = {
     response_model=RedemptionResponse,
     summary="Redeem a printed code",
     description=(
-        "Redeem a printed code. Safe to retry: a repeat by the same user "
-        "returns ``replayed: true`` instead of an error."
+        "Redeem a printed code. Needs a complete profile (terms accepted and "
+        "a nickname). Safe to retry: a repeat by the same user returns "
+        "``replayed: true`` instead of an error."
     ),
     responses={
         400: {
@@ -61,6 +67,10 @@ _ERRORS: dict[RedemptionErrorCode, tuple[int, str]] = {
             "description": "CODE_MALFORMED or CODE_MISTYPED",
         },
         401: {"model": ErrorResponse, "description": "Not signed in"},
+        403: {
+            "model": ErrorResponse,
+            "description": "TERMS_NOT_ACCEPTED or PROFILE_INCOMPLETE",
+        },
         404: {"model": ErrorResponse, "description": "CODE_INVALID"},
         409: {"model": ErrorResponse, "description": "CODE_ALREADY_REDEEMED"},
         429: {
@@ -71,7 +81,7 @@ _ERRORS: dict[RedemptionErrorCode, tuple[int, str]] = {
 )
 async def redeem_code(
     payload: RedeemCodeRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_complete_profile)],
     service: Annotated[RedemptionService, Depends(get_redemption_service)],
 ) -> RedemptionResponse:
     try:
