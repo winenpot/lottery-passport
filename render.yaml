@@ -3,7 +3,7 @@ services:
     name: lottery-passport-api
     runtime: docker
     plan: free
-    region: oregon
+    region: frankfurt
     dockerfilePath: ./Dockerfile
     dockerContext: .
     preDeployCommand: .venv/bin/alembic upgrade head
@@ -13,8 +13,10 @@ services:
         value: demo
       - key: PORT
         value: 10000
+      # Render's proxy peers are in 10.0.0.0/8: trust X-Forwarded-For only from
+      # them, so the rate limit and logs see the real client (not the proxy).
       - key: FORWARDED_ALLOW_IPS
-        sync: false
+        value: 10.0.0.0/8
       - key: REDEMPTION_CODE_PEPPER
         generateValue: true
         sync: false
@@ -55,6 +57,8 @@ services:
           name: lottery-passport-db
           property: connectionString
 
+# Not used by the live demo: it runs on Supabase through DATABASE_URL (set in the
+# dashboard). Kept only so the blueprint stays self-contained.
 databases:
   - name: lottery-passport-db
     databaseName: lottery_passport
