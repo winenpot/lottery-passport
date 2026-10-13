@@ -52,6 +52,7 @@ def test_docs_are_disabled_in_production() -> None:
             environment="production",
             database_url="postgresql+asyncpg://app:secret@postgres:5432/db",
             redemption_code_pepper="p" * 48,
+            admin_session_secret="a" * 48,
         )
     )
 
@@ -70,6 +71,7 @@ def test_docs_are_enabled_outside_production() -> None:
                 environment=environment,
                 database_url="postgresql+asyncpg://app:secret@postgres:5432/db",
                 redemption_code_pepper="p" * 48,
+                admin_session_secret="a" * 48,
             )
         )
 

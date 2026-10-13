@@ -49,6 +49,7 @@ def test_production_accepts_compose_service_database() -> None:
         environment="production",
         database_url="postgresql+asyncpg://app:secret@postgres:5432/lottery_passport",
         redemption_code_pepper="p" * 48,
+        admin_session_secret="a" * 48,
         _env_file=None,
     )
 
@@ -85,6 +86,7 @@ def _deployed(**overrides: object) -> Settings:
     return Settings(
         environment="staging",
         redemption_code_pepper=_PEPPER,
+        admin_session_secret="a" * 48,
         database_url=_EXTERNAL_DB,
         _env_file=None,
         **overrides,  # type: ignore[arg-type]
@@ -146,3 +148,28 @@ def test_demo_environment_may_use_http_and_wildcard_origins() -> None:
     )
 
     assert settings.allowed_cors_origins == ["http://86.104.82.71:8000"]
+
+
+def test_staging_and_production_need_an_admin_session_secret() -> None:
+    for environment in ("staging", "production"):
+        for secret in (None, "short"):
+            with pytest.raises(ValueError, match="ADMIN_SESSION_SECRET"):
+                Settings(
+                    environment=environment,
+                    database_url=_EXTERNAL_DB,
+                    redemption_code_pepper=_PEPPER,
+                    admin_session_secret=secret,
+                    cors_origins="https://play.example",
+                    _env_file=None,
+                )
+
+
+def test_demo_runs_without_an_admin_session_secret() -> None:
+    settings = Settings(
+        environment="demo",
+        database_url=_EXTERNAL_DB,
+        redemption_code_pepper=_PEPPER,
+        _env_file=None,
+    )
+
+    assert settings.admin_session_secret is None

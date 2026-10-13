@@ -37,6 +37,7 @@ from app.application.wallets import WalletService
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.domain.codes import verify_frozen_formats
+from app.infrastructure.admin import mount_admin
 from app.infrastructure.authentication import (
     SecureAuthenticationCodeGenerator,
     SystemClock,
@@ -235,6 +236,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     application.openapi = openapi_with_error_envelope  # type: ignore[method-assign]
     application.include_router(router)
+    application.state.admin = mount_admin(
+        application,
+        database.engine,
+        authentication_service,
+        secret_key=(
+            resolved_settings.admin_session_secret.get_secret_value()
+            if resolved_settings.admin_session_secret is not None
+            else None
+        ),
+        max_age_seconds=resolved_settings.admin_session_max_age_seconds,
+        secure=resolved_settings.secure_session_cookies,
+        # TODO: remove this on production (otp_test_numbers.py).
+        show_test_codes=resolved_settings.environment.lower()
+        in {"development", "demo"},
+    )
     application.state.readiness_checker = readiness_checker
     application.state.authentication_service = authentication_service
     application.state.passport_service = passport_service

@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 from app.application.otp_test_numbers import is_test_phone_number
 from app.domain.authentication import AuthenticatedSession, AuthenticationChallenge
 from app.domain.phone import PhoneNumberError, mask_phone, normalize_iranian_mobile
-from app.domain.users import AccountStatus, User, VerificationStatus
+from app.domain.users import AccountStatus, User, UserRole, VerificationStatus
 
 
 class AuthenticationError(Exception):
@@ -237,7 +237,77 @@ class AuthenticationService:
         )
         return result
 
+    async def request_admin_challenge(self, identifier: str) -> RequestChallengeResult:
+        """Send a sign-in code for the admin panel, but only to an active admin.
+
+        Anyone else gets the same response and no SMS: the panel's sign-in form
+        must not reveal who is an admin, nor spend SMS credit on strangers.
+        """
+        try:
+            phone = normalize_iranian_mobile(identifier)
+        except PhoneNumberError as error:
+            raise PhoneInvalidError(str(error)) from error
+        user = await self._users.get_by_identifier(phone)
+        if not _is_active_admin(user):
+            logger.warning(
+                "admin_sign_in_refused",
+                extra={"phone": mask_phone(phone), "reason": "not_an_admin"},
+            )
+            return RequestChallengeResult(
+                resend_after_seconds=int(
+                    self._settings.resend_cooldown.total_seconds()
+                ),
+                expires_in_seconds=int(self._settings.challenge_ttl.total_seconds()),
+                code_length=self._code_generator.code_length,
+            )
+        return await self.request_challenge(phone)
+
+    async def verify_admin_challenge(self, identifier: str, code: str) -> User:
+        """Check a code for the admin panel. Creates no player session."""
+        user, now, masked = await self._consume_code(identifier, code)
+        if not _is_active_admin(user):
+            logger.warning(
+                "admin_sign_in_refused",
+                extra={"phone": masked, "reason": "not_an_admin"},
+            )
+            raise AuthenticationError("invalid authentication challenge")
+        if user.verification_status is not VerificationStatus.VERIFIED:
+            user = await self._users.mark_verified(user.id, now)
+        logger.info(
+            "admin_sign_in_succeeded", extra={"phone": masked, "user_id": str(user.id)}
+        )
+        return user
+
+    async def get_active_admin(self, user_id: UUID) -> User | None:
+        """The admin behind an admin-panel session, re-checked on every request."""
+        user = await self._users.get_by_id(user_id)
+        return user if _is_active_admin(user) else None
+
     async def verify_challenge(self, identifier: str, code: str) -> VerificationResult:
+        user, now, masked = await self._consume_code(identifier, code)
+        if user.verification_status is not VerificationStatus.VERIFIED:
+            user = await self._users.mark_verified(user.id, now)
+        session_token = secrets.token_urlsafe(32)
+        session = AuthenticatedSession(
+            id=uuid4(),
+            user_id=user.id,
+            token_hash=self.hash_secret(session_token),
+            expires_at=now + self._settings.session_ttl,
+            created_at=now,
+            last_used_at=now,
+            revoked_at=None,
+        )
+        await self._sessions.create(session)
+        logger.info(
+            "sign_in_succeeded",
+            extra={"phone": masked, "user_id": str(user.id)},
+        )
+        return VerificationResult(user=user, session_token=session_token)
+
+    async def _consume_code(
+        self, identifier: str, code: str
+    ) -> tuple[User, datetime, str]:
+        """Check and use up a sign-in code. Returns the user, now, masked phone."""
         try:
             phone = normalize_iranian_mobile(identifier)
         except PhoneNumberError as error:
@@ -269,25 +339,7 @@ class AuthenticationService:
         if not consumed:
             self._log_verify_failed(masked, "code_already_used")
             raise AuthenticationError("invalid authentication challenge")
-
-        if user.verification_status is not VerificationStatus.VERIFIED:
-            user = await self._users.mark_verified(user.id, now)
-        session_token = secrets.token_urlsafe(32)
-        session = AuthenticatedSession(
-            id=uuid4(),
-            user_id=user.id,
-            token_hash=self.hash_secret(session_token),
-            expires_at=now + self._settings.session_ttl,
-            created_at=now,
-            last_used_at=now,
-            revoked_at=None,
-        )
-        await self._sessions.create(session)
-        logger.info(
-            "sign_in_succeeded",
-            extra={"phone": masked, "user_id": str(user.id)},
-        )
-        return VerificationResult(user=user, session_token=session_token)
+        return user, now, masked
 
     @staticmethod
     def _log_verify_failed(masked_phone: str, reason: str) -> None:
@@ -329,3 +381,11 @@ class AuthenticationService:
     @staticmethod
     def hash_secret(secret: str) -> str:
         return hashlib.sha256(secret.encode("utf-8")).hexdigest()
+
+
+def _is_active_admin(user: User | None) -> bool:
+    return (
+        user is not None
+        and user.role is UserRole.ADMIN
+        and user.account_status is AccountStatus.ACTIVE
+    )

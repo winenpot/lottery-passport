@@ -120,6 +120,15 @@ Submission URLs: parse, accept only `https://instagram.com` or `https://www.inst
 - No passwords. Entering the panel needs a fresh SMS code and issues a separate admin cookie (`Path=/admin`, `SameSite=Strict`, about 1 hour); the role is re-checked on every request. SMS is a weaker factor than TOTP (SIM swap), so keep the admin list short and add TOTP if the owner wants it.
 - Every write goes through the same application services as the API and writes an `audit_log` row (who, what, before/after, IP, time).
 - No raw editing of balances, ledger rows, codes or redemptions (read-only views).
+- Built (B20 step 1): `/admin` with phone sign-in (`app/infrastructure/admin/`). The sign-in
+  form sends an SMS only to an active admin and answers everyone else identically; the code
+  creates no player session. Cookie `lottery_passport_admin`: signed with
+  `ADMIN_SESSION_SECRET`, `Path=/admin`, `SameSite=Strict`, `HttpOnly`, `Secure` when the
+  player cookie is, ends after 1 hour idle or 8 hours total. Panel forms cannot send
+  `X-Requested-With`, so `CsrfMiddleware` instead rejects any `/admin` write whose `Origin`
+  is not the panel's own host. Exports are off (they would put phone numbers in files).
+  **Not yet:** the IP allow-list (needs nginx, B23; the Render demo has none), the audit log
+  (step 2) and write actions (step 3).
 
 ## Secrets inventory
 
@@ -130,7 +139,7 @@ Submission URLs: parse, accept only `https://instagram.com` or `https://www.inst
 | Database passwords | API, worker, backups | `.env` on the server | On staff change |
 | SMS provider API keys | Worker | `.env` | On staff change; immediately if leaked (the key is part of the request URL for some providers, so never log URLs) |
 | Backup repository password | Backup job | Password manager (two holders) | Rarely; losing it loses every backup |
-| Admin passwords and TOTP seeds | People | Each person's password manager | On role change |
+| `ADMIN_SESSION_SECRET` | API (admin panel cookie) | `.env` / Render env | Any time; every admin signs in again |
 
 ## Logging and privacy
 

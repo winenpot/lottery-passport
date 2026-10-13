@@ -77,7 +77,8 @@ and audit log are the point, not the forms.
 
 ## Action items
 
-1. [ ] SQLAdmin mount with fresh-SMS admin session, read-only views (B20, step 1).
+1. [x] SQLAdmin mount with fresh-SMS admin session, read-only views (B20, step 1;
+   players, lounges, code batches, wallets, coin ledger).
 2. [ ] `audit_log` table and a hook for every admin write (B20, step 2).
 3. [ ] Write actions through the application services; nginx allow-list (B20, steps 3 and infra).
 4. [ ] Train Mehdi and lounge staff (B30).

@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     # Current terms of service; players accept it by sending this exact value.
     terms_version: str = "2026-10-01"
     kavenegar_otp_api_key: SecretStr | None = None
+    # Signs the admin panel's session cookie. Unset: a random key per process
+    # (admin sessions end on restart); required in staging/production.
+    admin_session_secret: SecretStr | None = None
+    admin_session_max_age_seconds: int = Field(default=3600, ge=300, le=8 * 3600)
     kavenegar_template_login: str = "login"
     kavenegar_template_signup: str = "signup"
     otp_ttl_seconds: int = Field(default=150, ge=30, le=600)
@@ -68,7 +72,12 @@ class Settings(BaseSettings):
             return value.replace("postgresql://", "postgresql+asyncpg://", 1)
         return value
 
-    @field_validator("redemption_code_pepper", "kavenegar_otp_api_key", mode="before")
+    @field_validator(
+        "redemption_code_pepper",
+        "kavenegar_otp_api_key",
+        "admin_session_secret",
+        mode="before",
+    )
     @classmethod
     def treat_blank_secrets_as_unset(cls, value: object) -> object:
         # ".env.example" ships "REDEMPTION_CODE_PEPPER=" (empty). An empty
@@ -136,6 +145,14 @@ class Settings(BaseSettings):
         # frontend, possibly plain http): only staging/production are strict.
         if self.environment.lower() in {"staging", "production"}:
             self._require_safe_origins()
+            if (
+                self.admin_session_secret is None
+                or len(self.admin_session_secret.get_secret_value()) < 32
+            ):
+                raise ValueError(
+                    "ADMIN_SESSION_SECRET must be at least 32 characters in "
+                    "staging/production"
+                )
         return self
 
     def _require_safe_origins(self) -> None:

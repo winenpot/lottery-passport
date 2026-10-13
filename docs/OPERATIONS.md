@@ -173,8 +173,9 @@ docker compose -f compose.prod.yml run --rm api python -m scripts.admins demote 
 ```
 
 `<identifier>` is whatever the account signed up with (an E.164 phone number, e.g.
-`+989123456789`). No admin-only routes exist yet; `app/api/deps.require_admin` is
-ready for the first one that does.
+`+989123456789`). The admin then signs in at `/admin` with that number (SMS code;
+on the demo a 0969 test number shows the code on the page). `app/api/deps.require_admin`
+guards admin-only API routes.
 
 ## SMS provider
 

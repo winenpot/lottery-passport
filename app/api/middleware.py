@@ -2,6 +2,7 @@ import logging
 from collections import defaultdict, deque
 from threading import Lock
 from time import monotonic
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from starlette.datastructures import Headers
@@ -26,7 +27,7 @@ class RateLimitMiddleware:
         self._lock = Lock()
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or scope["path"] in {"/health", "/ready"}:
+        if scope["type"] != "http" or _is_exempt_from_rate_limit(scope["path"]):
             await self.app(scope, receive, send)
             return
 
@@ -67,6 +68,13 @@ class RateLimitMiddleware:
         await send({"type": "http.response.body", "body": body})
 
 
+def _is_exempt_from_rate_limit(path: str) -> bool:
+    # One admin page pulls about ten static files; counting them would lock
+    # an admin out after a few clicks.
+    return path in {"/health", "/ready"} or path.startswith(f"{ADMIN_PATH}/statics/")
+
+
+ADMIN_PATH = "/admin"
 CSRF_HEADER = "X-Requested-With"
 _UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
@@ -86,6 +94,11 @@ class CsrfMiddleware:
     Requests without the session cookie (sign-in, anonymous calls) are not
     affected: there is no session to ride on. OWASP: "custom request header"
     and "verifying origin with standard headers".
+
+    The admin panel (``/admin``) posts plain HTML forms, which cannot send the
+    header. Its own cookie is ``SameSite=Strict``, so a foreign site cannot
+    ride on it; here every admin write must also come from the panel's own
+    origin when the browser says where it came from.
     """
 
     def __init__(
@@ -104,6 +117,13 @@ class CsrfMiddleware:
             await self.app(scope, receive, send)
             return
         headers = Headers(scope=scope)
+        if scope["path"] == ADMIN_PATH or scope["path"].startswith(f"{ADMIN_PATH}/"):
+            origin = headers.get("origin")
+            if origin and urlsplit(origin).netloc != headers.get("host"):
+                await self._reject(scope, send, "origin not allowed")
+                return
+            await self.app(scope, receive, send)
+            return
         cookie = headers.get("cookie", "")
         has_session = any(
             part.strip().startswith(f"{self.cookie_name}=")

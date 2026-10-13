@@ -22,6 +22,8 @@ services:
       - key: REDEMPTION_CODE_PEPPER
         generateValue: true
         sync: false
+      - key: ADMIN_SESSION_SECRET
+        generateValue: true
       - key: KAVENEGAR_OTP_API_KEY
         sync: false
       - key: KAVENEGAR_TEMPLATE_LOGIN

@@ -33,6 +33,7 @@ def test_refuses_to_run_in_production() -> None:
         environment="production",
         database_url="postgresql+asyncpg://app:secret@postgres:5432/db",
         redemption_code_pepper="p" * 48,
+        admin_session_secret="a" * 48,
         _env_file=None,
     )
 

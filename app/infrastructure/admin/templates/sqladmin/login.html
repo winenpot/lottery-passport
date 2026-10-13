@@ -1,0 +1,45 @@
+{% extends "sqladmin/base.html" %}
+{# Phone sign-in for admins (overrides SQLAdmin's username/password form). #}
+{% set step = request.query_params.get("step") %}
+{% set m = request.query_params.get("m") %}
+{% set messages = {
+  "sent": ("success", "If this number belongs to an admin, a code is on its way by SMS."),
+  "phone": ("danger", "That is not a valid Iranian mobile number."),
+  "wait": ("warning", "Wait " ~ request.query_params.get("s", "60") ~ " seconds before asking for another code."),
+  "limit": ("danger", "Too many codes for this number today. Try again tomorrow."),
+  "sms": ("danger", "The SMS could not be sent. Try again in a minute."),
+  "bad": ("danger", "Wrong or expired code."),
+} %}
+{% block body %}
+<div class="d-flex align-items-center justify-content-center vh-100">
+  <form class="col-lg-4 col-md-6 card card-md" action="{{ url_for('admin:login') }}" method="POST" autocomplete="off">
+    <div class="card-body">
+      <h2 class="card-title text-center mb-4">{{ admin.title }}</h2>
+      {% if m in messages %}
+      <div class="alert alert-{{ messages[m][0] }}" role="alert">{{ messages[m][1] }}</div>
+      {% endif %}
+      {% if step == "code" and request.session.get("pending_phone") %}
+      {% if request.session.get("test_code") %}
+      <div class="alert alert-info" role="alert">Demo test number, code: <strong>{{ request.session.get("test_code") }}</strong></div>
+      {% endif %}
+      <div class="mb-3">
+        <label class="form-label" for="code">Code sent to {{ request.session.get("pending_phone") }}</label>
+        <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" class="form-control" required autofocus>
+      </div>
+      <div class="form-footer d-flex gap-2">
+        <button type="submit" name="action" value="verify" class="btn btn-primary w-100">Sign in</button>
+      </div>
+      <div class="mt-3 text-center"><a href="{{ url_for('admin:login') }}">Use another number</a></div>
+      {% else %}
+      <div class="mb-3">
+        <label class="form-label" for="phone">Mobile number</label>
+        <input id="phone" name="phone" type="tel" inputmode="tel" class="form-control" placeholder="09xx xxx xxxx" required autofocus>
+      </div>
+      <div class="form-footer">
+        <button type="submit" name="action" value="send" class="btn btn-primary w-100">Send code</button>
+      </div>
+      {% endif %}
+    </div>
+  </form>
+</div>
+{% endblock %}
