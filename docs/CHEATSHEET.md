@@ -101,6 +101,25 @@ uv run python -m scripts.export_openapi     # refresh docs/openapi.json after ro
 Run the first four before every commit; CI fails on ruff errors. Commit messages
 need a gitmoji, a type and a description, e.g. `✨ feat(auth): add login`.
 
+## Demo smoke test (before telling the frontend a change is live)
+
+Runs the whole frontend path against the Render demo (CORS, error shape, test-number sign-in,
+cookie, CSRF, profile, scan, sign-out). Needs one fresh demo code per run.
+
+```bash
+# one-off: 3 demo codes, activate the batch (prints the batch id)
+set -a; . ./.env; set +a
+uv run python -m scripts.generate_codes --city tokyo --quantity 3 --coins-per-code 10 \
+  --label "DEMO smoke-test codes" --base-url http://86.104.82.71:8000 \
+  --output var/redemption-codes/demo-smoke-N.csv
+uv run python -m scripts.code_batches activate <batch-id>
+# every run
+uv run python -m scripts.smoke_demo --base-url https://lottery-passport.onrender.com \
+  --origin http://86.104.82.71:8000 --code <one printed_code from the CSV>
+```
+
+The demo shares its pepper with the local `.env`; never use that pepper for a print run.
+
 ## Dependencies
 
 ```bash

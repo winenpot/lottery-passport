@@ -122,8 +122,9 @@ Rules that hold whatever the final names are:
 6. **CSRF: send `X-Requested-With: torshx` on every POST, PATCH and DELETE** (any value
    works; simplest is to add it to the shared fetch wrapper). A write that carries the
    session cookie without it, or from an `Origin` not in `CORS_ORIGINS`, gets
-   `403 CSRF_REJECTED`. Sign-in calls before a session exists are not checked, but sending
-   the header everywhere is fine.
+   `403 CSRF_REJECTED`. **Send it on every write, sign-in calls included**: the check applies
+   whenever the browser still holds a session cookie, even an expired one, so a returning
+   player's `POST /auth/request` without the header would be rejected.
 7. **Demo only (Render):** the cookie is `SameSite=None; Secure` so the cross-site demo
    frontend can sign in from Chrome. Safari, Firefox (strict) and private windows may still
    drop it; rules 1-4 are the real fix and staging/production use `SameSite=Lax`.
