@@ -97,10 +97,21 @@ Rules that hold whatever the final names are:
 Every error has this shape:
 
 ```json
-{"error": {"code": "CODE_MISTYPED", "message": "One character looks mistyped."}}
+{"error": {"code": "CODE_MISTYPED", "message": "One character looks mistyped.", "request_id": "6f1c..."}}
 ```
 
 Switch on `code` and show your own Persian copy. `message` is for developers and logs.
+**Every** error uses this shape, including unknown paths, wrong methods, validation and 500s
+(never FastAPI's `{"detail": ...}`). `request_id` equals the `X-Request-ID` response header
+and the id in our logs: put it in bug reports.
+
+`VALIDATION_FAILED` (422) also carries `fields`; submitted values are never echoed:
+
+```json
+{"error": {"code": "VALIDATION_FAILED", "message": "request validation failed",
+  "request_id": "6f1c...",
+  "fields": [{"field": "body.identifier", "message": "Field required", "type": "missing"}]}}
+```
 
 | Code | HTTP | Meaning | What the app should do |
 |---|---|---|---|
@@ -143,6 +154,8 @@ Switch on `code` and show your own Persian copy. `message` is for developers and
 | `EVENT_FULL` | 409 | No places left | Show "full" |
 | `EVENT_CLOSED` | 409 | Registration closed | Refresh |
 | `RATE_LIMITED` | 429 | Generic limit (proxy or API) | Countdown from `Retry-After` |
+| `NOT_FOUND` | 404 | No such route | A bug in the client; check the path |
+| `METHOD_NOT_ALLOWED` | 405 | Wrong HTTP method for the route (`Allow` header lists the right ones) | A bug in the client |
 | `CSRF_REJECTED` | 403 | A cookie-authenticated write without `X-Requested-With`, or from an origin not allowed | Add the header in the fetch wrapper; a bug, never shown to players |
 | `SERVICE_UNAVAILABLE` | 503 | A dependency is down or misconfigured | Generic error; we get alerted |
 | `INTERNAL_ERROR` | 500 | Bug | Generic error; we get alerted |

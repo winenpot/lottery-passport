@@ -167,12 +167,39 @@
             "title": "Code",
             "type": "string"
           },
+          "fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldError"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only on VALIDATION_FAILED.",
+            "title": "Fields"
+          },
           "message": {
             "examples": [
               "One character looks mistyped; check the code."
             ],
             "title": "Message",
             "type": "string"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Same as the X-Request-ID header; quote it in bug reports.",
+            "title": "Request Id"
           }
         },
         "required": [
@@ -195,17 +222,36 @@
         "title": "ErrorResponse",
         "type": "object"
       },
-      "HTTPValidationError": {
+      "FieldError": {
         "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "title": "Detail",
-            "type": "array"
+          "field": {
+            "examples": [
+              "body.identifier"
+            ],
+            "title": "Field",
+            "type": "string"
+          },
+          "message": {
+            "examples": [
+              "Field required"
+            ],
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "examples": [
+              "missing"
+            ],
+            "title": "Type",
+            "type": "string"
           }
         },
-        "title": "HTTPValidationError",
+        "required": [
+          "field",
+          "message",
+          "type"
+        ],
+        "title": "FieldError",
         "type": "object"
       },
       "HealthResponse": {
@@ -528,46 +574,6 @@
         "title": "UserUpdate",
         "type": "object"
       },
-      "ValidationError": {
-        "properties": {
-          "ctx": {
-            "title": "Context",
-            "type": "object"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "loc": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "title": "Location",
-            "type": "array"
-          },
-          "msg": {
-            "title": "Message",
-            "type": "string"
-          },
-          "type": {
-            "title": "Error Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
-        "title": "ValidationError",
-        "type": "object"
-      },
       "VenueResponse": {
         "properties": {
           "city": {
@@ -712,11 +718,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "VALIDATION_FAILED (see error.fields)"
           }
         },
         "security": [
@@ -851,11 +857,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "VALIDATION_FAILED (see error.fields)"
           }
         },
         "summary": "Verify a sign-in code",
@@ -1133,11 +1139,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "VALIDATION_FAILED (see error.fields)"
           },
           "429": {
             "content": {
@@ -1199,6 +1205,13 @@
             "description": "Successful Response"
           },
           "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
             "description": "Database unreachable"
           }
         },

@@ -16,7 +16,12 @@ def test_ready_reports_unavailable_database(client: TestClient) -> None:
     response = client.get("/ready")
 
     assert response.status_code == 503
-    assert response.json() == {"detail": "service unavailable"}
+    body = response.json()["error"]
+    assert (body["code"], body["message"]) == (
+        "SERVICE_UNAVAILABLE",
+        "database unreachable",
+    )
+    assert body["request_id"] == response.headers["x-request-id"]
 
 
 def test_cors_allows_configured_origin() -> None:

@@ -7,6 +7,8 @@ from uuid import uuid4
 from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.api.errors import error_bytes, request_id_from_scope
+
 request_logger = logging.getLogger("lottery_passport.http")
 
 
@@ -42,13 +44,15 @@ class RateLimitMiddleware:
                 request_times.append(now)
 
         if limited:
-            await self._send_limited(send)
+            await self._send_limited(scope, send)
             return
 
         await self.app(scope, receive, send)
 
-    async def _send_limited(self, send: Send) -> None:
-        body = b'{"error":{"code":"RATE_LIMITED","message":"rate limit exceeded"}}'
+    async def _send_limited(self, scope: Scope, send: Send) -> None:
+        body = error_bytes(
+            "RATE_LIMITED", "rate limit exceeded", request_id_from_scope(scope)
+        )
         await send(
             {
                 "type": "http.response.start",
@@ -107,18 +111,16 @@ class CsrfMiddleware:
         if has_session:
             origin = headers.get("origin")
             if not headers.get(CSRF_HEADER):
-                await self._reject(send, f"missing {CSRF_HEADER} header")
+                await self._reject(scope, send, f"missing {CSRF_HEADER} header")
                 return
             if origin and not self.any_origin and origin not in self.allowed_origins:
-                await self._reject(send, "origin not allowed")
+                await self._reject(scope, send, "origin not allowed")
                 return
         await self.app(scope, receive, send)
 
     @staticmethod
-    async def _reject(send: Send, message: str) -> None:
-        body = (
-            '{"error":{"code":"CSRF_REJECTED","message":"' + message + '"}}'
-        ).encode()
+    async def _reject(scope: Scope, send: Send, message: str) -> None:
+        body = error_bytes("CSRF_REJECTED", message, request_id_from_scope(scope))
         await send(
             {
                 "type": "http.response.start",
@@ -139,6 +141,8 @@ class RequestLoggingMiddleware:
             return
 
         request_id = str(uuid4())
+        # Read by the error handlers so the body and the X-Request-ID header agree.
+        scope.setdefault("state", {})["request_id"] = request_id
         started_at = monotonic()
         status_code = 500
 

@@ -2,11 +2,21 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import timedelta
+from typing import Any
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.errors import ApiError, api_error_handler, unhandled_error_handler
+from app.api.errors import (
+    ApiError,
+    api_error_handler,
+    document_validation_errors,
+    http_error_handler,
+    unhandled_error_handler,
+    validation_error_handler,
+)
 from app.api.middleware import (
     CSRF_HEADER,
     CsrfMiddleware,
@@ -213,7 +223,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     application.add_middleware(RequestLoggingMiddleware)
     application.add_exception_handler(ApiError, api_error_handler)
+    application.add_exception_handler(StarletteHTTPException, http_error_handler)
+    application.add_exception_handler(RequestValidationError, validation_error_handler)
     application.add_exception_handler(Exception, unhandled_error_handler)
+    build_openapi = application.openapi
+
+    def openapi_with_error_envelope() -> dict[str, Any]:
+        if application.openapi_schema is None:
+            document_validation_errors(build_openapi())
+        return application.openapi_schema or {}
+
+    application.openapi = openapi_with_error_envelope  # type: ignore[method-assign]
     application.include_router(router)
     application.state.readiness_checker = readiness_checker
     application.state.authentication_service = authentication_service
