@@ -13,6 +13,13 @@ def _ignore_local_env_file(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(Settings.model_config, "env_file", None)
 
 
+@pytest.fixture(autouse=True)
+def _never_send_real_sms(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A real key in the shell (for example from sourcing .env to reach the
+    # database) would make the sign-in tests text random phone numbers.
+    monkeypatch.delenv("KAVENEGAR_OTP_API_KEY", raising=False)
+
+
 @pytest.fixture
 def client() -> TestClient:
     settings = Settings(
