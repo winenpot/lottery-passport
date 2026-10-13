@@ -17,6 +17,12 @@ Parked features (not in the MVP contract): the city passport. See
 Newest first. **Breaking** means a call that worked before needs a change on your side.
 Check `GET /health` → `commit` to see which backend commit is deployed on the demo.
 
+**2026-10-14**
+- Demo data: `GET /config` now returns 5 lounges (OxinGame branches in Tehran, Ahvaz and
+  Isfahan; ids `punak`, `ahvaz-golestan`, `ahvaz-kianpars`, `isfahan-khane`,
+  `isfahan-mirfenderski`; `city` is a lowercase slug, show the Persian label yourself).
+  Which of them are in the campaign is not final.
+
 **2026-10-13**
 - **Breaking:** every error now uses `{"error": {"code", "message", "request_id"}}`. Unknown
   paths (404), wrong methods (405), validation (422, with `fields`) and `/ready` 503 used to be
