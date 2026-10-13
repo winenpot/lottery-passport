@@ -272,7 +272,7 @@ def test_config_is_public_and_matches_the_contract() -> None:
         "terms_version": "2026-10-01",
         "limits": {"scans_per_day": 20},
         "nickname": {"min_length": 3, "max_length": 16},
-        "cities": [
+        "location_cities": [
             {"id": "tehran", "name": "تهران"},
             {"id": "ahvaz", "name": "اهواز"},
             {"id": "mashhad", "name": "مشهد"},
@@ -282,7 +282,7 @@ def test_config_is_public_and_matches_the_contract() -> None:
             {
                 "id": "parsa",
                 "name": "Parsa",
-                "city": "tehran",
+                "location_city": "tehran",
                 "address": "تهران، پونک",
             }
         ],

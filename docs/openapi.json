@@ -83,31 +83,6 @@
         "title": "AuthenticationVerification",
         "type": "object"
       },
-      "CityResponse": {
-        "properties": {
-          "id": {
-            "examples": [
-              "tehran"
-            ],
-            "title": "Id",
-            "type": "string"
-          },
-          "name": {
-            "description": "Persian name.",
-            "examples": [
-              "\u062a\u0647\u0631\u0627\u0646"
-            ],
-            "title": "Name",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name"
-        ],
-        "title": "CityResponse",
-        "type": "object"
-      },
       "ConfigLimits": {
         "properties": {
           "scans_per_day": {
@@ -123,13 +98,6 @@
       },
       "ConfigResponse": {
         "properties": {
-          "cities": {
-            "items": {
-              "$ref": "#/components/schemas/CityResponse"
-            },
-            "title": "Cities",
-            "type": "array"
-          },
           "day_ends_at": {
             "format": "date-time",
             "title": "Day Ends At",
@@ -141,6 +109,14 @@
           },
           "limits": {
             "$ref": "#/components/schemas/ConfigLimits"
+          },
+          "location_cities": {
+            "description": "Real cities with lounges. Not passport cities (flavors).",
+            "items": {
+              "$ref": "#/components/schemas/LocationCityResponse"
+            },
+            "title": "Location Cities",
+            "type": "array"
           },
           "nickname": {
             "$ref": "#/components/schemas/NicknameLimits"
@@ -185,7 +161,7 @@
           "terms_version",
           "limits",
           "nickname",
-          "cities",
+          "location_cities",
           "venues"
         ],
         "title": "ConfigResponse",
@@ -372,6 +348,31 @@
           "environment"
         ],
         "title": "LivenessResponse",
+        "type": "object"
+      },
+      "LocationCityResponse": {
+        "properties": {
+          "id": {
+            "examples": [
+              "tehran"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "description": "Persian name.",
+            "examples": [
+              "\u062a\u0647\u0631\u0627\u0646"
+            ],
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "LocationCityResponse",
         "type": "object"
       },
       "NicknameLimits": {
@@ -666,12 +667,13 @@
             "description": "Street address in Persian; null when unknown.",
             "title": "Address"
           },
-          "city": {
-            "title": "City",
-            "type": "string"
-          },
           "id": {
             "title": "Id",
+            "type": "string"
+          },
+          "location_city": {
+            "description": "One of location_cities ids.",
+            "title": "Location City",
             "type": "string"
           },
           "name": {
@@ -682,7 +684,7 @@
         "required": [
           "id",
           "name",
-          "city",
+          "location_city",
           "address"
         ],
         "title": "VenueResponse",
