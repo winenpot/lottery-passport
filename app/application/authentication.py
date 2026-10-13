@@ -1,11 +1,12 @@
 import hashlib
 import hmac
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Protocol
 from uuid import UUID, uuid4
 
+from app.application.otp_test_numbers import TEST_PHONE_NUMBERS
 from app.domain.authentication import AuthenticatedSession, AuthenticationChallenge
 from app.domain.phone import PhoneNumberError, normalize_iranian_mobile
 from app.domain.users import AccountStatus, User, VerificationStatus
@@ -104,6 +105,8 @@ class AuthenticationSettings:
     max_verification_attempts: int
     resend_cooldown: timedelta
     daily_limit: int
+    # TODO: remove this on production (see app/application/otp_test_numbers.py).
+    test_numbers_enabled: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +114,8 @@ class RequestChallengeResult:
     resend_after_seconds: int
     expires_in_seconds: int
     code_length: int
+    # Only for TEST_PHONE_NUMBERS outside production; None for real numbers.
+    test_code: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -185,6 +190,11 @@ class AuthenticationService:
             created_at=now,
         )
         purpose = "signup" if is_new_user else "login"
+        # TODO: remove this on production. Test numbers: same random code and
+        # limits, but no SMS; the code goes back in the response instead.
+        if self._settings.test_numbers_enabled and phone in TEST_PHONE_NUMBERS:
+            await self._challenges.create(challenge)
+            return replace(result, test_code=code)
         # Send before persisting: a delivery failure must not start the
         # resend cooldown or count against the daily limit for a code the
         # user never received.

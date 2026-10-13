@@ -35,6 +35,14 @@ class AuthenticationRequested(BaseModel):
     )
     expires_in_seconds: int = Field(description="How long the code stays valid.")
     code_length: int
+    test_code: str | None = Field(
+        default=None,
+        description=(
+            "Demo only: the code itself, for the 40 test numbers "
+            "0900 000 0001-0040 (no SMS is sent). Absent for real numbers and "
+            "always absent in production."
+        ),
+    )
 
 
 class UserResponse(BaseModel):

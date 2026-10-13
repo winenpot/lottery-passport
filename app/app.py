@@ -105,6 +105,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             max_verification_attempts=resolved_settings.otp_max_attempts,
             resend_cooldown=timedelta(seconds=resolved_settings.otp_resend_seconds),
             daily_limit=resolved_settings.otp_daily_limit_per_phone,
+            # TODO: remove this on production (otp_test_numbers.py).
+            test_numbers_enabled=resolved_settings.environment.lower()
+            in {"development", "demo"},
         ),
     )
     admin_user_service = AdminUserService(

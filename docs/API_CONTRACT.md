@@ -185,6 +185,15 @@ field is named `identifier` (kept for one release so an older client sending a
 The response is the same for new and known numbers. Errors: `PHONE_INVALID`,
 `OTP_COOLDOWN`, `OTP_DAILY_LIMIT`.
 
+Test numbers (demo only, never in production): `0900 000 0001` to `0900 000 0040`.
+No SMS is sent; the response carries the code, then verify as usual. Cooldown and
+daily limit still apply per number.
+
+```http
+202 Accepted
+{"resend_after_seconds": 60, "expires_in_seconds": 150, "code_length": 6, "test_code": "483920"}
+```
+
 ### `POST /api/v1/auth/verify` (live)
 
 ```http

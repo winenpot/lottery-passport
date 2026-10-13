@@ -25,6 +25,7 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 @router.post(
     "/request",
     response_model=AuthenticationRequested,
+    response_model_exclude_none=True,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Request a sign-in code",
     description=(
@@ -75,6 +76,7 @@ async def request_authentication(
         resend_after_seconds=result.resend_after_seconds,
         expires_in_seconds=result.expires_in_seconds,
         code_length=result.code_length,
+        test_code=result.test_code,
     )
 
 

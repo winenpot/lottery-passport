@@ -35,6 +35,18 @@
             "description": "Seconds to wait before POSTing /auth/request again.",
             "title": "Resend After Seconds",
             "type": "integer"
+          },
+          "test_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Demo only: the code itself, for the 40 test numbers 0900 000 0001-0040 (no SMS is sent). Absent for real numbers and always absent in production.",
+            "title": "Test Code"
           }
         },
         "required": [
