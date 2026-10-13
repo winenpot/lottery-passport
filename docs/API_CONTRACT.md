@@ -12,8 +12,44 @@ the contract, edit this file in a pull request first; the code follows the contr
 Parked features (not in the MVP contract): the city passport. See
 [parked/CITY_PASSPORT.md](parked/CITY_PASSPORT.md) and ADR 0009.
 
+## Changelog
+
+Newest first. **Breaking** means a call that worked before needs a change on your side.
+Check `GET /health` → `commit` to see which backend commit is deployed on the demo.
+
+**2026-10-13**
+- **Breaking:** every error now uses `{"error": {"code", "message", "request_id"}}`. Unknown
+  paths (404), wrong methods (405), validation (422, with `fields`) and `/ready` 503 used to be
+  FastAPI's `{"detail": ...}`.
+- **Breaking:** a `POST`/`PATCH`/`DELETE` that carries the session cookie must send
+  `X-Requested-With` (any value), or it gets `403 CSRF_REJECTED` ([rule 6](#hosts-cors-and-cookies)).
+- Added: test phone numbers `0969 xxx xxxx` (demo only): the response of `POST /auth/request`
+  carries `test_code`, no SMS is sent.
+- Added: `GET /config` returns `venues` (`[{id, name, city}]`, empty until the lounges are
+  entered); `PATCH /me` accepts `home_venue_id` (`CATALOGUE_UNKNOWN` if not an active venue);
+  `GET /me` returns `home_venue_id`.
+- Added: `GET /health` returns `version`, `commit` and `environment`.
+- Demo hosting: the session cookie is `SameSite=None; Secure`; CORS also allows
+  `http://127.0.0.1:5173`, `:5174` and `http://localhost:5173`, `:5174`. The demo shares a free
+  Render plan, so the first call after a quiet period can take about a minute.
+
+**2026-10-12**
+- Added: `PATCH /me` with `nickname` (rules in [Config and profile](#config-and-profile)) and
+  `accept_terms_version`; `profile_complete` on `GET /me`; public `GET /config` (server time,
+  Tehran day and week keys, limits, terms version, nickname limits).
+- Added: staff-only `GET /admin/users` (keyset pagination).
+
+**2026-10-11**
+- **Breaking:** sign-in is by Iranian mobile number with an SMS one-time code (`POST /auth/request`,
+  `POST /auth/verify`); the email sign-in is gone. The request field is still named `identifier`.
+- Added: `role` on `GET /me`; this contract now covers every screen of the 2026-10-10 demo.
+
+**2026-10-10**
+- Added: `CODE_ATTEMPTS_LIMITED` (429) after too many invalid codes in an hour.
+
 ## Contents
 
+- [Changelog](#changelog)
 - [Conventions](#conventions)
 - [Hosts, CORS and cookies](#hosts-cors-and-cookies)
 - [Errors](#errors)
