@@ -130,3 +130,19 @@ of this is lost to a session/context loss.
     throwaway line in this file); `GAMIFICATION.md`'s own anti-patterns table already
     warns against hollow badges and "two confusing currencies" — needs its own
     spec pass before building, not just an architecture.
+  - Notification-on-unlock is a DIFFERENT problem than the write and needs its own
+    answer, not "same as the write": the `user_achievements` row is a plain DB write
+    (atomic, rolls back with everything else, fine in-transaction); telling the user
+    is an external side effect and must never fire from inside a transaction that
+    might still roll back (same principle as SQLAdmin's audit log running in its own
+    transaction, mirrored: there a side effect must not undo a real write, here a
+    side effect must not fire on a write that isn't durably committed yet).
+    In-app notification (the common case): no new mechanism — the triggering call
+    returns `newly_unlocked: [...]` in its own response, exactly like `bonus_awarded`
+    already does; an unread counter (same shape as `API_CONTRACT.md`'s planned
+    `unread_activity`) covers achievements the user didn't see live. Out-of-app
+    push/SMS (nobody has asked for this yet): the transactional-outbox + B11-worker
+    escalation path already named above — outbox row written in the same
+    transaction, worker sends the push/SMS only after that transaction is confirmed
+    committed, outside it. Scope to the in-app case only unless push/SMS is
+    explicitly requested later.
