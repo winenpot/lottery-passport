@@ -301,6 +301,12 @@ WHERE created_at >= now() - interval '1 day' GROUP BY reason;
 SELECT actor_id, count(*), sum(amount) FROM coin_ledger_entries
 WHERE reason = 'admin_adjustment' AND created_at >= now() - interval '1 day' GROUP BY actor_id;
 
+-- 2b. Admin panel audit trail (who changed what; audit_log is append-only, see
+-- migration 0012). Lounge edits: entity = 'venue-model'; coin adjustments:
+-- entity = 'coin_ledger_entry', entity_id = the player's user id.
+SELECT actor_user_id, action, entity, entity_id, changes, created_at
+FROM audit_log WHERE created_at >= now() - interval '1 day' ORDER BY created_at DESC;
+
 -- 3. Redemptions per city and per hour (sudden spikes = leak or harvesting)
 SELECT city, date_trunc('hour', redeemed_at) AS hour, count(*) FROM redemption_codes
 WHERE redeemed_at >= now() - interval '1 day' GROUP BY 1, 2 ORDER BY 2 DESC, 3 DESC LIMIT 20;

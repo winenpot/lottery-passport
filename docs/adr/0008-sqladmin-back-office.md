@@ -79,6 +79,13 @@ and audit log are the point, not the forms.
 
 1. [x] SQLAdmin mount with fresh-SMS admin session, read-only views (B20, step 1;
    players, lounges, code batches, wallets, coin ledger).
-2. [ ] `audit_log` table and a hook for every admin write (B20, step 2).
-3. [ ] Write actions through the application services; nginx allow-list (B20, steps 3 and infra).
+2. [x] `audit_log` table and a hook for every admin write (B20, step 2; done
+   2026-10-14, migration 0012). Two writers: SQLAdmin's own `audit_backend`
+   (generic CRUD -- lounges are now editable; a separate, best-effort
+   transaction after the edit commits) and the application's unit of work for
+   a multi-table action (coin adjustments; same transaction as the write).
+3. [x] Coin adjustments through `CoinAdjustmentService` (B20, step 3; done
+   2026-10-14): a custom `/admin/coin-adjustments` page, never a raw edit.
+   [ ] Submission/approval actions remain (B18, once social submissions exist).
+   nginx IP allow-list is still open (infra, not code).
 4. [ ] Train Mehdi and lounge staff (B30).
