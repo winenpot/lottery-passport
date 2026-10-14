@@ -70,13 +70,16 @@ def build_unique_codes(
 
 
 def qr_url(base_url: str, code: str, code_format: CodeFormat) -> str:
-    """The URL printed as the QR, code in the fragment (never logged server-side).
+    """The URL printed as the QR: ``https://torshx.com/b/TO-ABC-DEF-GHJ``.
 
-    Uppercase (the printed form already is): QR alphanumeric mode encodes
-    upper-case text and digits in a smaller symbol than mixed case.
+    Path form ``/b/<code>`` (decision 2026-10-14, the frontend's route).
+    Scheme, host and ``/b/`` stay lower-case because URL paths are
+    case-sensitive (``/B/`` would miss the route); only the code is upper-case.
+    The code reaches the web server's access log, so the proxy must not log
+    ``/b/*`` paths and the page sends no Referer (docs/SECURITY.md).
     """
     printed = format_printed(code, code_format)
-    return f"{base_url.rstrip('/')}/r#{printed}".upper()
+    return f"{base_url.rstrip('/').lower()}/b/{printed}"
 
 
 async def insert_codes(

@@ -50,11 +50,11 @@ export function normalizeCode(raw) {
     .toUpperCase();
 }
 
-// Drop a scanned QR's URL, keeping only the code it carries. The QR payload
-// puts the code after a "#" (a URL fragment, kept out of server logs and
-// Referer), e.g. "https://torshx.com/r#TO-ABC-DEF-GHJ"; the older path form
-// ("https://.../r/CODE", no fragment) is handled by the text after the last
-// "/". A bare typed code (no "#" or "://") passes through unchanged.
+// Drop a scanned QR's URL, keeping only the code it carries. The printed QR
+// puts the code in the path, "https://torshx.com/b/TO-ABC-DEF-GHJ" (the text
+// after the last "/"); the fragment form "https://torshx.com/r#TO-ABC-DEF-GHJ"
+// is still accepted (the text after "#"). A bare typed code (no "#" or "://")
+// passes through unchanged.
 function stripQrWrapper(raw) {
   const text = raw.trim();
   if (text.includes("#")) return text.slice(text.lastIndexOf("#") + 1);

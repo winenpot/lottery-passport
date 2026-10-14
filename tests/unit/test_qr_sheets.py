@@ -32,7 +32,7 @@ def write_batch_csv(path: Path, count: int, *, batch_id: str = "batch-test") -> 
                     "TOKYO",
                     printed,
                     code,
-                    f"HTTPS://TORSHX.COM/R#{printed}",
+                    f"https://torshx.com/b/{printed}",
                 ]
             )
 

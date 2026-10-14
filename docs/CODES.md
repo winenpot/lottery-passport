@@ -27,7 +27,7 @@ Section 1 is written to be handed to the factory as-is.
 | Uniqueness | Every unit has a different code; we supply them in a CSV, one row per unit |
 | **Placement** | **Not visible until the drink is opened**: inside the cap / under the tab / under a peel layer. A code readable on a closed can can be harvested from shelves and vending-machine windows |
 | Font | A clear sans-serif or monospace face, at least 2 mm character height; the dashes help reading |
-| QR (if the printer can do variable QR) | Encodes the URL in the CSV column `qr_url`, e.g. `HTTPS://TORSHX.COM/R#TO-HA1-NQC-C32`. The code sits after `#` (a URL fragment), so it never reaches server logs or `Referer` headers. Error correction level M. At about 0.5 mm per module the QR is roughly 2 cm square including its quiet zone; test before the run |
+| QR (if the printer can do variable QR) | Encodes the URL in the CSV column `qr_url`, e.g. `https://torshx.com/b/TO-HA1-NQC-C32` (path form, decision 2026-10-14; scheme, host and `/b/` lower-case because paths are case-sensitive). The code is in the path, so the proxy must not log `/b/*` paths and the app sends `Referrer-Policy: no-referrer` ([SECURITY.md](SECURITY.md)). Error correction level M. At about 0.5 mm per module the QR is roughly 2 cm square including its quiet zone; test before the run |
 | If no per-unit QR is possible | Print the 11-character code per unit, plus one **static** QR on the label that opens `https://torshx.com/`; the player types the code |
 | File we send | `batch_id, city, printed_code, code, qr_url` (UTF-8 CSV), plus a `.sha256` checksum file |
 | Test print | 20 units with **test codes** before the real run; we scan and type them |
@@ -65,8 +65,8 @@ without the pepper ([ADR-0002](adr/0002-random-codes-hmac-storage-batches.md)).
 People mistype, use Persian keyboards and paste from chats. Before checking anything, the
 server (`app/domain/codes.py`) normalizes the input:
 
-1. If the input is a scanned QR URL, keep only the code: the text after the last `#`
-   (current fragment form), or after the last `/` if there is no `#` (older path form).
+1. If the input is a scanned QR URL, keep only the code: the text after the last `/`
+   (printed path form `/b/<code>`), or after the last `#` if there is one (fragment form, still accepted).
 2. Unicode NFKC (full-width characters become normal ones).
 3. Persian `۰–۹` and Arabic-Indic `٠–٩` digits become `0–9`.
 4. Spaces, every kind of dash, underscores, dots and invisible characters (ZWNJ, direction marks) are removed.

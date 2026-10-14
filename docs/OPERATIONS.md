@@ -91,10 +91,10 @@ Docker Hub refuses Iranian IP addresses, and other foreign registries can be blo
 [`deploy/nginx/nginx.conf`](../deploy/nginx/nginx.conf) does five jobs:
 
 1. **TLS and redirects**: HTTP → HTTPS, TLS 1.2/1.3, HSTS.
-2. **The PWA**: serves `/srv/lottery-passport/pwa` (a symlink to the current release of Arman's `dist/`); `/assets/*` cached for a year, `index.html` never cached, unknown paths fall back to `index.html` (client-side routes like `/r/<code>`).
+2. **The PWA**: serves `/srv/lottery-passport/pwa` (a symlink to the current release of Arman's `dist/`); `/assets/*` cached for a year, `index.html` never cached, unknown paths fall back to `index.html` (client-side routes like `/b/<code>` and `/q/<venue>/<date>`).
 3. **The API**: `/api/` proxied to the FastAPI container with timeouts; the client IP is **overwritten** into `X-Forwarded-For` so it cannot be spoofed.
 4. **Rate limits**: 10 requests/s per IP for the API, 6/min for OTP requests. **Lounge IPs** (listed in `/etc/lottery-passport/nginx/lounge_ips.conf`) get 300/s and 120/min because a whole lounge shares one public IP. Over the limit: `429` with the standard JSON error.
-5. **Privacy and admin**: `/r/<code>` is logged as `/r/[redacted]`; `/admin` only from IPs in `admin_allow.conf`; `/docs` and `/openapi.json` return 404.
+5. **Privacy and admin**: `/b/<code>` is logged as `/b/[redacted]` and `/q/<venue>/<date>/<token>` as `/q/[redacted]`; `/admin` only from IPs in `admin_allow.conf`; `/docs` and `/openapi.json` return 404.
 
 Gotcha built into the file: an `add_header` inside a `location` **replaces** all server-level
 headers, so every such location includes `snippets/security_headers.conf` again.

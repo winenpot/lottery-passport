@@ -228,7 +228,7 @@ and the id in our logs: put it in bug reports.
 | Profile → حساب‌های متصل | `/me/social-accounts...` |
 | Profile → دعوت دوستان | `GET /me/invite` |
 | Profile → تنظیمات, پشتیبانی | Static in the frontend; support contacts come from `GET /config.support` |
-| `/r#<code>` product QR | `POST /redemptions` (after sign-in) |
+| `/b/<code>` product QR | `POST /redemptions` (after sign-in) |
 | `/q/:venue` venue QR, `/go` campaign link | `POST /me/arrivals` |
 | Home "stories" strip | Static assets in the frontend for the MVP (no endpoint) |
 
@@ -402,8 +402,9 @@ screen without confetti; a replay does not count toward the limit. Errors:
 
 Code format (decided 2026-10-10): a 2-letter city code plus 9 characters, written
 `<CITY>-XXX-XXX-XXX`, for example `TO-7KQ-2M9-XH4`. The QR encodes
-`https://torshx.com/r#TO-7KQ-2M9-XH4`. The code sits in the URL **fragment**, so it never
-reaches a server, a proxy log or a `Referer` header. The format is registered and frozen in
+`https://torshx.com/b/TO-7KQ-2M9-XH4` (path form `/b/<code>`, decision 2026-10-14; the
+fragment form `/r#<code>` is still accepted by the API). The code is in the path, so the
+proxy does not log `/b/*` and the app sends `Referrer-Policy: no-referrer`. The format is registered and frozen in
 the backend ([CODES.md](CODES.md)); validate with the generated `docs/frontend/codes.js`
 instead of hard-coding the length.
 
@@ -897,9 +898,9 @@ check. The first call after a quiet period on the free Render plan can take abou
 
 ## Frontend recipes
 
-**Product QR landing (`/r#<code>`)**
+**Product QR landing (`/b/<code>`)**
 
-1. On the `/r` route, read the code from `location.hash` (drop the leading `#`). If signed
+1. On the `/b/:code` route, read the code from the path. If signed If signed
    out, keep it in `sessionStorage` and go to sign-in.
 2. After sign-in (and profile setup if needed), `POST /api/v1/redemptions` with the code.
 3. Call `history.replaceState(null, "", "/scan")` so the code does not stay in the URL bar
@@ -950,6 +951,6 @@ Differences between the 2026-10-10 demo client and this contract:
 | `PATCH /me {display_name}` | `PATCH /me {nickname, avatar_id, favorite_games, accept_terms_version}` |
 | `POST /me/redeem {code}` | `POST /redemptions {code}` |
 | `GET /me/passports` | Removed from the MVP (parked) |
-| QR `https://torsh-x.com/b/<9 chars>` or `TX1:B:<9 chars>` | `https://torshx.com/r#<CITY>-XXX-XXX-XXX`; the code is in the fragment; host from build config |
+| QR `https://torsh-x.com/b/<9 chars>` or `TX1:B:<9 chars>` | `https://torshx.com/b/<CITY>-XXX-XXX-XXX` (host `torshx.com`, no hyphen; `TX1:B:` dropped); host from build config |
 | Avatar, favourites, streak, spin, games, shop, tickets, events, social and invite state live in the browser | All of it moves to the endpoints above; the browser keeps only UI state |
 | No T&C acceptance | Add it to setup |

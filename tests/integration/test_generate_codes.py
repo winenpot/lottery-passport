@@ -63,7 +63,7 @@ async def test_batch_spanning_chunks_stores_hashes_and_writes_private_csv(
     for _, city, printed, code, url in body[:50]:
         assert city == "PARIS"
         assert parse_code(printed).canonical == code
-        assert url == f"https://play.example.ir/r#{printed}".upper()
+        assert url == f"https://play.example.ir/b/{printed}"
     assert stat.S_IMODE(output.stat().st_mode) == 0o600
     digest = hashlib.sha256(output.read_bytes()).hexdigest()
     assert (tmp_path / "paris.csv.sha256").read_text().startswith(digest)

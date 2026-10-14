@@ -90,7 +90,7 @@ Everything that crosses into the core is validated there, even from staff and ev
 | T16 | **Denial of service / floods** | nginx `limit_req`, request body size limit, timeouts; FastAPI workers bounded; PostgreSQL `statement_timeout`; a domestic CDN/WAF in front if attacked | B25 |
 | T17 | **Supply chain** (malicious or swapped packages, mirrors) | `uv.lock` with hashes and `uv sync --locked`; one package index, never `--extra-index-url`; images pinned by digest; `npm ci`; pip-audit and gitleaks in CI | Lock ✅; CI additions B25 |
 | T18 | **Secrets in git or chat** | `.env` ignored; secrets only in a password manager; gitleaks over history | B25 |
-| T19 | **Codes or phone numbers in logs** | API logs no bodies; nginx log format redacts `/r/<code>`; phone numbers masked in application logs | Partly ✅; nginx B25 |
+| T19 | **Codes or phone numbers in logs** | API logs no bodies; nginx log format redacts `/b/<code>`; phone numbers masked in application logs | Partly ✅; nginx B25 |
 | T20 | **Disputed draw** ("it was rigged") | Published entry-snapshot hash before the draw, public seed, reproducible script, witnesses ([DRAW.md](DRAW.md)) | Phase 3 |
 
 ## Authentication and sessions
@@ -145,7 +145,7 @@ Submission URLs: parse, accept only `https://instagram.com` or `https://www.inst
 
 - Collect only what the game needs: mobile number, nickname, home lounge, consent version and time, activity. No name, birth date, national ID or address until a prize claim needs them (Phase 2), and then store them separately with stricter access.
 - Logs never contain codes, OTPs, session tokens, cookies, request bodies or full phone numbers (`0912***6789`).
-- nginx access logs replace `/r/<code>` with `/r/[redacted]` (config in [OPERATIONS.md](OPERATIONS.md#nginx)); the PWA sends `Referrer-Policy: no-referrer` so codes never leak in `Referer` headers.
+- nginx access logs replace `/b/<code>` with `/b/[redacted]` (config in [OPERATIONS.md](OPERATIONS.md#nginx)); the PWA sends `Referrer-Policy: no-referrer` so codes never leak in `Referer` headers.
 - Retention: application logs 30 days; unverified accounts deleted after 7 days; finished jobs deleted after 1 day; backups kept 30 days.
 - A player may ask for deletion: anonymize the user row (keep ledger rows for audit, detached from personal data).
 

@@ -165,11 +165,11 @@ class CodeFormat:
 V2_B10 = CodeFormat(format_id="v2-b10", body_length=10, grouping=(4, 4, 3))
 
 # Current default (decision 2026-10-10): 2-letter city + 9 characters printed
-# as 3-3-3 (8 random characters + 1 check character), carried in the QR as
-# the URL fragment so it never reaches server logs or Referer headers, e.g.
-# ``https://torshx.com/r#TO-ABC-DEF-GHJ``. v2-b10 stays registered: nothing
-# has been printed in either format yet, but the registry never un-registers
-# a format once real codes could exist under it.
+# as 3-3-3 (8 random characters + 1 check character). The QR carries it in
+# the path, ``https://torshx.com/b/TO-ABC-DEF-GHJ`` (decision 2026-10-14;
+# the fragment form ``/r#CODE`` is still parsed). v2-b10 stays registered:
+# nothing has been printed in either format yet, but the registry never
+# un-registers a format once real codes could exist under it.
 CITY2_B9 = CodeFormat(format_id="city2-b9", body_length=8, grouping=(3, 3, 3))
 
 FORMATS: dict[str, CodeFormat] = {}
@@ -330,12 +330,11 @@ def normalize_input(raw: str) -> str:
 def _strip_qr_wrapper(raw: str) -> str:
     """Drop a scanned QR's URL, keeping only the code it carries.
 
-    The current QR payload puts the code after a ``#`` (a URL fragment, so
-    it never reaches server logs or ``Referer`` headers), e.g.
-    ``https://torshx.com/r#TO-ABC-DEF-GHJ``. Anything printed in the older
-    path form (``https://.../r/CODE``, no fragment) is handled too by
-    falling back to the text after the last ``/``. A bare typed code (no
-    ``#`` or ``://``) passes through unchanged.
+    The printed QR puts the code in the path,
+    ``https://torshx.com/b/TO-ABC-DEF-GHJ``: the text after the last ``/``.
+    The fragment form (``https://torshx.com/r#TO-ABC-DEF-GHJ``) is still
+    accepted: the text after ``#``. A bare typed code (no ``#`` or ``://``)
+    passes through unchanged.
     """
     text = raw.strip()
     if "#" in text:

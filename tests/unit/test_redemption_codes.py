@@ -4,7 +4,7 @@ import itertools
 
 import pytest
 
-from app.domain.codes import V2_B10, format_printed, parse_code
+from app.domain.codes import CITY2_B9, V2_B10, format_printed, parse_code
 from app.domain.passports import CityCode
 from scripts.generate_codes import build_unique_codes, city_from_name, qr_url
 
@@ -39,8 +39,15 @@ def test_city_from_name_rejects_unknown_cities() -> None:
         city_from_name("london")
 
 
-def test_qr_url_carries_the_printed_code_in_the_fragment() -> None:
+def test_qr_url_carries_the_printed_code_in_the_b_path() -> None:
     code = "TO7KQ2M9XH4R6"
-    assert qr_url("https://play.example.ir/", code, V2_B10) == (
-        f"https://play.example.ir/r#{format_printed(code, V2_B10)}".upper()
+    assert qr_url("HTTPS://Play.Example.ir/", code, V2_B10) == (
+        f"https://play.example.ir/b/{format_printed(code, V2_B10)}"
     )
+
+
+def test_qr_url_round_trips_through_parse_code() -> None:
+    code = "TOHA1NQCC32"
+    url = qr_url("https://torshx.com", code, CITY2_B9)
+    assert url == "https://torshx.com/b/TO-HA1-NQC-C32"
+    assert parse_code(url).canonical == code

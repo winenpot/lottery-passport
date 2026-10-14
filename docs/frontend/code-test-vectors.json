@@ -306,6 +306,20 @@
   "problem": "mistyped"
  },
  {
+  "input": "https://torshx.com/b/TO-HA1-NQC-C32",
+  "note": "printed QR URL (path form /b/, decision 2026-10-14)",
+  "ok": true,
+  "canonical": "TOHA1NQCC32",
+  "format_id": "city2-b9"
+ },
+ {
+  "input": "https://torshx.com/b/to-ha1-nqc-c32",
+  "note": "printed QR URL, code lower-cased by a scanner app",
+  "ok": true,
+  "canonical": "TOHA1NQCC32",
+  "format_id": "city2-b9"
+ },
+ {
   "input": "https://torshx.com/r#TO-HA1-NQC-C32",
   "note": "printed QR URL, code after the fragment",
   "ok": true,
