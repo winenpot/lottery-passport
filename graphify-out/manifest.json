@@ -90,10 +90,10 @@
     "semantic_hash": "ae6c09c922f071f582af3fd95b7fb20e"
   },
   "app/api/v1/schemas.py": {
-    "mtime": 1791899649.4082496,
-    "seen": 1791899749.9630976,
-    "ast_hash": "4a884918bd5128e0017536d2450bd97d",
-    "semantic_hash": "4a884918bd5128e0017536d2450bd97d"
+    "mtime": 1791977759.5671213,
+    "seen": 1791977802.2684906,
+    "ast_hash": "c99ea9c409f72e72512681a47ffeb1a1",
+    "semantic_hash": "c99ea9c409f72e72512681a47ffeb1a1"
   },
   "app/api/v1/users.py": {
     "mtime": 1791868156.3774724,
@@ -102,10 +102,10 @@
     "semantic_hash": "1dd893316e087ca893eaf50739e3bb42"
   },
   "app/app.py": {
-    "mtime": 1791969090.5733662,
-    "seen": 1791969382.5258176,
-    "ast_hash": "b07903461130ad12803e976c02c0dedc",
-    "semantic_hash": "b07903461130ad12803e976c02c0dedc"
+    "mtime": 1791977744.760063,
+    "seen": 1791977802.268519,
+    "ast_hash": "d69fd87dc97b1642d05372987b4a0f66",
+    "semantic_hash": "d69fd87dc97b1642d05372987b4a0f66"
   },
   "app/application/__init__.py": {
     "mtime": 1788688160.8628054,
@@ -132,16 +132,16 @@
     "semantic_hash": "1e2703654d76c52953dd46bbee4762d2"
   },
   "app/application/redemption_codes.py": {
-    "mtime": 1791722457.9274428,
-    "seen": 1791722470.7762072,
-    "ast_hash": "56cf508b5b424f4233700be3dd3e2588",
-    "semantic_hash": "56cf508b5b424f4233700be3dd3e2588"
+    "mtime": 1791979084.0143378,
+    "seen": 1791979361.4157186,
+    "ast_hash": "8a4b22e7dfdbe90b184a440e6df8b878",
+    "semantic_hash": "8a4b22e7dfdbe90b184a440e6df8b878"
   },
   "app/application/unit_of_work.py": {
-    "mtime": 1791968828.4795215,
-    "seen": 1791969071.2307794,
-    "ast_hash": "e896d63ddaf00cf349fd3abcf0a9d237",
-    "semantic_hash": "e896d63ddaf00cf349fd3abcf0a9d237"
+    "mtime": 1791973582.4628417,
+    "seen": 1791973748.7449088,
+    "ast_hash": "050e6352b0100a3274bce1ec61d2c0d5",
+    "semantic_hash": "050e6352b0100a3274bce1ec61d2c0d5"
   },
   "app/application/wallets.py": {
     "mtime": 1791722457.9275155,
@@ -156,10 +156,10 @@
     "semantic_hash": "6be04eea448a7202ce346f63b6ebe6b9"
   },
   "app/core/config.py": {
-    "mtime": 1791899851.227886,
-    "seen": 1791900062.0753062,
-    "ast_hash": "6464e6233b21a26a35bd21345a5e4051",
-    "semantic_hash": "6464e6233b21a26a35bd21345a5e4051"
+    "mtime": 1791977743.8540595,
+    "seen": 1791977802.2688694,
+    "ast_hash": "74b1295053d2502f7523560a10b0b067",
+    "semantic_hash": "74b1295053d2502f7523560a10b0b067"
   },
   "app/core/logging.py": {
     "mtime": 1791888410.4209073,
@@ -198,10 +198,10 @@
     "semantic_hash": "e6dc8e1812e7b079011e354305d1afb6"
   },
   "app/domain/ledger.py": {
-    "mtime": 1791722457.9277692,
-    "seen": 1791722470.776319,
-    "ast_hash": "c4772741b47a33be2d34088f29688e9a",
-    "semantic_hash": "c4772741b47a33be2d34088f29688e9a"
+    "mtime": 1791973539.364703,
+    "seen": 1791973748.7452135,
+    "ast_hash": "4b46982a8fe48560fc34c1656690194b",
+    "semantic_hash": "4b46982a8fe48560fc34c1656690194b"
   },
   "app/domain/passports.py": {
     "mtime": 1791722457.927803,
@@ -246,10 +246,10 @@
     "semantic_hash": "4e1e7e6f1492247b2e3b6289aee31133"
   },
   "app/infrastructure/postgres/models.py": {
-    "mtime": 1791968881.1486914,
-    "seen": 1791969071.2313771,
-    "ast_hash": "f67fabba557e5ffea3f47996aefe1cf4",
-    "semantic_hash": "f67fabba557e5ffea3f47996aefe1cf4"
+    "mtime": 1791973565.5917873,
+    "seen": 1791973748.745541,
+    "ast_hash": "eaafba918a6bd0486ff0709e7eaef5e5",
+    "semantic_hash": "eaafba918a6bd0486ff0709e7eaef5e5"
   },
   "app/infrastructure/postgres/repositories.py": {
     "mtime": 1791894565.604299,
@@ -258,10 +258,10 @@
     "semantic_hash": "20462dbbaae7581b26bbb836af6f4413"
   },
   "app/infrastructure/postgres/unit_of_work.py": {
-    "mtime": 1791968929.2818465,
-    "seen": 1791969071.2314112,
-    "ast_hash": "e1b8787f85ce96758c29671d5c98320c",
-    "semantic_hash": "e1b8787f85ce96758c29671d5c98320c"
+    "mtime": 1791977640.1036508,
+    "seen": 1791977802.26948,
+    "ast_hash": "c1e01e2c0cd00de71440b0221d18a9b5",
+    "semantic_hash": "c1e01e2c0cd00de71440b0221d18a9b5"
   },
   "deploy/backup.sh": {
     "mtime": 1791722457.9284983,
@@ -324,10 +324,10 @@
     "semantic_hash": "bb8e02af2978db24dc74b6618c86a843"
   },
   "scripts/generate_codes.py": {
-    "mtime": 1791966568.61913,
-    "seen": 1791966794.0440059,
-    "ast_hash": "6e3ca127b24536455bf67b79fe8163c8",
-    "semantic_hash": "6e3ca127b24536455bf67b79fe8163c8"
+    "mtime": 1791977774.48918,
+    "seen": 1791977802.2698615,
+    "ast_hash": "b004280646daa3e885f689aac723bbc2",
+    "semantic_hash": "b004280646daa3e885f689aac723bbc2"
   },
   "scripts/loadtest_sessions.py": {
     "mtime": 1791894783.7930129,
@@ -378,10 +378,10 @@
     "semantic_hash": "ce32711d9a2a7cce78a81d98dc3cb2ca"
   },
   "tests/integration/test_redemption_flow.py": {
-    "mtime": 1791894781.7510061,
-    "seen": 1791895075.3399696,
-    "ast_hash": "c0b5f097a72594a03a8d233abf601aa6",
-    "semantic_hash": "c0b5f097a72594a03a8d233abf601aa6"
+    "mtime": 1791980184.7936733,
+    "seen": 1791980299.1203842,
+    "ast_hash": "99b2974a0369af058e458e243ecb7b8a",
+    "semantic_hash": "99b2974a0369af058e458e243ecb7b8a"
   },
   "tests/test_health.py": {
     "mtime": 1791886600.1355646,
@@ -444,10 +444,10 @@
     "semantic_hash": "0d1496250c4926e2cc878ad3f491f949"
   },
   "tests/unit/test_redemption_service.py": {
-    "mtime": 1791722457.9371872,
-    "seen": 1791722470.77663,
-    "ast_hash": "e78a50700c00166a24ac249859d8d4f5",
-    "semantic_hash": "e78a50700c00166a24ac249859d8d4f5"
+    "mtime": 1791978808.5012527,
+    "seen": 1791979049.760075,
+    "ast_hash": "5af0b74f6038a70f43db243aeeb5de48",
+    "semantic_hash": "5af0b74f6038a70f43db243aeeb5de48"
   },
   ".githooks/commit-msg": {
     "mtime": 1791722457.9260595,
@@ -732,10 +732,10 @@
     "semantic_hash": "f2ada87a39b0e697c2ed676215e7ef3e"
   },
   "docs/openapi.json": {
-    "mtime": 1791970345.8693595,
-    "seen": 1791970629.4803035,
-    "ast_hash": "e1a369abb1cf8a4715c31b66ddd146d8",
-    "semantic_hash": "e1a369abb1cf8a4715c31b66ddd146d8"
+    "mtime": 1791980257.2846234,
+    "seen": 1791980299.1197815,
+    "ast_hash": "be6f6ac284f93e7030c3c47784c224b4",
+    "semantic_hash": "be6f6ac284f93e7030c3c47784c224b4"
   },
   "scripts/admins.py": {
     "mtime": 1791722457.936141,
@@ -930,10 +930,10 @@
     "semantic_hash": "b9095123aceb676505ffa9dc038c5eb8"
   },
   "app/infrastructure/admin/__init__.py": {
-    "mtime": 1791969680.5602674,
-    "seen": 1791969694.1533065,
-    "ast_hash": "86fe232ebbc2bbdda12bd581f42bc266",
-    "semantic_hash": "86fe232ebbc2bbdda12bd581f42bc266"
+    "mtime": 1791977807.1003084,
+    "seen": 1791977807.4550962,
+    "ast_hash": "928390cb99a479f6fa41611e6ba96d8b",
+    "semantic_hash": "928390cb99a479f6fa41611e6ba96d8b"
   },
   "tests/integration/test_admin_panel_db.py": {
     "mtime": 1791970382.8235307,
@@ -982,5 +982,29 @@
     "seen": 1791970629.4807396,
     "ast_hash": "1e054af6b7d4456a35d4e2deb3981e78",
     "semantic_hash": "1e054af6b7d4456a35d4e2deb3981e78"
+  },
+  "alembic/versions/0013_economy_core.py": {
+    "mtime": 1791973551.0667405,
+    "seen": 1791973748.7442298,
+    "ast_hash": "7323947739d8d749b03e3745d1886fc9",
+    "semantic_hash": "7323947739d8d749b03e3745d1886fc9"
+  },
+  "app/domain/periods.py": {
+    "mtime": 1791973528.3626673,
+    "seen": 1791973748.7452636,
+    "ast_hash": "cdd13ba0e0a49fb8ac32683b053190f5",
+    "semantic_hash": "cdd13ba0e0a49fb8ac32683b053190f5"
+  },
+  "app/domain/reward_rules.py": {
+    "mtime": 1791973528.3626673,
+    "seen": 1791973748.7453175,
+    "ast_hash": "0bcdb46a602834ae4d3c1ab61d9780f9",
+    "semantic_hash": "0bcdb46a602834ae4d3c1ab61d9780f9"
+  },
+  "tests/integration/test_economy_core_db.py": {
+    "mtime": 1791979084.0143378,
+    "seen": 1791979361.4172976,
+    "ast_hash": "67c08f6d7fa231dee031cb85b7726232",
+    "semantic_hash": "67c08f6d7fa231dee031cb85b7726232"
   }
 }
