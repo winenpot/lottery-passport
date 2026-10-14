@@ -86,3 +86,47 @@ deleted once this vault is confirmed to carry everything load-bearing from it.
   NVMe) + continuous off-site WAL backups. Method to confirm it:
   `../ops/CAPACITY_PLANNING.md`. Final call goes in ADR 0010 after measurements.
 - Still open: reward economy and delivery (user + Mehdi, after DB design).
+
+## 2026-10-14 — team exclusivity, diamonds full scope, achievements design (queued)
+
+Resolved in chat while E1 was in flight; not yet reflected in the plan file (queued
+behind finishing E1, per the user's own sequencing call). Recorded here first so none
+of this is lost to a session/context loss.
+
+- **Team membership is exclusive, by SKU-purchase threshold.** Crossing a new
+  highest-threshold flavor switches your team; a player is never on two teams at
+  once. Chosen specifically to keep the monthly league's "team score = sum of
+  members' points" meaningful (overlapping membership would have let everyone
+  count toward every team, erasing the lounge/team rivalry `GAMIFICATION.md`
+  principle 5 depends on). Maps onto existing `passport_progress` data — no new
+  table needed for the threshold check itself.
+- **Diamonds: full scope before D12 freeze** (convert action, Mehdi's 72h/monthly
+  conversion window, a new PS5 raffle-entries table) — overrides this session's
+  earlier "defer to post-launch" default. The ledger `asset` column (E1, migration
+  0013) already anticipated this; the new work is the convert action, exposing a
+  second balance on `/me/wallet`, and the raffle-entries table. Mehdi's "PS5 draw is
+  probably per season" remark introduces a season concept `ROADMAP.md` explicitly
+  parks for Phase 4 — do not build season infrastructure for this; scope diamonds/PS5
+  to work for one unnamed season (today's), revisit seasons only if Mehdi insists.
+- **Achievements: no message broker.** The user asked for an event-driven rules
+  engine (emit facts, match against stored definitions) and separately asked whether
+  RabbitMQ/Kafka/Redis Streams were warranted. Decision: no. ADR 0004 already rejected
+  Redis for the MVP for a stronger case (the SMS job queue) than achievements is;
+  Kafka/RabbitMQ would add an infra component to operate, back up and secure during a
+  four-working-day runway, for a feature with zero existing spec, at a load this
+  campaign's own numbers (~1,000 req/s peak, see above) do not come close to needing.
+  Design instead (mirrors ADR 0004's `QUEUE_BACKEND=postgres|redis` shape exactly):
+  - `FactPublisher.publish(fact)` — the only thing application services call; no
+    infrastructure concept is visible above this port.
+  - `InProcessFactPublisher` (ships with achievements, whenever that is built):
+    evaluates `achievement_rules` and writes `user_achievements` in the *same*
+    unit-of-work transaction as the triggering write. Zero new infrastructure.
+  - Escalation path, not built now: a transactional outbox (`fact_outbox`, written in
+    the same transaction so nothing is lost waiting on a broker) drained by a worker,
+    reusing B11's planned Postgres-backed `jobs`/worker machinery. A broker, if ever
+    genuinely needed, would only be imported inside that worker — never above the
+    `FactPublisher` port, never in `RedemptionService` or any other call site.
+  - Achievements has no existing spec (checked: nothing in the repo beyond one
+    throwaway line in this file); `GAMIFICATION.md`'s own anti-patterns table already
+    warns against hollow badges and "two confusing currencies" — needs its own
+    spec pass before building, not just an architecture.
