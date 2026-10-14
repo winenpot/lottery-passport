@@ -16,7 +16,15 @@ top of their section.
 
 ## Production sizing
 
-**Status: ESTIMATE ONLY — servers not yet inspected.**
+**Status: ESTIMATE ONLY — atpg inventoried 2026-10-14, DB server not yet.**
+
+2026-10-14 atpg: VMware VM, 8 vCPU, 15 GiB RAM (10 available), single 100 GB
+disk (was 97% full; cleaned to 63% by truncating an unrotated 22 GB MongoDB
+container log + build cache; Docker log rotation still missing), 29 near-idle
+containers, load ~0.7. DB server (user-reported, not inspected): 8 vCPU /
+16 GB / 250 GB VM, MongoDB for ~10 Flask apps + an empty Postgres.
+Staging decided: Render + Supabase. Work plan and buy rule:
+`.hermes/plans/2026-10-14_infra-capacity.md`.
 Method and commands: `../ops/CAPACITY_PLANNING.md`.
 Target: 40,000 registered users, 10,000 active at a spike.
 

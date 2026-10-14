@@ -46,6 +46,23 @@ conventional-commit subjects). `HANDOFF.md` (written by a prior session,
 superseded by this vault + the plan file) is gitignored and will be
 deleted once this vault is confirmed to carry everything load-bearing from it.
 
+## 2026-10-14 — QR back to path form `/b/<code>`; venue check-in; sheet is final
+
+- **QR format supersedes 2026-10-10:** `https://torshx.com/b/<CITY>-XXX-XXX-XXX`
+  (Arman's route; the fragment form was a misunderstanding on our side). Host stays
+  `torshx.com` (torsh-x.com does not resolve). Nothing was printed, so no code changes;
+  the parser accepts both forms. Cost: the code reaches proxy access logs, so `/b/*` is
+  redacted there and the app sends `Referrer-Policy: no-referrer`.
+- Daily venue check-in QR `/q/<venue>/<date>/<token>` (one printed sheet per lounge per
+  day, staff swap it each morning), small coin reward, once per player per day.
+- Rewards sheet is final for launch (Mehdi, 2026-10-14), referral part pending his voice
+  note. Leaderboard = sheet: monthly league points per player and per flavor team.
+- Game scores are never trusted from the browser: server-issued runs, plausibility checks,
+  caps. Spin / PS5 draw: visuals now, routes stubbed, payouts off until legal sign-off.
+- Profile photos: chosen from a server-side avatar catalogue (some locked, unlocked by
+  coins/achievements later); no user uploads (no moderation capacity). Home city
+  (location city) added to the profile.
+
 ## 2026-10-10 — frontend demo, QR format, hosting, sizing
 
 - Frontend demo reviewed (Arman, http://86.104.82.71:8000/, all mocked in the
