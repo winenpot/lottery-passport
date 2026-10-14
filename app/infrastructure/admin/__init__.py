@@ -1,20 +1,23 @@
 """Back office (SQLAdmin) mounted at ``/admin``. ADR-0008 as amended.
 
 Step 1 of B20: phone sign-in for users with the ``admin`` role, and read-only
-views. Every write (coin adjustments, approvals) arrives in later steps and
-goes through an application service plus the audit log, never a raw edit.
+views. Step 2: an audit row for every write (SQLAdmin's own audit backend
+for generic CRUD, like the venues edit below; the application's unit of
+work for a multi-table action, like coin adjustments). No write happens as
+a raw edit outside these two paths.
 """
 
 import secrets
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 from urllib.parse import urlencode
 from uuid import UUID
 
-from sqladmin import Admin, ModelView
+from sqladmin import Admin, BaseView, DBAuditBackend, Flash, ModelView, expose
+from sqladmin.audit import AuditEntry
 from sqladmin.authentication import AuthenticationBackend
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -28,7 +31,14 @@ from app.application.authentication import (
     PhoneInvalidError,
     ResendCooldownError,
 )
+from app.application.coin_adjustments import (
+    CoinAdjustmentService,
+    InsufficientCoinsError,
+    PhoneNumberError,
+    UserNotFoundError,
+)
 from app.infrastructure.postgres.models import (
+    AuditLogModel,
     CodeBatchModel,
     CoinLedgerEntryModel,
     UserModel,
@@ -178,6 +188,11 @@ class VenueAdmin(ReadOnlyView, model=VenueModel):
     name = "Lounge"
     name_plural = "Lounges"
     icon = "fa-solid fa-gamepad"
+    # Editable (B20 step 2): fields the panel can fill in as they become
+    # known (``address`` is often null at first). ``city`` stays CLI-only
+    # (``scripts.venues set --city``): it is one of four fixed ids and the
+    # panel has no dropdown widget to constrain free text to them.
+    can_edit = True
     column_list = [
         VenueModel.id,
         VenueModel.name,
@@ -187,6 +202,12 @@ class VenueAdmin(ReadOnlyView, model=VenueModel):
     ]
     column_labels = {VenueModel.city: "location city"}
     column_searchable_list = [VenueModel.id, VenueModel.name]
+    form_columns = [
+        VenueModel.name,
+        VenueModel.address,
+        VenueModel.public_ip,
+        VenueModel.active,
+    ]
 
 
 class CodeBatchAdmin(ReadOnlyView, model=CodeBatchModel):
@@ -246,6 +267,110 @@ VIEWS: tuple[type[ModelView], ...] = (
 )
 
 
+class SqlAdminAuditBackend(DBAuditBackend):
+    """Writes SQLAdmin's own CRUD audit entries into our ``audit_log`` table.
+
+    Best-effort, in its OWN transaction: SQLAdmin calls this after the edit
+    already committed (see ``ModelView._emit_audit``), matching its documented
+    trade-off that a broken audit backend must never undo an already-committed
+    admin change. A write that must be atomic with its audit row (coin
+    adjustments) goes through ``CoinAdjustmentService``'s unit of work
+    instead, never through this backend.
+    """
+
+    def build_row(
+        self, entry: AuditEntry, actor: Any, request: Request
+    ) -> AuditLogModel:
+        # ``actor`` is None only if a write somehow ran without an
+        # authenticated admin, which ``authenticate()`` already prevents;
+        # UUID(None) raises, and the caller (_emit_audit) logs it rather
+        # than lose the already-committed change.
+        return AuditLogModel(
+            actor_user_id=UUID(str(actor)),
+            action=entry.action,
+            entity=entry.identity,
+            entity_id=entry.pk,
+            changes=entry.changes,
+            ip=request.client.host if request.client else None,
+            created_at=entry.timestamp,
+        )
+
+
+class CoinAdjustmentView(BaseView):
+    """A small custom page (not a model list) for giving or taking coins.
+
+    Goes through ``CoinAdjustmentService`` -- ledger entry, wallet and audit
+    row in one transaction -- never a raw ``UPDATE`` on ``wallets``.
+    ``service`` is a class attribute set once in :func:`mount_admin`
+    (SQLAdmin instantiates views with no constructor arguments, the same
+    reason it injects ``session_maker`` onto ``ModelView`` subclasses after
+    the fact rather than through ``__init__``).
+    """
+
+    name = "Adjust coins"
+    identity = "coin-adjustments"
+    icon = "fa-solid fa-coins"
+    service: ClassVar[CoinAdjustmentService]
+
+    @expose("/coin-adjustments", methods=["GET", "POST"], identity="coin-adjustments")
+    async def form(self, request: Request) -> Response:
+        if request.method == "POST":
+            await self._submit(request)
+            return RedirectResponse(
+                request.url_for("admin:view-coin-adjustments"), status_code=303
+            )
+        return await self.templates.TemplateResponse(
+            request, "sqladmin/coin_adjustment.html", {}
+        )
+
+    async def _submit(self, request: Request) -> None:
+        admin_id = request.session.get("uid")
+        if not admin_id:
+            Flash.error(request, "Session expired; sign in again.")
+            return
+        data = await request.form()
+        identifier = str(data.get("identifier") or "").strip()
+        note = str(data.get("note") or "").strip()
+        amount_raw = str(data.get("amount") or "").strip()
+        try:
+            amount = int(amount_raw)
+        except ValueError:
+            Flash.error(request, "Amount must be a whole number.")
+            return
+        if amount == 0:
+            Flash.error(request, "Amount must not be zero.")
+            return
+        if not note:
+            Flash.error(request, "A note (reason) is required.")
+            return
+        if len(note) > 500:
+            Flash.error(request, "Note is too long (500 characters max).")
+            return
+        try:
+            result = await self.service.adjust(
+                actor_id=UUID(admin_id),
+                target_identifier=identifier,
+                amount=amount,
+                note=note,
+                ip=request.client.host if request.client else None,
+            )
+        except PhoneNumberError:
+            Flash.error(request, "That is not a valid Iranian mobile number.")
+        except UserNotFoundError:
+            Flash.error(request, f"No player with phone number {identifier!r}.")
+        except InsufficientCoinsError:
+            Flash.error(request, "That would take the balance below zero.")
+        except ValueError as error:
+            Flash.error(request, str(error))
+        else:
+            verb = "Gave" if amount > 0 else "Took"
+            Flash.success(
+                request,
+                f"{verb} {abs(amount)} coins for {identifier}. "
+                f"New balance: {result.new_balance}.",
+            )
+
+
 def mount_admin(
     app: Starlette,
     engine: AsyncEngine,
@@ -255,6 +380,8 @@ def mount_admin(
     max_age_seconds: int,
     secure: bool,
     show_test_codes: bool,
+    session_factory: async_sessionmaker[AsyncSession],
+    coin_adjustment_service: CoinAdjustmentService,
 ) -> Admin:
     backend = PhoneSignInBackend(
         service,
@@ -273,7 +400,10 @@ def mount_admin(
         title="TorshX admin",
         authentication_backend=backend,
         templates_dir=str(TEMPLATES_DIR),
+        audit_backend=SqlAdminAuditBackend(session_factory),
     )
     for view in VIEWS:
         admin.add_view(view)
+    CoinAdjustmentView.service = coin_adjustment_service
+    admin.add_view(CoinAdjustmentView)
     return admin

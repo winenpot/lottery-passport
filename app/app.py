@@ -27,6 +27,7 @@ from app.api.routes import router
 from app.application.admin_users import AdminUserService
 from app.application.app_config import AppConfigService
 from app.application.authentication import AuthenticationService, AuthenticationSettings
+from app.application.coin_adjustments import CoinAdjustmentService
 from app.application.failure_throttle import ThrottleSettings
 from app.application.passports import PassportService
 from app.application.ports import ReadinessChecker
@@ -168,6 +169,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     wallet_service = WalletService(
         wallets=PostgreSQLWalletReader(database.session_factory)
     )
+    coin_adjustment_service = CoinAdjustmentService(
+        unit_of_work=unit_of_work,
+        users=PostgreSQLUserRepository(database.session_factory),
+        clock=SystemClock(),
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -250,6 +256,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # TODO: remove this on production (otp_test_numbers.py).
         show_test_codes=resolved_settings.environment.lower()
         in {"development", "demo"},
+        session_factory=database.session_factory,
+        coin_adjustment_service=coin_adjustment_service,
     )
     application.state.readiness_checker = readiness_checker
     application.state.authentication_service = authentication_service
@@ -259,6 +267,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.admin_user_service = admin_user_service
     application.state.profile_service = profile_service
     application.state.app_config_service = app_config_service
+    application.state.coin_adjustment_service = coin_adjustment_service
     application.state.sms_sender = sms_sender
     application.state.settings = resolved_settings
     return application

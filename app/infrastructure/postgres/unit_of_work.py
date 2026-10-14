@@ -28,10 +28,12 @@ from app.application.unit_of_work import (
     CodeLookup,
     InsufficientCoinsError,
 )
+from app.domain.audit import NewAuditEntry
 from app.domain.code_batches import BatchStatus
 from app.domain.ledger import NewLedgerEntry
 from app.domain.passports import Campaign, CityCode, PassportProgress
 from app.infrastructure.postgres.models import (
+    AuditLogModel,
     CodeBatchModel,
     CoinLedgerEntryModel,
     PassportProgressModel,
@@ -208,12 +210,31 @@ class SqlLedger:
         return int(amount) if amount is not None else None
 
 
+class SqlAudit:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def record(self, entry: NewAuditEntry) -> None:
+        await self._session.execute(
+            pg_insert(AuditLogModel).values(
+                actor_user_id=entry.actor_user_id,
+                action=entry.action.value,
+                entity=entry.entity,
+                entity_id=entry.entity_id,
+                changes=entry.changes,
+                ip=entry.ip,
+                created_at=entry.created_at,
+            )
+        )
+
+
 class SqlAlchemyUnitOfWork:
     """``async with SqlAlchemyUnitOfWork(factory) as uow: ...; await uow.commit()``."""
 
     codes: SqlRedemptionCodes
     passports: SqlPassports
     ledger: SqlLedger
+    audit: SqlAudit
 
     def __init__(self, factory: async_sessionmaker[AsyncSession]) -> None:
         self._factory = factory
@@ -226,6 +247,7 @@ class SqlAlchemyUnitOfWork:
         self.codes = SqlRedemptionCodes(self._session)
         self.passports = SqlPassports(self._session)
         self.ledger = SqlLedger(self._session)
+        self.audit = SqlAudit(self._session)
         return self
 
     async def __aexit__(

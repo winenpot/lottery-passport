@@ -13,6 +13,7 @@ from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
 
+from app.domain.audit import NewAuditEntry
 from app.domain.ledger import NewLedgerEntry
 from app.domain.passports import Campaign, CityCode, PassportProgress
 
@@ -86,6 +87,12 @@ class LedgerInTransaction(Protocol):
     async def amount_for_key(self, idempotency_key: str) -> int | None: ...
 
 
+class AuditInTransaction(Protocol):
+    async def record(self, entry: NewAuditEntry) -> None:
+        """Insert an audit row in the same transaction as the write it covers."""
+        ...
+
+
 class UnitOfWork(Protocol):
     # Read-only properties so implementations may expose concrete subtypes.
     @property
@@ -96,6 +103,9 @@ class UnitOfWork(Protocol):
 
     @property
     def ledger(self) -> LedgerInTransaction: ...
+
+    @property
+    def audit(self) -> AuditInTransaction: ...
 
     async def __aenter__(self) -> Self: ...
 

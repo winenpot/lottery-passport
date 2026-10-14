@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import (
     BigInteger,
@@ -14,6 +15,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -313,4 +315,39 @@ class RedemptionFailureModel(Base):
 
     __table_args__ = (
         Index("ix_redemption_failures_user_time", "user_id", "occurred_at"),
+    )
+
+
+class AuditLogModel(Base):
+    """Who changed what in ``/admin``, and when. Append-only (see migration
+    0012: a trigger rejects UPDATE/DELETE, like ``coin_ledger_entries``).
+
+    Two writers: SQLAdmin's own generic CRUD audit hook (venues edits; a
+    separate, best-effort transaction committed right after the edit) and
+    application services with a unit of work (coin adjustments; same
+    transaction as the write it covers). ``changes`` is the submitted data,
+    not a before/after diff -- see app/domain/audit.py.
+    """
+
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String(20), nullable=False)
+    entity: Mapped[str] = mapped_column(String(60), nullable=False)
+    entity_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    changes: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('create', 'update', 'delete')", name="ck_audit_log_action"
+        ),
+        Index("ix_audit_log_actor_time", "actor_user_id", "created_at"),
+        Index("ix_audit_log_entity", "entity", "entity_id"),
     )
