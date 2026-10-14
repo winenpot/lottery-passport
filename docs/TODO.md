@@ -77,6 +77,8 @@ the item is closed; reopening it later goes through the swap rule.
 | B33 | should | Leaderboard TV page for lounge screens | Runs 8 hours on a lounge screen without a reload |
 | B34 | should | Venue check-in: rotating signed QR on the lounge screen (60 s validity) | A photo of the QR is useless after a minute |
 | B35 | should | Tournament self-registration | |
+| B36 | D11 | Teams (flavor), Fibonacci switching ([vault decision 2026-10-14 evening](vault/Decisions.md)): auto-join at 5 codes of one flavor; opt-in switch `POST /me/team` needs the next Fibonacci count (8, 13, 21, ...) of the target flavor since the last change; `team_memberships` history; behind `/config.features.teams` | Unit test walks join 5 -> switch 8 -> switch 13; 7 codes of the target refused with 409 `TEAM_THRESHOLD_NOT_MET` |
+| B37 | D12 (extra hours) | Achievements + badges: spec in [GAMIFICATION.md](GAMIFICATION.md), `badges` catalogue (image assets, locked/unlocked art), `achievement_rules` editable in /admin, `user_achievements`, `FactPublisher` port with an in-process adapter in the same unit of work, `newly_unlocked` in the triggering response, `GET /badges`, `GET /me/achievements`; behind `/config.features.achievements` | Redeeming the 7th distinct flavor returns its badge in `newly_unlocked` exactly once |
 
 ## Arman: frontend
 

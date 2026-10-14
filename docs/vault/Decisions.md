@@ -146,3 +146,29 @@ of this is lost to a session/context loss.
     transaction, worker sends the push/SMS only after that transaction is confirmed
     committed, outside it. Scope to the in-app case only unless push/SMS is
     explicitly requested later.
+
+## 2026-10-14 evening — Fibonacci team switching, achievements + badges, staged rollout
+
+- **Team switching follows Fibonacci from 5** (Ashkan, team chat). A player joins a
+  flavor team automatically when one flavor reaches 5 codes. Switching afterwards is
+  the player's choice and needs the next number of codes of the TARGET flavor:
+  8 for the first switch, 13 for the second, then 21, 34, ... Each switch is harder,
+  so teams stay meaningful for the league but nobody is locked in forever.
+  Refines the morning entry above: "crossing a new highest threshold switches your
+  team" becomes "unlocks the right to switch"; exclusivity is unchanged.
+  - Default, open to objection: codes count since the last team change (lifetime
+    counts would make later switches free for heavy buyers).
+  - Stored as an additive `team_memberships` history (user, flavor, joined_at,
+    switch_no). Default for the league: points count for the team the player was on
+    when they earned them (Mehdi may choose "team at month end" instead).
+  - Rejected switch: 409 `TEAM_THRESHOLD_NOT_MET` with `required` and `have`.
+- **Staged rollout instead of cutting** (Arman's point: no awareness yet, too many
+  mechanics on day one confuses players; the team agreed). Everything in the MVP plan
+  still gets built; mechanics go live gradually through `/config.features` flags.
+  Teams and achievements each get a flag. Flavors reach players first through
+  challenges ("discover 3 flavors").
+- **Achievements + badges are a planned MVP item** (B37), built in the user's extra
+  hours so they don't displace other launch work. Badges are catalogue assets (image
+  per badge, locked and unlocked art), same shape as the avatar catalogue. A spec
+  pass (the list of achievements) comes before code; architecture as in the morning
+  entry (FactPublisher, in-process, no broker).
