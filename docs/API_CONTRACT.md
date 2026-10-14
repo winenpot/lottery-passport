@@ -392,11 +392,23 @@ without dashes, in any letter case. The server normalizes it.
 
 ```http
 200 OK
-{"coins_awarded": 50, "coin_balance": 2500, "scans_today": 2, "scans_limit": 5, "replayed": false}
+{
+  "city": "tokyo",
+  "entries_added": 1,
+  "city_entries": 14,
+  "coins_awarded": 50,
+  "coin_balance": 2500,
+  "replayed": false,
+  "bonus_awarded": 0
+}
 ```
 
 `replayed: true` means this account already redeemed this code. Show the same success
-screen without confetti; a replay does not count toward the limit. Errors:
+screen without confetti; a replay does not count toward the limit. `bonus_awarded` is
+non-zero only on the redemption that first triggers a reward rule (currently: the
+welcome bonus on a user's very first successful redemption, ADR 0010); it is already
+included in `coin_balance`, same as `coins_awarded` — the client never adds it
+separately. Errors:
 `CODE_MALFORMED`, `CODE_MISTYPED`, `CODE_INVALID`, `CODE_ALREADY_REDEEMED`,
 `SCAN_DAILY_LIMIT`, `CODE_ATTEMPTS_LIMITED`.
 

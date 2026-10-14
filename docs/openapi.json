@@ -438,6 +438,11 @@
       },
       "RedemptionResponse": {
         "properties": {
+          "bonus_awarded": {
+            "default": 0,
+            "title": "Bonus Awarded",
+            "type": "integer"
+          },
           "city": {
             "title": "City",
             "type": "string"

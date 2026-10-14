@@ -16,6 +16,7 @@ from uuid import UUID
 from app.domain.audit import NewAuditEntry
 from app.domain.ledger import NewLedgerEntry
 from app.domain.passports import Campaign, CityCode, PassportProgress
+from app.domain.reward_rules import RewardRule
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +94,16 @@ class AuditInTransaction(Protocol):
         ...
 
 
+class RewardRulesInTransaction(Protocol):
+    async def get(self, key: str) -> RewardRule | None:
+        """The current rule for ``key``, or ``None`` if nobody has set one.
+
+        ``None`` is the normal case for most keys (ADR 0010): it means "use
+        the calling service's configured default", not an error.
+        """
+        ...
+
+
 class UnitOfWork(Protocol):
     # Read-only properties so implementations may expose concrete subtypes.
     @property
@@ -106,6 +117,9 @@ class UnitOfWork(Protocol):
 
     @property
     def audit(self) -> AuditInTransaction: ...
+
+    @property
+    def rules(self) -> RewardRulesInTransaction: ...
 
     async def __aenter__(self) -> Self: ...
 

@@ -421,15 +421,21 @@ async def test_redemption_api_end_to_end(test_database_url: str) -> None:
         "entries_added": 1,
         "city_entries": 1,
         "coins_awarded": 10,
-        "coin_balance": 10,
+        "coin_balance": 60,  # 10 base + the default 50-coin first-code bonus
         "replayed": False,
+        "bonus_awarded": 50,
     }
     assert replay.status_code == 200
     assert replay.json()["replayed"] is True
     assert garbage.status_code == 400
     assert garbage.json()["error"]["code"] == "CODE_MALFORMED"
-    assert wallet.json()["balance"] == 10
-    assert wallet.json()["recent"][0]["reason"] == "code_redemption"
+    assert wallet.json()["balance"] == 60
+    # Two ledger rows from this one redemption: base award, then the
+    # first-code bonus right after it in the same transaction -- "recent"
+    # orders by id desc (insertion order), so the bonus (inserted second)
+    # is recent[0].
+    assert wallet.json()["recent"][0]["reason"] == "first_code_bonus"
+    assert wallet.json()["recent"][1]["reason"] == "code_redemption"
     assert passports.json()[0]["campaign"] == "tokyo"
     assert passports.json()[0]["points"] == 1
 

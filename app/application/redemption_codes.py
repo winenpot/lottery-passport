@@ -30,6 +30,8 @@ from app.domain.codes import CodeFormatError, CodeProblem, parse_code
 from app.domain.ledger import LedgerReason, NewLedgerEntry
 from app.domain.passports import CAMPAIGN_BY_CITY, ENTRIES_PER_CODE, CityCode
 
+FIRST_CODE_BONUS_KEY = "first_code"
+
 
 class RedemptionErrorCode(StrEnum):
     """Stable error codes the frontend maps to user-facing copy."""
@@ -60,6 +62,7 @@ class RedemptionResult:
     coins_awarded: int
     coin_balance: int
     replayed: bool
+    bonus_awarded: int = 0
 
 
 def hash_redemption_code(code: str, pepper: str) -> str:
@@ -75,6 +78,10 @@ def hash_redemption_code(code: str, pepper: str) -> str:
 
 def redemption_idempotency_key(code_id: UUID) -> str:
     return f"{LedgerReason.CODE_REDEMPTION.value}:{code_id}"
+
+
+def first_code_bonus_idempotency_key(user_id: UUID) -> str:
+    return f"{FIRST_CODE_BONUS_KEY}:{user_id}"
 
 
 def start_of_local_day(moment: datetime, zone: ZoneInfo) -> datetime:
@@ -93,6 +100,7 @@ class RedemptionService:
         campaign_zone: ZoneInfo,
         throttle: FailureThrottle | None = None,
         throttle_settings: ThrottleSettings | None = None,
+        first_code_bonus_coins: int = 0,
     ) -> None:
         self._unit_of_work = unit_of_work
         self._clock = clock
@@ -101,6 +109,9 @@ class RedemptionService:
         self._campaign_zone = campaign_zone
         self._throttle = throttle
         self._throttle_settings = throttle_settings or ThrottleSettings()
+        # Default when no `reward_rules` row overrides it (ADR 0010); the
+        # sheet's number lives in Settings, not hardcoded here.
+        self._first_code_bonus_coins = first_code_bonus_coins
 
     async def redeem(self, user_id: UUID, raw_code: str) -> RedemptionResult:
         if self._pepper is None:
@@ -173,6 +184,7 @@ class RedemptionService:
                     source_id=str(claimed.code_id),
                 )
             )
+        balance, bonus = await self._award_first_code_bonus(uow, user_id, balance, now)
         return RedemptionResult(
             city=claimed.city,
             entries_added=ENTRIES_PER_CODE,
@@ -180,7 +192,39 @@ class RedemptionService:
             coins_awarded=claimed.coins_per_code,
             coin_balance=balance,
             replayed=False,
+            bonus_awarded=bonus,
         )
+
+    async def _award_first_code_bonus(
+        self, uow: UnitOfWork, user_id: UUID, balance: int, now: datetime
+    ) -> tuple[int, int]:
+        """Pay the welcome bonus at most once per user (ADR 0010).
+
+        A ``reward_rules`` row for ``first_code`` overrides the amount or
+        turns it off (``active=false``); no row means "use the configured
+        default". Checked on every redemption rather than only the first,
+        since nothing marks a user as "first redemption done" ahead of the
+        ledger itself — the idempotency key is what actually prevents a
+        second payout.
+        """
+        rule = await uow.rules.get(FIRST_CODE_BONUS_KEY)
+        amount = rule.amount if rule is not None else self._first_code_bonus_coins
+        active = rule.active if rule is not None else True
+        if not active or amount <= 0:
+            return balance, 0
+        key = first_code_bonus_idempotency_key(user_id)
+        if await uow.ledger.amount_for_key(key) is not None:
+            return balance, 0
+        balance = await uow.ledger.record(
+            NewLedgerEntry(
+                user_id=user_id,
+                amount=amount,
+                reason=LedgerReason.FIRST_CODE_BONUS,
+                idempotency_key=key,
+                created_at=now,
+            )
+        )
+        return balance, amount
 
     async def _resolve_unclaimed(
         self, uow: UnitOfWork, code_hash: str, user_id: UUID, balance: int

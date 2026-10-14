@@ -16,11 +16,20 @@ from uuid import UUID
 
 class LedgerReason(StrEnum):
     CODE_REDEMPTION = "code_redemption"
+    FIRST_CODE_BONUS = "first_code_bonus"
     CHALLENGE_REWARD = "challenge_reward"
     TOURNAMENT_PRIZE = "tournament_prize"
     SOCIAL_POST_REWARD = "social_post_reward"
     ADMIN_ADJUSTMENT = "admin_adjustment"
     STORE_PURCHASE = "store_purchase"
+
+
+class Asset(StrEnum):
+    """What a ledger entry moves. Only ``coin`` exists; ``asset`` is added
+    now (ADR 0010) so a future diamond currency widens a CHECK constraint
+    instead of needing another migration to the ledger's shape."""
+
+    COIN = "coin"
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +49,7 @@ class NewLedgerEntry:
     source_id: str | None = None
     actor_id: UUID | None = None
     note: str | None = None
+    asset: Asset = Asset.COIN
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +60,7 @@ class LedgerEntry:
     reason: LedgerReason
     source_id: str | None
     created_at: datetime
+    asset: Asset = Asset.COIN
 
 
 @dataclass(frozen=True, slots=True)

@@ -8,7 +8,7 @@ when the product reaches the venues.
 Usage (one city per batch, one batch per print run)::
 
     uv run python -m scripts.generate_codes --city tokyo --quantity 50000 \
-        --coins-per-code 10 --label "Tokyo can, first run" \
+        --coins-per-code 100 --label "Tokyo can, first run" \
         --base-url https://play.example.ir \
         --output var/redemption-codes/tokyo-run1.csv
 
@@ -242,7 +242,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--city", required=True, help="campaign name or prefix")
     parser.add_argument("--quantity", type=int, required=True)
-    parser.add_argument("--coins-per-code", type=int, default=0)
+    parser.add_argument(
+        "--coins-per-code",
+        type=int,
+        default=100,
+        help="coins this batch's codes pay out (sheet default: 100, ADR 0010)",
+    )
     parser.add_argument("--label", required=True, help="human description of the run")
     parser.add_argument(
         "--base-url",

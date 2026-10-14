@@ -21,6 +21,7 @@ from app.application.redemption_codes import (
     RedemptionError,
     RedemptionErrorCode,
     RedemptionService,
+    first_code_bonus_idempotency_key,
     hash_redemption_code,
     start_of_local_day,
 )
@@ -28,6 +29,7 @@ from app.application.unit_of_work import ClaimedCode, CodeLookup
 from app.domain.codes import ALPHABET, compute_check_value, generate_code
 from app.domain.ledger import NewLedgerEntry
 from app.domain.passports import Campaign, CityCode, PassportProgress
+from app.domain.reward_rules import Cadence, RewardRule
 
 PEPPER = "test-pepper"
 TEHRAN = ZoneInfo("Asia/Tehran")
@@ -49,6 +51,7 @@ class Store:
     entries: dict[tuple[UUID, Campaign], int] = field(default_factory=dict)
     ledger: list[NewLedgerEntry] = field(default_factory=list)
     wallets: dict[UUID, int] = field(default_factory=dict)
+    rules: dict[str, RewardRule] = field(default_factory=dict)
 
 
 class FakeCodes:
@@ -123,6 +126,14 @@ class FakeLedger:
         return None
 
 
+class FakeRewardRules:
+    def __init__(self, store: Store) -> None:
+        self.store = store
+
+    async def get(self, key: str) -> RewardRule | None:
+        return self.store.rules.get(key)
+
+
 class FakeUnitOfWork:
     def __init__(self, committed: Store) -> None:
         self._committed = committed
@@ -139,6 +150,10 @@ class FakeUnitOfWork:
     @property
     def ledger(self) -> FakeLedger:
         return FakeLedger(self.working)
+
+    @property
+    def rules(self) -> FakeRewardRules:
+        return FakeRewardRules(self.working)
 
     async def __aenter__(self) -> Self:
         self.working = copy.deepcopy(self._committed)
@@ -183,6 +198,7 @@ def build(
     now: datetime | None = None,
     throttle: FakeThrottle | None = None,
     max_invalid_attempts: int = 10,
+    first_code_bonus_coins: int = 0,
 ) -> tuple[RedemptionService, Store, FakeClock]:
     store = Store()
     clock = FakeClock(now or datetime(2026, 10, 10, 12, 0, tzinfo=UTC))
@@ -196,6 +212,7 @@ def build(
         throttle_settings=ThrottleSettings(
             max_attempts=max_invalid_attempts, window_seconds=3600
         ),
+        first_code_bonus_coins=first_code_bonus_coins,
     )
     return service, store, clock
 
@@ -442,3 +459,71 @@ async def test_no_throttle_configured_does_not_block() -> None:
     user = uuid4()
     result = await service.redeem(user, add_code(store))
     assert result.replayed is False
+
+
+# ---------------------------------------------------------------------------
+# First-code bonus (ADR 0010)
+# ---------------------------------------------------------------------------
+
+
+async def test_first_code_bonus_is_off_by_default() -> None:
+    service, store, _ = build()  # first_code_bonus_coins defaults to 0
+    user = uuid4()
+
+    result = await service.redeem(user, add_code(store, coins=10))
+
+    assert (result.bonus_awarded, result.coin_balance) == (0, 10)
+    assert len(store.ledger) == 1
+
+
+async def test_first_code_bonus_pays_once_on_the_first_redemption() -> None:
+    service, store, _ = build(first_code_bonus_coins=50)
+    user = uuid4()
+
+    first = await service.redeem(user, add_code(store, coins=10))
+    second = await service.redeem(user, add_code(store, coins=10))
+
+    assert (first.bonus_awarded, first.coin_balance) == (50, 60)
+    assert (second.bonus_awarded, second.coin_balance) == (0, 70)
+    assert store.wallets[user] == 70
+    bonus_entries = [
+        e
+        for e in store.ledger
+        if e.idempotency_key == first_code_bonus_idempotency_key(user)
+    ]
+    assert len(bonus_entries) == 1
+
+
+async def test_first_code_bonus_is_per_user() -> None:
+    service, store, _ = build(first_code_bonus_coins=50)
+
+    first_user = await service.redeem(uuid4(), add_code(store, coins=0))
+    second_user = await service.redeem(uuid4(), add_code(store, coins=0))
+
+    assert first_user.bonus_awarded == 50
+    assert second_user.bonus_awarded == 50
+
+
+async def test_reward_rule_overrides_the_configured_bonus_amount() -> None:
+    service, store, _ = build(first_code_bonus_coins=50)
+    store.rules["first_code"] = RewardRule(
+        key="first_code", amount=99, cadence=Cadence.ONCE, active=True
+    )
+    user = uuid4()
+
+    result = await service.redeem(user, add_code(store, coins=0))
+
+    assert result.bonus_awarded == 99
+
+
+async def test_reward_rule_can_switch_the_bonus_off() -> None:
+    service, store, _ = build(first_code_bonus_coins=50)
+    store.rules["first_code"] = RewardRule(
+        key="first_code", amount=50, cadence=Cadence.ONCE, active=False
+    )
+    user = uuid4()
+
+    result = await service.redeem(user, add_code(store, coins=0))
+
+    assert result.bonus_awarded == 0
+    assert store.ledger == []

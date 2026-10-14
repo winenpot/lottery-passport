@@ -165,6 +165,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             max_attempts=resolved_settings.redemption_max_invalid_attempts_per_hour,
             window_seconds=3600,
         ),
+        first_code_bonus_coins=resolved_settings.first_code_bonus_coins,
     )
     wallet_service = WalletService(
         wallets=PostgreSQLWalletReader(database.session_factory)

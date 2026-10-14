@@ -199,6 +199,7 @@ class RedemptionResponse(BaseModel):
     coins_awarded: int
     coin_balance: int
     replayed: bool
+    bonus_awarded: int = 0
 
     @classmethod
     def from_result(cls, result: RedemptionResult) -> "RedemptionResponse":
@@ -209,6 +210,7 @@ class RedemptionResponse(BaseModel):
             coins_awarded=result.coins_awarded,
             coin_balance=result.coin_balance,
             replayed=result.replayed,
+            bonus_awarded=result.bonus_awarded,
         )
 
 

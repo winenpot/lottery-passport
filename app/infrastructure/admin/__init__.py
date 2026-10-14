@@ -41,6 +41,7 @@ from app.infrastructure.postgres.models import (
     AuditLogModel,
     CodeBatchModel,
     CoinLedgerEntryModel,
+    RewardRuleModel,
     UserModel,
     VenueModel,
     WalletModel,
@@ -258,12 +259,50 @@ class CoinLedgerAdmin(ReadOnlyView, model=CoinLedgerEntryModel):
     column_default_sort = (CoinLedgerEntryModel.created_at, True)
 
 
+class RewardRuleAdmin(ModelView, model=RewardRuleModel):
+    """Admin-tunable reward amounts (ADR 0010): no deploy to retune a
+    reward or turn it off.
+
+    ``key`` is picked by whichever service reads it (for example
+    ``first_code``, the welcome bonus) -- there is no catalogue of valid
+    keys here by design; a typo'd key is simply never read by anything,
+    same risk profile as an unused row. No delete: switch a rule off with
+    ``active = false`` instead, so its history (and anything that already
+    decided based on it) stays legible.
+    """
+
+    name = "Reward rule"
+    name_plural = "Reward rules"
+    icon = "fa-solid fa-sliders"
+    can_create = True
+    can_edit = True
+    can_delete = False
+    can_export = False
+    column_list = [
+        RewardRuleModel.key,
+        RewardRuleModel.amount,
+        RewardRuleModel.cadence,
+        RewardRuleModel.active,
+        RewardRuleModel.note,
+        RewardRuleModel.updated_at,
+    ]
+    column_searchable_list = [RewardRuleModel.key]
+    form_columns = [
+        RewardRuleModel.key,
+        RewardRuleModel.amount,
+        RewardRuleModel.cadence,
+        RewardRuleModel.active,
+        RewardRuleModel.note,
+    ]
+
+
 VIEWS: tuple[type[ModelView], ...] = (
     UserAdmin,
     VenueAdmin,
     CodeBatchAdmin,
     WalletAdmin,
     CoinLedgerAdmin,
+    RewardRuleAdmin,
 )
 
 

@@ -289,14 +289,42 @@ class CoinLedgerEntryModel(Base):
     )
     actor_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    asset: Mapped[str] = mapped_column(String(20), nullable=False, default="coin")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
 
     __table_args__ = (
         CheckConstraint("amount <> 0", name="ck_coin_ledger_entries_amount_non_zero"),
+        CheckConstraint(
+            "asset = 'coin'", name="ck_coin_ledger_entries_asset_coin_only"
+        ),
         Index("ix_coin_ledger_entries_user_time", "user_id", "created_at"),
         Index("ix_coin_ledger_entries_created_at", "created_at"),
+    )
+
+
+class RewardRuleModel(Base):
+    """Admin-tunable reward amounts (ADR 0010). No rows seeded by migration;
+    a missing key means "use the service's configured default"."""
+
+    __tablename__ = "reward_rules"
+
+    key: Mapped[str] = mapped_column(String(60), primary_key=True)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False)
+    cadence: Mapped[str] = mapped_column(String(20), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_reward_rules_amount_positive"),
+        CheckConstraint(
+            "cadence IN ('once', 'daily', 'weekly', 'monthly')",
+            name="ck_reward_rules_cadence",
+        ),
     )
 
 

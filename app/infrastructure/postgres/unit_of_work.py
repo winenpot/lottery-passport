@@ -32,12 +32,14 @@ from app.domain.audit import NewAuditEntry
 from app.domain.code_batches import BatchStatus
 from app.domain.ledger import NewLedgerEntry
 from app.domain.passports import Campaign, CityCode, PassportProgress
+from app.domain.reward_rules import Cadence, RewardRule
 from app.infrastructure.postgres.models import (
     AuditLogModel,
     CodeBatchModel,
     CoinLedgerEntryModel,
     PassportProgressModel,
     RedemptionCodeModel,
+    RewardRuleModel,
     WalletModel,
 )
 
@@ -179,6 +181,7 @@ class SqlLedger:
                 idempotency_key=entry.idempotency_key,
                 actor_id=entry.actor_id,
                 note=entry.note,
+                asset=entry.asset.value,
                 created_at=entry.created_at,
             )
         )
@@ -228,6 +231,23 @@ class SqlAudit:
         )
 
 
+class SqlRewardRules:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get(self, key: str) -> RewardRule | None:
+        model = await self._session.get(RewardRuleModel, key)
+        if model is None:
+            return None
+        return RewardRule(
+            key=model.key,
+            amount=model.amount,
+            cadence=Cadence(model.cadence),
+            active=model.active,
+            note=model.note,
+        )
+
+
 class SqlAlchemyUnitOfWork:
     """``async with SqlAlchemyUnitOfWork(factory) as uow: ...; await uow.commit()``."""
 
@@ -235,6 +255,7 @@ class SqlAlchemyUnitOfWork:
     passports: SqlPassports
     ledger: SqlLedger
     audit: SqlAudit
+    rules: SqlRewardRules
 
     def __init__(self, factory: async_sessionmaker[AsyncSession]) -> None:
         self._factory = factory
@@ -248,6 +269,7 @@ class SqlAlchemyUnitOfWork:
         self.passports = SqlPassports(self._session)
         self.ledger = SqlLedger(self._session)
         self.audit = SqlAudit(self._session)
+        self.rules = SqlRewardRules(self._session)
         return self
 
     async def __aexit__(

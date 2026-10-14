@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     redemption_code_pepper: SecretStr | None = None
     redemption_daily_limit_per_user: int = Field(default=20, ge=1, le=1_000)
     redemption_max_invalid_attempts_per_hour: int = Field(default=10, ge=1, le=1_000)
+    # Welcome bonus on a user's first successfully redeemed code (ADR 0010);
+    # a `reward_rules` row for key "first_code" overrides or disables it.
+    first_code_bonus_coins: int = Field(default=50, ge=0, le=100_000)
     campaign_timezone: str = "Asia/Tehran"
     # Current terms of service; players accept it by sending this exact value.
     terms_version: str = "2026-10-01"
