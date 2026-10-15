@@ -49,6 +49,14 @@ class UserModel(Base):
         ForeignKey("venues.id", name="fk_users_home_venue_id", ondelete="SET NULL"),
         nullable=True,
     )
+    # A real city (tehran/ahvaz/...), never a flavor; validated by the
+    # application against SUPPORTED_CITY_IDS, like venues.city.
+    location_city: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    avatar_id: Mapped[str | None] = mapped_column(
+        String(40),
+        ForeignKey("avatars.id", name="fk_users_avatar_id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
@@ -72,6 +80,56 @@ class VenueModel(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
+    )
+
+
+class AvatarModel(Base):
+    """Avatar catalogue (P1). Starts empty, filled in /admin; ``locked``
+    avatars are shown but cannot be picked until an unlock exists."""
+
+    __tablename__ = "avatars"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    image_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    locked: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    unlock_rule: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    sort: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+
+class TeamMembershipModel(Base):
+    """Flavor team history (app/domain/teams.py). The current team is the
+    row with the highest ``switch_no``; UNIQUE (user_id, switch_no) makes two
+    concurrent joins of one player fail instead of both landing."""
+
+    __tablename__ = "team_memberships"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    flavor: Mapped[str] = mapped_column(String(2), nullable=False)
+    switch_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "switch_no", name="uq_team_memberships_user_switch"
+        ),
+        CheckConstraint("switch_no >= 0", name="ck_team_memberships_switch_no"),
+        CheckConstraint(
+            "flavor IN ('PR', 'BE', 'PA', 'ME', 'MA', 'TO', 'MO')",
+            name="ck_team_memberships_flavor",
+        ),
     )
 
 
