@@ -16,6 +16,7 @@ from uuid import UUID
 from app.domain.achievements import Achievement, AchievementFact
 from app.domain.audit import NewAuditEntry
 from app.domain.challenges import Challenge, ChallengeKind
+from app.domain.games import GameId, GameRun, GameRunStatus, NewGameRun
 from app.domain.ledger import NewLedgerEntry
 from app.domain.passports import Campaign, CityCode, PassportProgress
 from app.domain.reward_rules import RewardRule
@@ -184,6 +185,42 @@ class AchievementsInTransaction(Protocol):
         ...
 
 
+class GamesInTransaction(Protocol):
+    """Server-verified game runs (app/domain/games.py, G1), inside the unit
+    of work: opening/finishing a run shares its transaction with the
+    wallet lock, same per-user serialization as teams/challenges."""
+
+    async def open(self, run: NewGameRun) -> None:
+        """Insert the run row as OPEN. The partial unique index
+        ``uq_game_runs_user_open`` is the database's own "one open run per
+        user" guard; ``get_open`` below lets the caller refuse with a
+        clean 409 before even attempting the insert."""
+        ...
+
+    async def get_open(self, user_id: UUID, game_id: GameId) -> GameRun | None:
+        """This user's currently open run of this game, if any."""
+        ...
+
+    async def get(self, run_id: UUID) -> GameRun | None: ...
+
+    async def finish(
+        self,
+        run_id: UUID,
+        status: GameRunStatus,
+        finished_at: datetime,
+        average_reaction_ms: float,
+    ) -> None:
+        """Move a run from OPEN to ACCEPTED or REJECTED. Never called for
+        EXPIRED -- an expired run is simply read as still OPEN past its
+        ``expires_at`` by any caller that cares; no background sweep."""
+        ...
+
+    async def count_rejected_since(self, user_id: UUID, since: datetime) -> int:
+        """How many of this user's runs were REJECTED since ``since`` --
+        feeds the service-layer 3/day admin-review flag."""
+        ...
+
+
 class UnitOfWork(Protocol):
     # Read-only properties so implementations may expose concrete subtypes.
     @property
@@ -209,6 +246,9 @@ class UnitOfWork(Protocol):
 
     @property
     def achievements(self) -> AchievementsInTransaction: ...
+
+    @property
+    def games(self) -> GamesInTransaction: ...
 
     async def __aenter__(self) -> Self: ...
 
