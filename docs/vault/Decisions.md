@@ -149,7 +149,9 @@ of this is lost to a session/context loss.
 
 ## 2026-10-14 evening — Fibonacci team switching, achievements + badges, staged rollout
 
-- **Team switching follows Fibonacci from 5** (Ashkan, team chat). A player joins a
+- **Superseded 2026-10-15** (Mehdi didn't see the point of Fibonacci; see the 2026-10-15
+  entry below). Kept for history:
+  **Team switching follows Fibonacci from 5** (Ashkan, team chat). A player joins a
   flavor team automatically when one flavor reaches 5 codes. Switching afterwards is
   the player's choice and needs the next number of codes of the TARGET flavor:
   8 for the first switch, 13 for the second, then 21, 34, ... Each switch is harder,
@@ -172,3 +174,27 @@ of this is lost to a session/context loss.
   per badge, locked and unlocked art), same shape as the avatar catalogue. A spec
   pass (the list of achievements) comes before code; architecture as in the morning
   entry (FactPublisher, in-process, no broker).
+
+## 2026-10-15 — teams: unlock by scanning, choose, 30-day lock (replaces Fibonacci)
+
+Mehdi's reply to the Fibonacci rule (team chat 2026-10-14 17:05): players should pick the
+team of their favourite flavor, with a limit so they don't keep changing; a monthly
+change is fine. Ashkan's rule, adopted:
+
+- **Unlock:** 5 codes of a flavor (lifetime count) unlock that flavor's team for good,
+  plus that flavor's badge (7 flavor badges, part of AC1/B37). The redemption that
+  reaches 5 returns `flavor_unlocked`.
+- **Choose:** nothing joins automatically. The player picks a team among the unlocked
+  flavors (`POST /me/team`). The sheet's "choose team, 30 coins once" pays on the first
+  join (C1).
+- **Lock:** joining locks the team for 30 days from the join. After that the player may
+  switch to any other unlocked flavor, including one left earlier; each switch starts a
+  new 30-day lock. Refusals: 409 `FLAVOR_NOT_UNLOCKED` (`required`, `have`), 409
+  `TEAM_LOCKED` (`switch_allowed_at`).
+- Defaults chosen, open to objection: lifetime counts (not "since joining"); 30 rolling
+  days, not calendar months; going back to an earlier team is allowed.
+- Unchanged: exclusive membership, `team_memberships` history (user, flavor, joined_at,
+  switch_no). Mehdi confirmed league credit goes to the team the player was on when the
+  coins were earned (his "option one").
+- Open, F1 not P1: Mehdi asked whether features can open day by day (a ~7-day journey).
+  Needs his answer on per-player days (from signup) versus fixed campaign dates.
