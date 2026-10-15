@@ -3,10 +3,12 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    ARRAY,
     BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     Identity,
     Index,
@@ -526,6 +528,51 @@ class AchievementModel(Base):
             "reward_coins >= 0", name="ck_achievements_reward_coins_non_negative"
         ),
         CheckConstraint("fact IN ('checkin_streak')", name="ck_achievements_fact"),
+    )
+
+
+class GameRunModel(Base):
+    """One server-issued, server-verified Tap Reflex run (G1).
+
+    ``round_delays_ms`` is the exact array handed to the client at issue
+    time; re-checking it against the client's reported reactions and the
+    server's own wall clock at finish time is what makes the game
+    plausibility-checkable (app/domain/games.py). The partial unique index
+    ``uq_game_runs_user_open`` (migration 0017) enforces "one open run per
+    user" as a database guarantee, not just an application check.
+    """
+
+    __tablename__ = "game_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    game_id: Mapped[str] = mapped_column(String(20), nullable=False)
+    round_delays_ms: Mapped[list[int]] = mapped_column(ARRAY(Integer), nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(10), nullable=False)
+    average_reaction_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("game_id IN ('tap_reflex')", name="ck_game_runs_game_id"),
+        CheckConstraint(
+            "status IN ('open', 'accepted', 'rejected', 'expired')",
+            name="ck_game_runs_status",
+        ),
+        Index(
+            "uq_game_runs_user_open",
+            "user_id",
+            unique=True,
+            postgresql_where="status = 'open'",
+        ),
+        Index("ix_game_runs_user_status", "user_id", "status"),
     )
 
 
