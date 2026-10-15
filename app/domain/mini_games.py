@@ -100,6 +100,19 @@ def open_run(
     )
 
 
+class MiniGameStartRefusal(StrEnum):
+    """Why a new run could not be opened. Separate from
+    ``MiniGameRunRefusal`` (which is about FINISHING an existing run)."""
+
+    ALREADY_OPEN = "already_open"
+
+
+class MiniGameStartError(Exception):
+    def __init__(self, reason: MiniGameStartRefusal) -> None:
+        super().__init__(reason.value)
+        self.reason = reason
+
+
 class MiniGameRunRefusal(StrEnum):
     """Structural problems with a finish request -- real API errors, as
     opposed to ``MiniGameRunRejection`` below (a plausibility verdict, not

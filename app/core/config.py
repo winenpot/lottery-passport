@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     # Flavor team switch lock (app/domain/teams.py, P1): days after each join
     # or switch before the player may change team again.
     team_lock_days: int = Field(default=30, ge=1, le=365)
+    # Mini-games (app/domain/mini_games.py, G1): this many REJECTED
+    # (implausible) runs for one player in one Tehran day writes an
+    # audit_log flag for admin review. Not an auto-ban.
+    mini_game_rejected_review_threshold: int = Field(default=3, ge=1, le=100)
     campaign_timezone: str = "Asia/Tehran"
     # Current terms of service; players accept it by sending this exact value.
     terms_version: str = "2026-10-01"

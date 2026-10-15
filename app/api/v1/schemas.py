@@ -9,6 +9,7 @@ from app.application.challenges import (
     ChallengeClaimResult,
     ChallengeProgress,
 )
+from app.application.mini_games import MiniGameFinishResult, RunStarted
 from app.application.redemption_codes import RedemptionResult
 from app.application.teams import FlavorProgress, TeamStatus
 from app.application.wallets import WalletView
@@ -419,4 +420,58 @@ class UnlockedAchievementResponse(BaseModel):
             threshold=achievement.threshold,
             reward_coins=achievement.reward_coins,
             unlocked_at=achievement.unlocked_at,
+        )
+
+
+class MiniGameRunStartResponse(BaseModel):
+    run_id: UUID
+    mini_game_id: str
+    round_delays_ms: list[int] = Field(
+        description=(
+            'Server-chosen delay (ms) before each round\'s "react now" '
+            "signal; the client cannot know these in advance."
+        )
+    )
+    expires_at: datetime = Field(
+        description="Finish before this (2 minutes from issue) or the run is unusable."
+    )
+
+    @classmethod
+    def from_result(cls, result: RunStarted) -> "MiniGameRunStartResponse":
+        return cls(
+            run_id=result.run_id,
+            mini_game_id=result.mini_game_id.value,
+            round_delays_ms=list(result.round_delays_ms),
+            expires_at=result.expires_at,
+        )
+
+
+class MiniGameRunFinishRequest(BaseModel):
+    reactions_ms: list[int] = Field(
+        min_length=1,
+        description="One reaction time (ms) per round, same count as issued.",
+    )
+
+
+class MiniGameRunFinishResponse(BaseModel):
+    run_id: UUID
+    accepted: bool = Field(
+        description=(
+            "False means the run failed the server's plausibility check -- "
+            "not an error, just no reward. Rewards pay only through "
+            "GET/POST /challenges, never from this endpoint directly."
+        )
+    )
+    average_reaction_ms: float
+    reason: str | None = Field(
+        default=None, description="Only set when accepted is false."
+    )
+
+    @classmethod
+    def from_result(cls, result: MiniGameFinishResult) -> "MiniGameRunFinishResponse":
+        return cls(
+            run_id=result.run_id,
+            accepted=result.accepted,
+            average_reaction_ms=result.average_reaction_ms,
+            reason=result.reason.value if result.reason is not None else None,
         )

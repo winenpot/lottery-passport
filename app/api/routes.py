@@ -9,6 +9,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.avatars import router as avatars_router
 from app.api.v1.challenges import router as challenges_router
 from app.api.v1.config import router as config_router
+from app.api.v1.mini_games import router as mini_games_router
 from app.api.v1.redemptions import router as redemptions_router
 from app.api.v1.teams import router as teams_router
 from app.api.v1.users import router as users_router
@@ -23,6 +24,7 @@ router.include_router(redemptions_router, prefix="/api/v1")
 router.include_router(avatars_router, prefix="/api/v1")
 router.include_router(teams_router, prefix="/api/v1")
 router.include_router(challenges_router, prefix="/api/v1")
+router.include_router(mini_games_router, prefix="/api/v1")
 router.include_router(achievements_router, prefix="/api/v1")
 router.include_router(admin_router, prefix="/api/v1")
 

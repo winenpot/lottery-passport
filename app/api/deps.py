@@ -11,6 +11,7 @@ from app.application.authentication import AuthenticationError, AuthenticationSe
 from app.application.avatars import AvatarService
 from app.application.challenges import ChallengeService
 from app.application.me import MeService
+from app.application.mini_games import MiniGameService
 from app.application.passports import PassportService
 from app.application.ports import ReadinessChecker
 from app.application.profile import ProfileService
@@ -72,6 +73,10 @@ def get_challenge_service(request: Request) -> ChallengeService:
 
 def get_achievement_service(request: Request) -> AchievementService:
     return cast(AchievementService, request.app.state.achievement_service)
+
+
+def get_mini_game_service(request: Request) -> MiniGameService:
+    return cast(MiniGameService, request.app.state.mini_game_service)
 
 
 def get_me_service(request: Request) -> MeService:

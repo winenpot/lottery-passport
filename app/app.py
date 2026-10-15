@@ -33,6 +33,7 @@ from app.application.challenges import ChallengeService
 from app.application.coin_adjustments import CoinAdjustmentService
 from app.application.failure_throttle import ThrottleSettings
 from app.application.me import MeService
+from app.application.mini_games import MiniGameService
 from app.application.passports import PassportService
 from app.application.ports import ReadinessChecker
 from app.application.profile import ProfileService
@@ -115,6 +116,15 @@ OPENAPI_TAGS = [
         "description": (
             "Auto-unlocked, auto-paid milestones (streaks today). No claim "
             "step. See API_CONTRACT.md#achievements."
+        ),
+    },
+    {
+        "name": "mini-games",
+        "description": (
+            "Our own in-app reaction mini-game (Tap Reflex), server-issued "
+            "and server-verified -- not the physical arcade machines at "
+            "the lounges. Rewards pay only through /challenges. "
+            "See API_CONTRACT.md#mini-games."
         ),
     },
     {
@@ -231,6 +241,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     achievement_service = AchievementService(
         reader=PostgreSQLAchievementsReader(database.session_factory),
     )
+    mini_game_service = MiniGameService(
+        unit_of_work=unit_of_work,
+        clock=SystemClock(),
+        zone=resolved_settings.campaign_zone,
+        rejected_review_threshold=resolved_settings.mini_game_rejected_review_threshold,
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -330,6 +346,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.me_service = me_service
     application.state.challenge_service = challenge_service
     application.state.achievement_service = achievement_service
+    application.state.mini_game_service = mini_game_service
     application.state.sms_sender = sms_sender
     application.state.settings = resolved_settings
     return application
