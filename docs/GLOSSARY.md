@@ -15,3 +15,4 @@ says so.
 | **Diamond** | Second currency in the rewards sheet: coins convert to diamonds in a monthly window. Not built. | |
 | **League points** | Rewards-sheet ranking counter, separate from coins, not spendable, monthly reset. Not built. | Coins. |
 | **Entry** | One chance in a passport city's draw; `passport_progress.points`. Parked for the MVP (ADR 0009). | |
+| **Mini-game** | Our own in-app reaction game (G1; `MiniGameId` in `app/domain/mini_games.py`, `mini_game_runs` table, JSON field `mini_game_id`). Server-issued round delays, server-verified plausibility; rewards pay only through C1 challenges. | The physical arcade machines at the OxinGame lounges themselves (see **Lounge** row) -- this backend has no telemetry integration with them. If one is ever built it gets its own separate `RealGame`/`real_game` naming. |

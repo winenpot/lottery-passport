@@ -5,18 +5,18 @@ from uuid import uuid4
 
 import pytest
 
-from app.domain.games import (
+from app.domain.mini_games import (
     MAX_ROUND_DELAY_MS,
     MIN_HUMAN_REACTION_MS,
     MIN_ROUND_DELAY_MS,
     ROUNDS_PER_RUN,
     RUN_TTL,
-    GameId,
-    GameRun,
-    GameRunError,
-    GameRunRefusal,
-    GameRunRejection,
-    GameRunStatus,
+    MiniGameId,
+    MiniGameRun,
+    MiniGameRunError,
+    MiniGameRunRefusal,
+    MiniGameRunRejection,
+    MiniGameRunStatus,
     assess_plausibility,
     check_can_finish,
     generate_round_delays,
@@ -38,60 +38,60 @@ def test_generation_is_deterministic_for_a_seeded_rng() -> None:
 
 def test_open_run_sets_issued_and_expiry() -> None:
     user_id = uuid4()
-    run = open_run(user_id, GameId.TAP_REFLEX, NOW, Random(1))
+    run = open_run(user_id, MiniGameId.TAP_REFLEX, NOW, Random(1))
     assert run.user_id == user_id
-    assert run.game_id is GameId.TAP_REFLEX
+    assert run.mini_game_id is MiniGameId.TAP_REFLEX
     assert run.issued_at == NOW
     assert run.expires_at == NOW + RUN_TTL
     assert len(run.round_delays_ms) == ROUNDS_PER_RUN
 
 
-def _open_game_run(delays: tuple[int, ...] = (1000, 1000, 1000)) -> GameRun:
+def _open_mini_game_run(delays: tuple[int, ...] = (1000, 1000, 1000)) -> MiniGameRun:
     user_id = uuid4()
-    return GameRun(
+    return MiniGameRun(
         id=uuid4(),
         user_id=user_id,
-        game_id=GameId.TAP_REFLEX,
+        mini_game_id=MiniGameId.TAP_REFLEX,
         round_delays_ms=delays,
         issued_at=NOW,
         expires_at=NOW + RUN_TTL,
-        status=GameRunStatus.OPEN,
+        status=MiniGameRunStatus.OPEN,
     )
 
 
 def test_check_can_finish_rejects_a_different_owner() -> None:
-    run = _open_game_run()
-    with pytest.raises(GameRunError) as caught:
+    run = _open_mini_game_run()
+    with pytest.raises(MiniGameRunError) as caught:
         check_can_finish(run, uuid4(), [200, 200, 200], NOW)
-    assert caught.value.reason is GameRunRefusal.NOT_OWNER
+    assert caught.value.reason is MiniGameRunRefusal.NOT_OWNER
 
 
 def test_check_can_finish_rejects_a_run_that_is_not_open() -> None:
-    run = _open_game_run()
-    finished = replace(run, status=GameRunStatus.ACCEPTED)
-    with pytest.raises(GameRunError) as caught:
+    run = _open_mini_game_run()
+    finished = replace(run, status=MiniGameRunStatus.ACCEPTED)
+    with pytest.raises(MiniGameRunError) as caught:
         check_can_finish(finished, finished.user_id, [200, 200, 200], NOW)
-    assert caught.value.reason is GameRunRefusal.ALREADY_FINISHED
+    assert caught.value.reason is MiniGameRunRefusal.ALREADY_FINISHED
 
 
 def test_check_can_finish_rejects_after_expiry() -> None:
-    run = _open_game_run()
-    with pytest.raises(GameRunError) as caught:
+    run = _open_mini_game_run()
+    with pytest.raises(MiniGameRunError) as caught:
         check_can_finish(
             run, run.user_id, [200, 200, 200], run.expires_at + timedelta(seconds=1)
         )
-    assert caught.value.reason is GameRunRefusal.EXPIRED
+    assert caught.value.reason is MiniGameRunRefusal.EXPIRED
 
 
 def test_check_can_finish_rejects_a_round_count_mismatch() -> None:
-    run = _open_game_run()
-    with pytest.raises(GameRunError) as caught:
+    run = _open_mini_game_run()
+    with pytest.raises(MiniGameRunError) as caught:
         check_can_finish(run, run.user_id, [200, 200], NOW)
-    assert caught.value.reason is GameRunRefusal.ROUND_COUNT_MISMATCH
+    assert caught.value.reason is MiniGameRunRefusal.ROUND_COUNT_MISMATCH
 
 
 def test_check_can_finish_passes_a_legitimate_attempt() -> None:
-    run = _open_game_run()
+    run = _open_mini_game_run()
     check_can_finish(run, run.user_id, [200, 200, 200], NOW + timedelta(seconds=10))
 
 
@@ -111,7 +111,7 @@ def test_a_reaction_below_the_human_floor_is_rejected() -> None:
     finished_at = NOW + timedelta(milliseconds=sum(delays) + sum(reactions) + 50)
     result = assess_plausibility(delays, reactions, NOW, finished_at)
     assert not result.plausible
-    assert result.reason is GameRunRejection.REACTION_TOO_FAST
+    assert result.reason is MiniGameRunRejection.REACTION_TOO_FAST
 
 
 def test_identical_reactions_are_rejected_even_if_individually_plausible() -> None:
@@ -120,7 +120,7 @@ def test_identical_reactions_are_rejected_even_if_individually_plausible() -> No
     finished_at = NOW + timedelta(milliseconds=sum(delays) + sum(reactions) + 50)
     result = assess_plausibility(delays, reactions, NOW, finished_at)
     assert not result.plausible
-    assert result.reason is GameRunRejection.IDENTICAL_REACTIONS
+    assert result.reason is MiniGameRunRejection.IDENTICAL_REACTIONS
 
 
 def test_submitting_immediately_without_waiting_is_rejected() -> None:
@@ -131,4 +131,4 @@ def test_submitting_immediately_without_waiting_is_rejected() -> None:
     finished_at = NOW + timedelta(milliseconds=10)
     result = assess_plausibility(delays, reactions, NOW, finished_at)
     assert not result.plausible
-    assert result.reason is GameRunRejection.WALL_TIME_TOO_SHORT
+    assert result.reason is MiniGameRunRejection.WALL_TIME_TOO_SHORT

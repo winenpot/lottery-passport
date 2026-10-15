@@ -32,8 +32,13 @@ from app.domain.achievements import Achievement, AchievementFact
 from app.domain.audit import NewAuditEntry
 from app.domain.challenges import Challenge, ChallengeKind
 from app.domain.code_batches import BatchStatus
-from app.domain.games import GameId, GameRun, GameRunStatus, NewGameRun
 from app.domain.ledger import NewLedgerEntry
+from app.domain.mini_games import (
+    MiniGameId,
+    MiniGameRun,
+    MiniGameRunStatus,
+    NewMiniGameRun,
+)
 from app.domain.passports import Campaign, CityCode, PassportProgress
 from app.domain.reward_rules import Cadence, RewardRule
 from app.domain.teams import TeamMembership
@@ -42,7 +47,7 @@ from app.infrastructure.postgres.models import (
     ChallengeClaimModel,
     CodeBatchModel,
     CoinLedgerEntryModel,
-    GameRunModel,
+    MiniGameRunModel,
     PassportProgressModel,
     RedemptionCodeModel,
     RewardRuleModel,
@@ -357,63 +362,66 @@ class SqlAchievements:
         )
 
 
-def _game_run_from_model(model: GameRunModel) -> GameRun:
-    return GameRun(
+def _mini_game_run_from_model(model: MiniGameRunModel) -> MiniGameRun:
+    return MiniGameRun(
         id=model.id,
         user_id=model.user_id,
-        game_id=GameId(model.game_id),
+        mini_game_id=MiniGameId(model.mini_game_id),
         round_delays_ms=tuple(model.round_delays_ms),
         issued_at=model.issued_at,
         expires_at=model.expires_at,
-        status=GameRunStatus(model.status),
+        status=MiniGameRunStatus(model.status),
     )
 
 
-class SqlGames:
-    """Implements ``GamesInTransaction`` (app/domain/games.py, G1). No plain
-    reader exists yet (no GET endpoint reads game runs directly today) --
-    add one alongside its queries here if a second caller shows up."""
+class SqlMiniGames:
+    """Implements ``MiniGamesInTransaction`` (app/domain/mini_games.py, G1).
+    No plain reader exists yet (no GET endpoint reads mini-game runs
+    directly today) -- add one alongside its queries here if a second
+    caller shows up."""
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def open(self, run: NewGameRun) -> None:
+    async def open(self, run: NewMiniGameRun) -> None:
         await self._session.execute(
-            insert(GameRunModel).values(
+            insert(MiniGameRunModel).values(
                 id=run.id,
                 user_id=run.user_id,
-                game_id=run.game_id.value,
+                mini_game_id=run.mini_game_id.value,
                 round_delays_ms=list(run.round_delays_ms),
                 issued_at=run.issued_at,
                 expires_at=run.expires_at,
-                status=GameRunStatus.OPEN.value,
+                status=MiniGameRunStatus.OPEN.value,
             )
         )
 
-    async def get_open(self, user_id: UUID, game_id: GameId) -> GameRun | None:
+    async def get_open(
+        self, user_id: UUID, mini_game_id: MiniGameId
+    ) -> MiniGameRun | None:
         model = await self._session.scalar(
-            select(GameRunModel).where(
-                GameRunModel.user_id == user_id,
-                GameRunModel.game_id == game_id.value,
-                GameRunModel.status == GameRunStatus.OPEN.value,
+            select(MiniGameRunModel).where(
+                MiniGameRunModel.user_id == user_id,
+                MiniGameRunModel.mini_game_id == mini_game_id.value,
+                MiniGameRunModel.status == MiniGameRunStatus.OPEN.value,
             )
         )
-        return _game_run_from_model(model) if model else None
+        return _mini_game_run_from_model(model) if model else None
 
-    async def get(self, run_id: UUID) -> GameRun | None:
-        model = await self._session.get(GameRunModel, run_id)
-        return _game_run_from_model(model) if model else None
+    async def get(self, run_id: UUID) -> MiniGameRun | None:
+        model = await self._session.get(MiniGameRunModel, run_id)
+        return _mini_game_run_from_model(model) if model else None
 
     async def finish(
         self,
         run_id: UUID,
-        status: GameRunStatus,
+        status: MiniGameRunStatus,
         finished_at: datetime,
         average_reaction_ms: float,
     ) -> None:
         await self._session.execute(
-            update(GameRunModel)
-            .where(GameRunModel.id == run_id)
+            update(MiniGameRunModel)
+            .where(MiniGameRunModel.id == run_id)
             .values(
                 status=status.value,
                 finished_at=finished_at,
@@ -424,9 +432,9 @@ class SqlGames:
     async def count_rejected_since(self, user_id: UUID, since: datetime) -> int:
         result = await self._session.scalar(
             select(func.count()).where(
-                GameRunModel.user_id == user_id,
-                GameRunModel.status == GameRunStatus.REJECTED.value,
-                GameRunModel.finished_at >= since,
+                MiniGameRunModel.user_id == user_id,
+                MiniGameRunModel.status == MiniGameRunStatus.REJECTED.value,
+                MiniGameRunModel.finished_at >= since,
             )
         )
         return int(result or 0)
@@ -443,7 +451,7 @@ class SqlAlchemyUnitOfWork:
     teams: SqlTeams
     challenges: SqlChallenges
     achievements: SqlAchievements
-    games: SqlGames
+    mini_games: SqlMiniGames
 
     def __init__(self, factory: async_sessionmaker[AsyncSession]) -> None:
         self._factory = factory
@@ -461,7 +469,7 @@ class SqlAlchemyUnitOfWork:
         self.teams = SqlTeams(self._session)
         self.challenges = SqlChallenges(self._session)
         self.achievements = SqlAchievements(self._session)
-        self.games = SqlGames(self._session)
+        self.mini_games = SqlMiniGames(self._session)
         return self
 
     async def __aexit__(

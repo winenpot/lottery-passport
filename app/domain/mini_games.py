@@ -1,14 +1,20 @@
-"""Server-verified mini-games (G1).
+"""Server-verified MINI-games (G1).
 
-Only ``TAP_REFLEX`` ships now (the plan's "only Mehdi's 2 games, Tap Reflex
-first" -- the second game has no agreed mechanic yet, left out of
-``GameId`` entirely rather than wired to a guess, same pattern C1 used for
-"first game" before this module existed).
+Named "mini game" throughout (this module, the migration, the API, JSON
+fields) rather than "game": it is our own in-app reaction game, not the
+physical arcade machines at the OxinGame lounges (docs/GLOSSARY.md
+"Lounge"). If a real-machine integration is ever built it gets its own
+clearly separate `RealGame`/`real_game` naming -- never reuse "game" bare.
+
+Only ``TAP_REFLEX`` ships now (the plan's "only Mehdi's 2 mini-games, Tap
+Reflex first" -- the second has no agreed mechanic yet, left out of
+``MiniGameId`` entirely rather than wired to a guess, same pattern C1 used
+for "first game" before this module existed).
 
 A run is issued by the server with its own per-round delays so the client
 cannot know in advance when the "react now" signal comes (``open_run``).
 The client plays, then reports its measured reaction time per round
-(``POST /games/runs/<run_id>/finish``). The server never trusts those
+(``POST /mini-games/runs/<run_id>/finish``). The server never trusts those
 numbers at face value -- a browser game cannot be made cheat-proof, so the
 real control is a cheap plausibility check (``assess_plausibility``) plus
 small, capped rewards paid only through C1 challenges, never from this
@@ -25,7 +31,7 @@ from random import Random
 from uuid import UUID, uuid4
 
 
-class GameId(StrEnum):
+class MiniGameId(StrEnum):
     TAP_REFLEX = "tap_reflex"
 
 
@@ -38,7 +44,7 @@ RUN_TTL = timedelta(minutes=2)
 MIN_HUMAN_REACTION_MS = 100
 
 
-class GameRunStatus(StrEnum):
+class MiniGameRunStatus(StrEnum):
     OPEN = "open"
     ACCEPTED = "accepted"  # finished, plausible
     REJECTED = "rejected"  # finished, implausible -- no reward
@@ -46,27 +52,27 @@ class GameRunStatus(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class NewGameRun:
+class NewMiniGameRun:
     id: UUID
     user_id: UUID
-    game_id: GameId
+    mini_game_id: MiniGameId
     round_delays_ms: tuple[int, ...]
     issued_at: datetime
     expires_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
-class GameRun:
+class MiniGameRun:
     """A run as stored: adds the fields that only exist once it is open in
     the database (status), read back by the finish/verification path."""
 
     id: UUID
     user_id: UUID
-    game_id: GameId
+    mini_game_id: MiniGameId
     round_delays_ms: tuple[int, ...]
     issued_at: datetime
     expires_at: datetime
-    status: GameRunStatus
+    status: MiniGameRunStatus
 
 
 def generate_round_delays(rng: Random, rounds: int = ROUNDS_PER_RUN) -> tuple[int, ...]:
@@ -81,21 +87,23 @@ def generate_round_delays(rng: Random, rounds: int = ROUNDS_PER_RUN) -> tuple[in
     )
 
 
-def open_run(user_id: UUID, game_id: GameId, now: datetime, rng: Random) -> NewGameRun:
-    return NewGameRun(
+def open_run(
+    user_id: UUID, mini_game_id: MiniGameId, now: datetime, rng: Random
+) -> NewMiniGameRun:
+    return NewMiniGameRun(
         id=uuid4(),
         user_id=user_id,
-        game_id=game_id,
+        mini_game_id=mini_game_id,
         round_delays_ms=generate_round_delays(rng),
         issued_at=now,
         expires_at=now + RUN_TTL,
     )
 
 
-class GameRunRefusal(StrEnum):
+class MiniGameRunRefusal(StrEnum):
     """Structural problems with a finish request -- real API errors, as
-    opposed to ``GameRunRejection`` below (a plausibility verdict, not an
-    error)."""
+    opposed to ``MiniGameRunRejection`` below (a plausibility verdict, not
+    an error)."""
 
     NOT_FOUND = "not_found"
     NOT_OWNER = "not_owner"
@@ -104,29 +112,29 @@ class GameRunRefusal(StrEnum):
     ROUND_COUNT_MISMATCH = "round_count_mismatch"
 
 
-class GameRunError(Exception):
-    def __init__(self, reason: GameRunRefusal) -> None:
+class MiniGameRunError(Exception):
+    def __init__(self, reason: MiniGameRunRefusal) -> None:
         super().__init__(reason.value)
         self.reason = reason
 
 
 def check_can_finish(
-    run: GameRun, user_id: UUID, reactions_ms: Sequence[int], now: datetime
+    run: MiniGameRun, user_id: UUID, reactions_ms: Sequence[int], now: datetime
 ) -> None:
-    """Raises ``GameRunError`` for anything that is not a legitimate attempt
-    to finish THIS run. Does not judge plausibility -- call
+    """Raises ``MiniGameRunError`` for anything that is not a legitimate
+    attempt to finish THIS run. Does not judge plausibility -- call
     ``assess_plausibility`` next once this passes."""
     if run.user_id != user_id:
-        raise GameRunError(GameRunRefusal.NOT_OWNER)
-    if run.status is not GameRunStatus.OPEN:
-        raise GameRunError(GameRunRefusal.ALREADY_FINISHED)
+        raise MiniGameRunError(MiniGameRunRefusal.NOT_OWNER)
+    if run.status is not MiniGameRunStatus.OPEN:
+        raise MiniGameRunError(MiniGameRunRefusal.ALREADY_FINISHED)
     if now > run.expires_at:
-        raise GameRunError(GameRunRefusal.EXPIRED)
+        raise MiniGameRunError(MiniGameRunRefusal.EXPIRED)
     if len(reactions_ms) != len(run.round_delays_ms):
-        raise GameRunError(GameRunRefusal.ROUND_COUNT_MISMATCH)
+        raise MiniGameRunError(MiniGameRunRefusal.ROUND_COUNT_MISMATCH)
 
 
-class GameRunRejection(StrEnum):
+class MiniGameRunRejection(StrEnum):
     """Why a plausibility check failed. Not an exception: a rejected run is
     still a normal (finished, unpaid) outcome, never a 4xx."""
 
@@ -136,9 +144,9 @@ class GameRunRejection(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class GameRunAssessment:
+class MiniGameRunAssessment:
     plausible: bool
-    reason: GameRunRejection | None
+    reason: MiniGameRunRejection | None
     average_reaction_ms: float
 
 
@@ -147,7 +155,7 @@ def assess_plausibility(
     reactions_ms: Sequence[int],
     issued_at: datetime,
     finished_at: datetime,
-) -> GameRunAssessment:
+) -> MiniGameRunAssessment:
     """Judges a finish attempt that already passed ``check_can_finish``
     (same round count). Three independent, cheap checks:
 
@@ -160,11 +168,17 @@ def assess_plausibility(
     """
     average = sum(reactions_ms) / len(reactions_ms)
     if any(reaction < MIN_HUMAN_REACTION_MS for reaction in reactions_ms):
-        return GameRunAssessment(False, GameRunRejection.REACTION_TOO_FAST, average)
+        return MiniGameRunAssessment(
+            False, MiniGameRunRejection.REACTION_TOO_FAST, average
+        )
     if len(set(reactions_ms)) == 1:
-        return GameRunAssessment(False, GameRunRejection.IDENTICAL_REACTIONS, average)
+        return MiniGameRunAssessment(
+            False, MiniGameRunRejection.IDENTICAL_REACTIONS, average
+        )
     wall_time_ms = (finished_at - issued_at) / timedelta(milliseconds=1)
     required_ms = sum(round_delays_ms) + sum(reactions_ms)
     if wall_time_ms < required_ms:
-        return GameRunAssessment(False, GameRunRejection.WALL_TIME_TOO_SHORT, average)
-    return GameRunAssessment(True, None, average)
+        return MiniGameRunAssessment(
+            False, MiniGameRunRejection.WALL_TIME_TOO_SHORT, average
+        )
+    return MiniGameRunAssessment(True, None, average)
