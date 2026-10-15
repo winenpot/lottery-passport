@@ -554,6 +554,103 @@
         "title": "LocationCityResponse",
         "type": "object"
       },
+      "MiniGameId": {
+        "enum": [
+          "tap_reflex"
+        ],
+        "title": "MiniGameId",
+        "type": "string"
+      },
+      "MiniGameRunFinishRequest": {
+        "properties": {
+          "reactions_ms": {
+            "description": "One reaction time (ms) per round, same count as issued.",
+            "items": {
+              "type": "integer"
+            },
+            "minItems": 1,
+            "title": "Reactions Ms",
+            "type": "array"
+          }
+        },
+        "required": [
+          "reactions_ms"
+        ],
+        "title": "MiniGameRunFinishRequest",
+        "type": "object"
+      },
+      "MiniGameRunFinishResponse": {
+        "properties": {
+          "accepted": {
+            "description": "False means the run failed the server's plausibility check -- not an error, just no reward. Rewards pay only through GET/POST /challenges, never from this endpoint directly.",
+            "title": "Accepted",
+            "type": "boolean"
+          },
+          "average_reaction_ms": {
+            "title": "Average Reaction Ms",
+            "type": "number"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only set when accepted is false.",
+            "title": "Reason"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "accepted",
+          "average_reaction_ms"
+        ],
+        "title": "MiniGameRunFinishResponse",
+        "type": "object"
+      },
+      "MiniGameRunStartResponse": {
+        "properties": {
+          "expires_at": {
+            "description": "Finish before this (2 minutes from issue) or the run is unusable.",
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "mini_game_id": {
+            "title": "Mini Game Id",
+            "type": "string"
+          },
+          "round_delays_ms": {
+            "description": "Server-chosen delay (ms) before each round's \"react now\" signal; the client cannot know these in advance.",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Round Delays Ms",
+            "type": "array"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "mini_game_id",
+          "round_delays_ms",
+          "expires_at"
+        ],
+        "title": "MiniGameRunStartResponse",
+        "type": "object"
+      },
       "NicknameLimits": {
         "properties": {
           "max_length": {
@@ -1823,6 +1920,162 @@
         ]
       }
     },
+    "/api/v1/mini-games/runs/{run_id}/finish": {
+      "post": {
+        "description": "Always 200 for a structurally valid attempt, even when the server's plausibility check rejects it (`accepted: false`, no reward). Rewards pay only through GET/POST /challenges.",
+        "operationId": "finish_mini_game_run",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MiniGameRunFinishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MiniGameRunFinishResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unknown run"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "MINI_GAME_RUN_ALREADY_FINISHED or MINI_GAME_RUN_EXPIRED"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "MINI_GAME_ROUND_COUNT_MISMATCH"
+          }
+        },
+        "security": [
+          {
+            "Session Cookie": []
+          }
+        ],
+        "summary": "Report a mini-game run's per-round reaction times",
+        "tags": [
+          "mini-games"
+        ]
+      }
+    },
+    "/api/v1/mini-games/{mini_game_id}/runs": {
+      "post": {
+        "description": "One open run per mini-game per player at a time; it expires 2 minutes after issue.",
+        "operationId": "start_mini_game_run",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "mini_game_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/MiniGameId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MiniGameRunStartResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "MINI_GAME_RUN_ALREADY_OPEN"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "VALIDATION_FAILED (see error.fields)"
+          }
+        },
+        "security": [
+          {
+            "Session Cookie": []
+          }
+        ],
+        "summary": "Start a server-verified mini-game run",
+        "tags": [
+          "mini-games"
+        ]
+      }
+    },
     "/api/v1/redemptions": {
       "post": {
         "description": "Redeem a printed code. Needs a complete profile (terms accepted and a nickname). Safe to retry: a repeat by the same user returns ``replayed: true`` instead of an error.",
@@ -2017,6 +2270,10 @@
     {
       "description": "Auto-unlocked, auto-paid milestones (streaks today). No claim step. See API_CONTRACT.md#achievements.",
       "name": "achievements"
+    },
+    {
+      "description": "Our own in-app reaction mini-game (Tap Reflex), server-issued and server-verified -- not the physical arcade machines at the lounges. Rewards pay only through /challenges. See API_CONTRACT.md#mini-games.",
+      "name": "mini-games"
     },
     {
       "description": "Liveness/readiness probes. See API_CONTRACT.md#health.",

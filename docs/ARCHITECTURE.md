@@ -164,6 +164,7 @@ erDiagram
     users ||--o{ challenge_claims : makes
     achievements ||--o{ user_achievements : "unlocked via"
     users ||--o{ user_achievements : unlocks
+    users ||--o{ mini_game_runs : plays
     challenges ||--o{ submissions : receives
     users ||--o{ submissions : sends
     venues ||--o{ tournaments : hosts
@@ -257,6 +258,17 @@ erDiagram
         string achievement_id FK
         uuid user_id FK
         timestamptz unlocked_at "UNIQUE with achievement_id+user_id: one-time ever, done AC1"
+    }
+    mini_game_runs {
+        uuid id PK
+        uuid user_id FK
+        string mini_game_id "tap_reflex only (closed set, done G1). Our own in-app reaction mini-game, NOT the lounges' physical arcade machines"
+        int round_delays_ms_array "server-chosen per-round delays, done G1"
+        timestamptz issued_at
+        timestamptz expires_at
+        timestamptz finished_at "null while open"
+        string status "open, accepted, rejected, expired (done G1)"
+        float average_reaction_ms "null while open"
     }
     submissions {
         uuid id PK

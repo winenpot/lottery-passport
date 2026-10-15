@@ -17,6 +17,20 @@ Parked features (not in the MVP contract): the city passport. See
 Newest first. **Breaking** means a call that worked before needs a change on your side.
 Check `GET /health` → `commit` to see which backend commit is deployed on the demo.
 
+**2026-10-15 (G1 mini-games)**
+
+- Added: `POST /api/v1/mini-games/{mini_game_id}/runs` and
+  `POST /api/v1/mini-games/runs/{run_id}/finish` — see [Mini-games](#mini-games). Only
+  `tap_reflex` ships. Rewards pay only through challenges, never from these endpoints.
+- Added: error codes `MINI_GAME_RUN_ALREADY_OPEN` (409), `MINI_GAME_RUN_ALREADY_FINISHED`
+  (409), `MINI_GAME_RUN_EXPIRED` (409), `MINI_GAME_ROUND_COUNT_MISMATCH` (422).
+- Replaces the earlier frontend-mock draft in this section (`GET /api/v1/games`,
+  `aim`/`cps`/`seq`, `game_of_the_day`, a direct coin cap) — none of that is built; the
+  real design is server-issued runs with a plausibility check instead.
+- Renamed throughout: this is our own in-app reaction mini-game, not the physical
+  arcade machines at the OxinGame lounges. `game_id` → `mini_game_id` in every path and
+  JSON field below, including the still-planned leaderboard routes.
+
 **2026-10-15 (AC1 + C1 daily check-in)**
 
 - Added: `daily_checkin` challenge kind (period `day`, `have`/`target` always `1`/`1`).
@@ -113,7 +127,7 @@ Check `GET /health` → `commit` to see which backend commit is deployed on the 
 - [Wallet and activity](#wallet-and-activity)
 - [Daily streak](#daily-streak)
 - [Daily wheel](#daily-wheel)
-- [Mini-games and game leaderboards](#mini-games-and-game-leaderboards)
+- [Mini-games and game leaderboards](#mini-games)
 - [Weekly coins leaderboard](#weekly-coins-leaderboard)
 - [Challenges and submissions](#challenges-and-submissions)
 - [Connected social accounts](#connected-social-accounts)
@@ -670,62 +684,76 @@ rules (as the demo says) and are not sent to the client.
 
 Errors: `SPIN_ALREADY_USED`.
 
-## Mini-games and game leaderboards
+## Mini-games
 
-Games: `tap` (Tap Reflex, milliseconds, lower is better), `aim` (Aim Rush, points), `cps`
-(CPS Blitz, clicks per second), `seq` (Sequence, level reached).
+Our own in-app reaction mini-game (G1), not the physical arcade machines at the
+OxinGame lounges — see `docs/GLOSSARY.md` "Mini-game". Only `tap_reflex` ships; the
+sheet's other three (`aim`, `cps`, `seq`) are an earlier frontend-mock draft with no
+agreed mechanic from Mehdi and are NOT built — don't assume them. Rewards pay only
+through [Challenges and submissions](#challenges-and-submissions) (`first_game`,
+`tap_reflex_fast` once those challenge kinds ship); this section's endpoints never
+move coins directly. Leaderboards, `game_of_the_day` and a direct per-game coin cap
+from the earlier draft below are also not built — see "Not shipped yet".
 
-### `GET /api/v1/games` (planned)
+### `POST /api/v1/mini-games/{mini_game_id}/runs` (live, G1)
 
-```json
+```http
+POST /api/v1/mini-games/tap_reflex/runs
+```
+
+```http
+200 OK
 {
-  "game_of_the_day": "tap",
-  "coins_today": 20, "coins_today_limit": 50,
-  "items": [
-    {"id": "tap", "unit": "ms", "better": "lower", "my_best": 214, "my_rank": 6, "top_score": 182}
-  ]
+  "run_id": "5e1c2b2a-....",
+  "mini_game_id": "tap_reflex",
+  "round_delays_ms": [1340, 2210, 905, 2980, 1677],
+  "expires_at": "2026-10-15T09:02:00Z"
 }
 ```
 
-`my_best` and `my_rank` are null if the player has never played. Ranks are for the current
-week.
+The server chooses `round_delays_ms` (one per round) so the client cannot know in
+advance when each round's "react now" signal comes. One OPEN run per player per
+mini-game at a time (enforced by a database constraint, not just an application
+check); `409 MINI_GAME_RUN_ALREADY_OPEN` if the previous run has not been finished
+or expired yet (2 minutes from issue).
 
-### `POST /api/v1/games/{game_id}/sessions` (planned)
-
-Starts a round. The server records the start time and returns a seed for anything random
-(target positions, the colour sequence), so a finished round can be checked.
-
-```json
-{"session_id": "5e1c...", "seed": "b64...", "expires_at": "2026-10-10T08:35:00Z"}
-```
-
-### `POST /api/v1/game-sessions/{session_id}/finish` (planned)
+### `POST /api/v1/mini-games/runs/{run_id}/finish` (live, G1)
 
 ```json
-{"score": 214, "details": {"rounds_ms": [220, 205, 231, 198, 216]}}
+{"reactions_ms": [310, 295, 340, 288, 322]}
 ```
 
-`details` depends on the game:
-
-- `tap`: per-round reaction times.
-- `aim`: hit count and per-hit times.
-- `cps`: click count.
-- `seq`: level reached and input timings.
-
-```json
-{"accepted": true, "score": 214, "new_best": true, "my_rank": 6, "coins_awarded": 10, "coins_today": 30, "coins_today_limit": 50}
+```http
+200 OK
+{
+  "run_id": "5e1c2b2a-....",
+  "accepted": true,
+  "average_reaction_ms": 311.0,
+  "reason": null
+}
 ```
 
-The server rejects impossible results with `SCORE_REJECTED`: for example an average
-reaction below 100 ms, more than 20 clicks per second, or a round shorter than the game's
-duration. Coins per day from games are capped (`game_coins_per_day`). Prizes never depend
-on client-reported scores alone. Errors: `GAME_SESSION_INVALID`, `SCORE_REJECTED`.
+Always `200` for a structurally valid attempt — a rejected (implausible) run is a
+normal outcome, not an error: `accepted: false` with `reason` set to one of
+`reaction_too_fast`, `identical_reactions`, `wall_time_too_short`. A browser game
+cannot be made cheat-proof; this (plus small, capped rewards paid only through
+challenges) makes cheating not worth it rather than impossible. Errors: `NOT_FOUND`
+(404 — unknown run id, or a run that is not yours; the response does not
+distinguish the two, so a stolen/guessed id reveals nothing), `MINI_GAME_RUN_ALREADY_FINISHED`
+(409), `MINI_GAME_RUN_EXPIRED` (409), `MINI_GAME_ROUND_COUNT_MISMATCH` (422 —
+`reactions_ms` length must match the issued round count).
 
-### `GET /api/v1/leaderboards/games/{game_id}?period=today|week|all` (planned)
+**Not shipped yet** (earlier frontend-mock draft; do not build a client assuming
+these): `GET /api/v1/games` summary/leaderboard view, `game_of_the_day`,
+`aim`/`cps`/`seq` mini-games, a direct per-mini-game daily coin cap
+(`game_coins_per_day`), `my_rank`/`top_score`. Game leaderboards may come later but
+will display bests only — never prizes from a client-reported score.
+
+### `GET /api/v1/leaderboards/mini-games/{mini_game_id}?period=today|week|all` (planned)
 
 ```json
 {
-  "game_id": "tap", "period": "week", "resets_at": "2026-10-16T20:30:00Z",
+  "mini_game_id": "tap_reflex", "period": "week", "resets_at": "2026-10-16T20:30:00Z",
   "updated_at": "2026-10-10T08:30:00Z",
   "entries": [{"rank": 1, "nickname": "NEXUS", "avatar_id": "avatar-2", "score": 182, "is_me": false}],
   "me": {"rank": 6, "score": 214}
@@ -733,9 +761,10 @@ on client-reported scores alone. Errors: `GAME_SESSION_INVALID`, `SCORE_REJECTED
 ```
 
 Each player's best score in the period. Ties go to whoever set the score first. Top 50.
-Cached up to 60 seconds, so show `updated_at`.
+Cached up to 60 seconds, so show `updated_at`. Not built yet — see "Not shipped yet"
+under [Mini-games](#mini-games).
 
-### `GET /api/v1/leaderboards/games/{game_id}/winners?week=previous` (planned)
+### `GET /api/v1/leaderboards/mini-games/{mini_game_id}/winners?week=previous` (planned)
 
 Last week's top 3 (the «برندگان هفته قبل» tab): `{"week_key": "...", "entries": [...]}`.
 
@@ -834,8 +863,8 @@ an earlier draft of this contract written against the frontend demo mock and are
 superseded by the shape above for every LIVE challenge.
 
 **Not shipped yet** (do not build a client assuming these): `scan_count`/`game_score`/
-`social_post`/`manual` kinds. "First game"/"Tap Reflex" challenges are blocked on G1 (no
-game-run data exists yet).
+`social_post`/`manual` kinds. `first_game`/`tap_reflex_fast` challenge kinds feeding off
+the now-live [Mini-games](#mini-games) runs are not wired yet either.
 
 ### `POST /api/v1/challenges/{id}/claim` (live, B17; MVP subset)
 

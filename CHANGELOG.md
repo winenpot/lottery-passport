@@ -7,6 +7,15 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ### Added
 
+- Mini-games (G1, B38): our own in-app reaction game (`tap_reflex`), not the physical
+  arcade machines at the OxinGame lounges. `POST /api/v1/mini-games/{mini_game_id}/runs`
+  issues a server-chosen per-round delay array; `POST /api/v1/mini-games/runs/{run_id}/finish`
+  judges plausibility (human reaction floor, not-all-identical, server wall-clock vs.
+  delays+reactions) — an implausible finish is a normal 200 (`accepted: false`), never a
+  4xx. One open run per user is a database guarantee (partial unique index), not just an
+  application check. Rewards pay only through challenges, never from these endpoints
+  directly. New `mini_game_runs` table (migration 0017).
+
 - Daily check-in + achievements (C1 extension / AC1 MVP slice): new `daily_checkin`
   challenge kind (always completed once signed in; claiming it IS the login signal, no
   passive tracking needed) — supersedes the planned "5-day login"/"5-day activity" sheet
