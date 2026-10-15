@@ -83,6 +83,29 @@
         "title": "AuthenticationVerification",
         "type": "object"
       },
+      "AvatarResponse": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "image_url": {
+            "title": "Image Url",
+            "type": "string"
+          },
+          "locked": {
+            "title": "Locked",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "image_url",
+          "locked"
+        ],
+        "title": "AvatarResponse",
+        "type": "object"
+      },
       "ConfigLimits": {
         "properties": {
           "scans_per_day": {
@@ -176,6 +199,19 @@
             "title": "Code",
             "type": "string"
           },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Structured extra data for a specific error code, for example ``{required, have}`` on TEAM/FLAVOR errors. Absent otherwise.",
+            "title": "Details"
+          },
           "fields": {
             "anyOf": [
               {
@@ -261,6 +297,29 @@
           "type"
         ],
         "title": "FieldError",
+        "type": "object"
+      },
+      "FlavorProgressResponse": {
+        "properties": {
+          "codes": {
+            "title": "Codes",
+            "type": "integer"
+          },
+          "flavor": {
+            "title": "Flavor",
+            "type": "string"
+          },
+          "unlocked": {
+            "title": "Unlocked",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "flavor",
+          "codes",
+          "unlocked"
+        ],
+        "title": "FlavorProgressResponse",
         "type": "object"
       },
       "HealthResponse": {
@@ -463,6 +522,18 @@
             "title": "Entries Added",
             "type": "integer"
           },
+          "flavor_unlocked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Flavor (campaign slug) unlocked by this redemption, or null.",
+            "title": "Flavor Unlocked"
+          },
           "replayed": {
             "title": "Replayed",
             "type": "boolean"
@@ -477,6 +548,80 @@
           "replayed"
         ],
         "title": "RedemptionResponse",
+        "type": "object"
+      },
+      "TeamChangeRequest": {
+        "properties": {
+          "flavor": {
+            "description": "A campaign slug from GET /config flavors.",
+            "examples": [
+              "tokyo"
+            ],
+            "title": "Flavor",
+            "type": "string"
+          }
+        },
+        "required": [
+          "flavor"
+        ],
+        "title": "TeamChangeRequest",
+        "type": "object"
+      },
+      "TeamStatusResponse": {
+        "properties": {
+          "flavors": {
+            "description": "Lifetime code count per flavor, for the 'N more to unlock' UI.",
+            "items": {
+              "$ref": "#/components/schemas/FlavorProgressResponse"
+            },
+            "title": "Flavors",
+            "type": "array"
+          },
+          "joined_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Joined At"
+          },
+          "switch_allowed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the next team change is allowed; null before any join.",
+            "title": "Switch Allowed At"
+          },
+          "team": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Current flavor team (campaign slug), or null.",
+            "title": "Team"
+          }
+        },
+        "required": [
+          "team",
+          "joined_at",
+          "switch_allowed_at",
+          "flavors"
+        ],
+        "title": "TeamStatusResponse",
         "type": "object"
       },
       "UserPageResponse": {
@@ -514,6 +659,17 @@
             "title": "Account Status",
             "type": "string"
           },
+          "avatar_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -550,6 +706,29 @@
             "title": "Identifier",
             "type": "string"
           },
+          "last_scanned_flavor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Flavor of the most recently redeemed code, or null.",
+            "title": "Last Scanned Flavor"
+          },
+          "location_city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location City"
+          },
           "nickname": {
             "anyOf": [
               {
@@ -568,6 +747,18 @@
           "role": {
             "title": "Role",
             "type": "string"
+          },
+          "team": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Current flavor team (campaign slug, e.g. 'tokyo'), or null.",
+            "title": "Team"
           },
           "terms_accepted": {
             "title": "Terms Accepted",
@@ -589,6 +780,10 @@
           "display_name",
           "nickname",
           "home_venue_id",
+          "location_city",
+          "avatar_id",
+          "team",
+          "last_scanned_flavor",
           "terms_accepted",
           "profile_complete",
           "account_status",
@@ -616,6 +811,19 @@
             "description": "Must equal ``terms_version``.",
             "title": "Accept Terms Version"
           },
+          "avatar_id": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An unlocked ``id`` from ``GET /avatars``.",
+            "title": "Avatar Id"
+          },
           "display_name": {
             "anyOf": [
               {
@@ -640,6 +848,19 @@
             ],
             "description": "An ``id`` from ``GET /config`` ``venues``.",
             "title": "Home Venue Id"
+          },
+          "location_city": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "One of ``location_cities`` ids from ``GET /config``.",
+            "title": "Location City"
           },
           "nickname": {
             "anyOf": [
@@ -968,6 +1189,32 @@
         ]
       }
     },
+    "/api/v1/avatars": {
+      "get": {
+        "description": "No sign-in needed. Includes locked avatars (so the frontend can show them as 'coming later'); only unlocked ones can be picked with ``PATCH /me avatar_id``.",
+        "operationId": "list_avatars",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AvatarResponse"
+                  },
+                  "title": "Response List Avatars",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Avatar catalogue",
+        "tags": [
+          "avatars"
+        ]
+      }
+    },
     "/api/v1/config": {
       "get": {
         "description": "No sign-in needed. Server time, the Tehran day and week keys and the limits clients must use instead of the phone clock, and the active lounges for the profile picker. Avatar/game catalogues are not included yet.",
@@ -1026,7 +1273,7 @@
         ]
       },
       "patch": {
-        "description": "Send any of ``display_name``, ``nickname``, ``accept_terms_version`` and ``home_venue_id``; only the fields sent change. ``profile_complete`` becomes true once a nickname is set and the terms are accepted.",
+        "description": "Send any of ``display_name``, ``nickname``, ``accept_terms_version``, ``home_venue_id``, ``location_city`` and ``avatar_id``; only the fields sent change. ``profile_complete`` becomes true once a nickname is set and the terms are accepted.",
         "operationId": "update_me",
         "requestBody": {
           "content": {
@@ -1077,7 +1324,7 @@
                 }
               }
             },
-            "description": "NICKNAME_INVALID, TERMS_VERSION_INVALID or CATALOGUE_UNKNOWN"
+            "description": "NICKNAME_INVALID, TERMS_VERSION_INVALID, CATALOGUE_UNKNOWN or AVATAR_LOCKED"
           }
         },
         "security": [
@@ -1129,6 +1376,107 @@
         "summary": "Per-city passport progress",
         "tags": [
           "users"
+        ]
+      }
+    },
+    "/api/v1/me/team": {
+      "get": {
+        "operationId": "get_my_team",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not signed in"
+          }
+        },
+        "security": [
+          {
+            "Session Cookie": []
+          }
+        ],
+        "summary": "Current flavor team and per-flavor unlock progress",
+        "tags": [
+          "teams"
+        ]
+      },
+      "post": {
+        "description": "Joins (first time) or switches to an unlocked flavor (5+ lifetime codes of it). Switching is locked for a while after each join; see ``GET /me/team`` for ``switch_allowed_at``.",
+        "operationId": "change_my_team",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "FLAVOR_NOT_UNLOCKED or TEAM_LOCKED"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "TEAM_SAME or unknown flavor"
+          }
+        },
+        "security": [
+          {
+            "Session Cookie": []
+          }
+        ],
+        "summary": "Join or switch flavor team",
+        "tags": [
+          "teams"
         ]
       }
     },
@@ -1346,6 +1694,14 @@
     {
       "description": "Scanning printed codes and the coin wallet. See API_CONTRACT.md#scanning-codes.",
       "name": "redemptions"
+    },
+    {
+      "description": "The avatar catalogue. See API_CONTRACT.md#config-and-profile.",
+      "name": "avatars"
+    },
+    {
+      "description": "Flavor team membership. See API_CONTRACT.md#teams.",
+      "name": "teams"
     },
     {
       "description": "Liveness/readiness probes. See API_CONTRACT.md#health.",

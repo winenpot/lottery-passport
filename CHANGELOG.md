@@ -7,6 +7,16 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ### Added
 
+- Flavor teams (P1/B36): 5 lifetime codes of a flavor unlock its team; `POST /me/team`
+  joins/switches among unlocked flavors; switching is locked for 30 days after each join.
+  `GET /api/v1/me/team`, `POST /api/v1/me/team`; `POST /api/v1/redemptions` gains
+  `flavor_unlocked`. New error codes `FLAVOR_NOT_UNLOCKED`, `TEAM_LOCKED`, `TEAM_SAME`.
+- Avatar catalogue (P1): `avatars` table (editable in `/admin`), `GET /api/v1/avatars`;
+  `PATCH /me` accepts `avatar_id` (`422 AVATAR_LOCKED` for a locked one) and
+  `location_city` (the player's real home city, never a flavor). `GET /me` gains
+  `location_city`, `avatar_id`, `team` and `last_scanned_flavor`.
+- `error.details`: an optional structured-data object on any error response (for example
+  `{required, have}` on `FLAVOR_NOT_UNLOCKED`), additive to the existing envelope.
 - Printed code format v2: city prefix + 10 random Crockford Base32 characters + Luhn mod 32
   check character; tolerant input normalization (Persian/Arabic digits, dashes, case, O/0, I/L/1).
 - Code batches (`generated`, `active`, `void`) with `python -m scripts.generate_codes` and

@@ -17,6 +17,26 @@ Parked features (not in the MVP contract): the city passport. See
 Newest first. **Breaking** means a call that worked before needs a change on your side.
 Check `GET /health` → `commit` to see which backend commit is deployed on the demo.
 
+**2026-10-15**
+- Added: `GET /api/v1/avatars` (no sign-in needed): the avatar catalogue, `[{id, image_url,
+  locked}]`. `PATCH /me avatar_id` picks an unlocked one; `422 AVATAR_LOCKED` otherwise
+  (avatar unlocks by coins/achievements are AFTER LAUNCH).
+- Added: `GET /api/v1/me/team` and `POST /api/v1/me/team` — see [Teams](#teams). A flavor
+  (one of the 7 passport cities) unlocks for a player after 5 lifetime codes of it; the
+  player then CHOOSES a team among unlocked flavors; switching is locked for a while
+  after each join.
+- Added: `PATCH /me` accepts `location_city` (one of `/config`'s `location_cities`, the
+  player's real home city — never a flavor) and `avatar_id`.
+- Added: `GET /me` returns `location_city`, `avatar_id`, `team` (current flavor team, or
+  null) and `last_scanned_flavor` (the most recently redeemed code's flavor, for the
+  frontend's flavor-mood theming).
+- Added: `POST /redemptions` response gains `flavor_unlocked` (campaign slug, or null):
+  set on the redemption that brings one flavor to 5 lifetime codes.
+- Added: error codes `FLAVOR_NOT_UNLOCKED` (409), `TEAM_LOCKED` (409), `TEAM_SAME` (422)
+  and `AVATAR_LOCKED` (422). `error.details` is a new optional object on any error for
+  structured extra data (`{required, have}` on `FLAVOR_NOT_UNLOCKED`, `{switch_allowed_at}`
+  on `TEAM_LOCKED`); existing clients reading only `code`/`message` are unaffected.
+
 **2026-10-13**
 - **Breaking:** `POST /redemptions` now requires a complete profile: `403 TERMS_NOT_ACCEPTED`
   (terms not accepted yet) or `403 PROFILE_INCOMPLETE` (no nickname). `GET /me/wallet` is
@@ -65,6 +85,8 @@ Check `GET /health` → `commit` to see which backend commit is deployed on the 
 - [Screen map](#screen-map)
 - [Authentication](#authentication)
 - [Config and profile](#config-and-profile)
+- [Avatars](#avatars)
+- [Teams](#teams)
 - [Scanning codes](#scanning-codes)
 - [Wallet and activity](#wallet-and-activity)
 - [Daily streak](#daily-streak)
@@ -175,6 +197,10 @@ and the id in our logs: put it in bug reports.
 | `NICKNAME_INVALID` | 422 | Length or characters not allowed | Show the rule |
 | `NICKNAME_TAKEN` | 409 | Someone else has it | Suggest another |
 | `CATALOGUE_UNKNOWN` | 422 | Unknown avatar, favourite game, game, reward or venue id | Reload `/config` |
+| `AVATAR_LOCKED` | 422 | `PATCH /me avatar_id` picked a locked avatar | Pick an unlocked one |
+| `FLAVOR_NOT_UNLOCKED` | 409 | `POST /me/team` picked a flavor with under 5 lifetime codes (`error.details.required`/`have`) | Show "N more to unlock" |
+| `TEAM_LOCKED` | 409 | `POST /me/team` too soon after the last join (`error.details.switch_allowed_at`) | Show the date it opens |
+| `TEAM_SAME` | 422 | `POST /me/team` picked the player's current team | No-op; show the current team |
 | `CODE_MALFORMED` | 400 | Not a product code at all | "This is not a TorshX code" |
 | `CODE_MISTYPED` | 400 | Right shape, one character wrong | "Check the characters, especially 0/O and 1/I" |
 | `CODE_INVALID` | 404 | Unknown code, or not released yet | "Code not valid" |
@@ -341,11 +367,17 @@ The demo's favourite-games list is `cs, wz, fifa, dota, lol, val, wow, r6, df, b
 }
 ```
 
-Live today: `{"id", "identifier", "display_name", "nickname", "home_venue_id", "terms_accepted", "profile_complete",
-"account_status", "verification_status", "role", "created_at", "updated_at"}`. `avatar_id`,
-`favorite_games`, `coin_balance` and `unread_activity` come with their own tasks.
+Live today: `{"id", "identifier", "display_name", "nickname", "home_venue_id",
+"location_city", "avatar_id", "team", "last_scanned_flavor", "terms_accepted",
+"profile_complete", "account_status", "verification_status", "role", "created_at",
+"updated_at"}`. `location_city` is one of `/config`'s `location_cities` ids, or null.
+`team` is the player's current flavor team (a campaign slug like `"tokyo"`), or null
+before any team is joined; see [Teams](#teams). `last_scanned_flavor` is the flavor of
+the most recently redeemed code, or null — the frontend uses it for the app's flavor
+mood/theme. `favorite_games`, `coin_balance` and `unread_activity` come with their own
+tasks.
 
-### `PATCH /api/v1/me` (live for `display_name`, `nickname`, `accept_terms_version`, `home_venue_id`)
+### `PATCH /api/v1/me` (live for `display_name`, `nickname`, `accept_terms_version`, `home_venue_id`, `location_city`, `avatar_id`)
 
 ```json
 {"nickname": "NightOwl", "avatar_id": "avatar-3", "favorite_games": ["val"], "accept_terms_version": "2026-10-01"}
@@ -362,11 +394,14 @@ All fields are optional; the response is the Me object.
 - `favorite_games`: up to 5 ids from `/config`.
 - `home_venue_id`: an active venue `id` from `/config` (the player's home lounge). If the venue
   is later removed, it reads back as `null`.
+- `location_city`: one of `/config`'s `location_cities` ids (the player's real home city;
+  never a flavor).
+- `avatar_id`: an avatar `id` from `GET /avatars` that is not `locked`.
 - `profile_complete` becomes true once the nickname is set and the terms are accepted.
 
 Errors: `NICKNAME_INVALID` (422), `NICKNAME_TAKEN` (409), `TERMS_VERSION_INVALID` (422, reload
-`/config`), `CATALOGUE_UNKNOWN` (422, unknown or inactive `home_venue_id`; later also avatars
-and games).
+`/config`), `CATALOGUE_UNKNOWN` (422, unknown or inactive `home_venue_id`, `location_city` or
+`avatar_id`; later also games), `AVATAR_LOCKED` (422, the avatar exists but is locked).
 
 `POST /redemptions` requires `profile_complete` (live since 2026-10-13): without accepted terms
 it answers `403 TERMS_NOT_ACCEPTED`, without a nickname `403 PROFILE_INCOMPLETE`. Send players
@@ -374,6 +409,73 @@ through profile setup before the camera opens.
 
 The demo's setup has no T&C checkbox. Add one to step 3 (or replace the "points are demo"
 checkbox in step 1) and send `accept_terms_version`.
+
+## Avatars
+
+### `GET /api/v1/avatars` (live; no sign-in needed)
+
+```json
+[
+  {"id": "avatar-1", "image_url": "https://cdn.torshx.com/avatars/1.png", "locked": false},
+  {"id": "avatar-2", "image_url": "https://cdn.torshx.com/avatars/2.png", "locked": true}
+]
+```
+
+Starts empty until Ashkan fills it in `/admin`. Includes locked avatars (show them as
+"coming later"); `PATCH /me avatar_id` refuses a locked one with `422 AVATAR_LOCKED`.
+There is no unlock mechanism yet (avatar unlocks by coins/achievements are AFTER LAUNCH);
+every avatar an admin creates without `locked` is pickable immediately.
+
+## Teams
+
+A team is a TorshX **flavor** (one of the 7 passport cities: Paris, Berlin, Pattaya,
+Mexico, Madrid, Tokyo, Moscow) — not a lounge or a squad. Membership is exclusive: a
+player is on at most one team. Rule (decided 2026-10-15, replaces an earlier Fibonacci
+design that never shipped):
+
+- **Unlock**: redeeming 5 lifetime codes of a flavor unlocks that flavor's team (and its
+  badge, planned with achievements). `POST /redemptions` reports this as `flavor_unlocked`.
+- **Choose**: nothing joins automatically. The player picks a team among their unlocked
+  flavors with `POST /me/team`.
+- **Lock**: after each join or switch, changing team again is locked for a while (the
+  server decides how long; see `switch_allowed_at`). After that, switching to any other
+  unlocked flavor is allowed, including a flavor the player left before.
+
+Behind `/config.features.teams` (planned, staged rollout): the frontend should hide team
+UI while that flag is off.
+
+### `GET /api/v1/me/team` (live)
+
+```json
+{
+  "team": "tokyo",
+  "joined_at": "2026-10-15T09:00:00Z",
+  "switch_allowed_at": "2026-11-14T09:00:00Z",
+  "flavors": [
+    {"flavor": "paris", "codes": 2, "unlocked": false},
+    {"flavor": "tokyo", "codes": 7, "unlocked": true},
+    {"flavor": "moscow", "codes": 5, "unlocked": true}
+  ]
+}
+```
+
+`team`, `joined_at` and `switch_allowed_at` are null before the player's first join.
+`flavors` lists all 7 campaign slugs with the player's lifetime code count and whether
+that unlocks the team — use it for "2 more Moscow to unlock" copy.
+
+### `POST /api/v1/me/team` (live)
+
+```http
+POST /api/v1/me/team
+{"flavor": "tokyo"}
+```
+
+Joins (first team) or switches to `flavor`, which must already be unlocked (5+ lifetime
+codes). Returns the same shape as `GET /me/team` on success (200).
+
+Errors: `FLAVOR_NOT_UNLOCKED` (409, `error.details` has `required` and `have`),
+`TEAM_LOCKED` (409, `error.details.switch_allowed_at`), `TEAM_SAME` (422, already this
+team), `CATALOGUE_UNKNOWN` (422, unknown flavor slug).
 
 ## Scanning codes
 
@@ -399,7 +501,8 @@ without dashes, in any letter case. The server normalizes it.
   "coins_awarded": 50,
   "coin_balance": 2500,
   "replayed": false,
-  "bonus_awarded": 0
+  "bonus_awarded": 0,
+  "flavor_unlocked": null
 }
 ```
 
@@ -408,7 +511,9 @@ screen without confetti; a replay does not count toward the limit. `bonus_awarde
 non-zero only on the redemption that first triggers a reward rule (currently: the
 welcome bonus on a user's very first successful redemption, ADR 0010); it is already
 included in `coin_balance`, same as `coins_awarded` — the client never adds it
-separately. Errors:
+separately. `flavor_unlocked` is the campaign slug of this code's flavor exactly on the
+redemption that brings it to 5 lifetime codes (see [Teams](#teams)); null otherwise,
+including on a replay. Errors:
 `CODE_MALFORMED`, `CODE_MISTYPED`, `CODE_INVALID`, `CODE_ALREADY_REDEEMED`,
 `SCAN_DAILY_LIMIT`, `CODE_ATTEMPTS_LIMITED`.
 

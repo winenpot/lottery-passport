@@ -108,12 +108,17 @@ app/
     code_batches.py    batch lifecycle                                                 (done)
     ledger.py          coin ledger entry types                               (done)
     passports.py       cities, campaigns, entries per code
+    avatars.py         avatar catalogue entry                                 (done, P1)
+    teams.py           flavor team unlock/choose/lock rule                    (done, P1)
     users.py, authentication.py
     phones.py          Iranian mobile normalization                          (B10)
     periods.py         Tehran day/week keys for challenges and leaderboards  (B17)
   application/         use cases and ports (Protocols); no SQLAlchemy/FastAPI
     unit_of_work.py    one-transaction ports for multi-table writes          (done)
     redemption_codes.py, wallets.py, passports.py                            (done)
+    avatars.py         avatar catalogue read (GET /avatars)                  (done, P1)
+    teams.py           TeamService: GET/POST /me/team                        (done, P1)
+    me.py              composes /me's team + last_scanned_flavor             (done, P1)
     authentication.py  phone OTP sign-in                                     (B10)
     jobs.py            enqueue/claim/complete jobs                           (B11)
     challenges.py, submissions.py, leaderboards.py, tournaments.py           (B17-B22)
@@ -151,6 +156,8 @@ erDiagram
     users ||--o{ redemption_codes : redeems
     code_batches ||--|{ redemption_codes : contains
     venues ||--o{ users : "home of"
+    avatars ||--o{ users : "picked by"
+    users ||--o{ team_memberships : "joins/switches"
     challenges ||--o{ challenge_claims : "claimed in"
     users ||--o{ challenge_claims : makes
     challenges ||--o{ submissions : receives
@@ -165,6 +172,8 @@ erDiagram
         string display_name "nickname"
         uuid home_venue_id FK "planned B15"
         string terms_version "planned B15"
+        string location_city "P1, done: real home city, not a flavor"
+        string avatar_id FK "P1, done"
     }
     code_batches {
         uuid id PK
@@ -205,6 +214,18 @@ erDiagram
         int id PK
         string slug UK
         string name
+    }
+    avatars {
+        string id PK "slug, e.g. avatar-1 (P1, done)"
+        string image_url
+        bool locked
+    }
+    team_memberships {
+        bigint id PK
+        uuid user_id FK
+        string flavor "one of 7 CityCode (P1, done)"
+        int switch_no "0 = first join, then 1, 2, ..."
+        timestamptz joined_at
     }
     challenges {
         uuid id PK
