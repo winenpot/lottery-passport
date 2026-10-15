@@ -198,3 +198,34 @@ change is fine. Ashkan's rule, adopted:
   coins were earned (his "option one").
 - Open, F1 not P1: Mehdi asked whether features can open day by day (a ~7-day journey).
   Needs his answer on per-player days (from signup) versus fixed campaign dates.
+
+## 2026-10-15 — C1 challenges: MVP subset ships, login/activity tracking needs a decision
+
+Built the generic challenge engine (`challenges` catalogue + `challenge_claims`,
+admin-editable, same empty-start pattern as avatars/reward rules) and shipped the two
+sheet items with an unambiguous, already-existing data source:
+
+- **`team_choice`** (once, 30 coins): the player's first team join. Reuses
+  `team_memberships` (P1) — no new data needed.
+- **`distinct_flavors`** (period, 100 coins monthly per the sheet): distinct flavors
+  redeemed within the period. Reuses `redemption_codes` — no new data needed.
+
+**Deliberately NOT built, rather than guessed:**
+
+- "First game 20 once" / "Tap Reflex <250ms 20 daily" — blocked on G1: no game-run data
+  exists yet to check progress against. Will add their kinds to the catalogue's closed
+  set once G1 ships.
+- "5-day login 30" / "5-day activity 100" (not additive: pay 30, top up 70) — the sheet's
+  wording assumes a real signal for "did the player use the app today", which this
+  backend does not have: the session cookie is long-lived, so a player can open the app
+  every day for weeks without a single new sign-in event. Building this needs a product
+  decision first, not just more code: where does "day used" get recorded (every
+  authenticated request — a write on every GET, a real load question; or a dedicated
+  lightweight endpoint the frontend calls once per app-open)? Until that is decided this
+  pair is left out of the catalogue's kind enum entirely, rather than wired to a fake or
+  silently-always-zero signal that would look shipped but never pay out correctly.
+
+Error codes `CHALLENGE_NOT_UNLOCKED` (409, `required`/`have`), `CHALLENGE_ALREADY_CLAIMED`
+(409). Claim idempotency is a real UNIQUE constraint on `challenge_claims (challenge_id,
+user_id, period_key)`, not just the ledger's own idempotency key — the same shape as
+`team_memberships`' `switch_no` guard.

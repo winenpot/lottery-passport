@@ -112,7 +112,7 @@ app/
     teams.py           flavor team unlock/choose/lock rule                    (done, P1)
     users.py, authentication.py
     phones.py          Iranian mobile normalization                          (B10)
-    periods.py         Tehran day/week keys for challenges and leaderboards  (B17)
+    periods.py         Tehran day/week/month keys + period starts (C1/G1/V1)  (done, C1)
   application/         use cases and ports (Protocols); no SQLAlchemy/FastAPI
     unit_of_work.py    one-transaction ports for multi-table writes          (done)
     redemption_codes.py, wallets.py, passports.py                            (done)
@@ -121,7 +121,8 @@ app/
     me.py              composes /me's team + last_scanned_flavor             (done, P1)
     authentication.py  phone OTP sign-in                                     (B10)
     jobs.py            enqueue/claim/complete jobs                           (B11)
-    challenges.py, submissions.py, leaderboards.py, tournaments.py           (B17-B22)
+    challenges.py      ChallengeService: GET/POST /challenges (2 kinds)      (done, C1)
+    submissions.py, leaderboards.py, tournaments.py                          (B18-B22)
   infrastructure/
     postgres/          models, read repositories, unit_of_work.py (writes)
     sms/               provider adapters + console adapter for development   (B11)
@@ -228,16 +229,18 @@ erDiagram
         timestamptz joined_at
     }
     challenges {
-        uuid id PK
-        string kind "redeem_count, distinct_cities, manual, social_post"
-        string period "day, week, once"
+        string id PK "slug, e.g. choose_team (done, C1)"
+        string kind "team_choice, distinct_flavors (closed set, done C1)"
+        string period "once, day, week, month"
         int target
         int reward_coins
+        bool active
     }
     challenge_claims {
-        uuid challenge_id FK
+        bigint id PK
+        string challenge_id FK
         uuid user_id FK
-        string period_key "UNIQUE with challenge and user"
+        string period_key "UNIQUE with challenge and user (done, C1)"
     }
     submissions {
         uuid id PK
@@ -277,7 +280,7 @@ already exists from migration 0006.
 | `coin_ledger_entries.idempotency_key` | One key per logical award: `code_redemption:<code id>`, `challenge:<id>:<period>:<user>`, `tournament:<id>:<place>`, `adjustment:<uuid>`. Unique, so an award can never be recorded twice. |
 | `coin_ledger_entries` | Append-only (trigger). Corrections are new entries with `reason = admin_adjustment`. |
 | `wallets.balance` | Cached sum of the user's ledger, updated in the same transaction as each entry. Reconcile with `SUM(amount)` (query in [OPERATIONS.md](OPERATIONS.md#daily-checks)). |
-| `challenge_claims.period_key` | `D:2026-10-10` for a Tehran day, `W:2026-10-10` for the week starting that Saturday, `ONCE` for one-off challenges. |
+| `challenge_claims.period_key` | `D:2026-10-10` for a Tehran day, `W:2026-10-10` for the week starting that Saturday, `M:2026-10` for a Tehran calendar month, `ONCE` for one-off challenges. |
 
 ## Key flows
 

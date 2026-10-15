@@ -106,6 +106,77 @@
         "title": "AvatarResponse",
         "type": "object"
       },
+      "ChallengeClaimResponse": {
+        "properties": {
+          "coin_balance": {
+            "title": "Coin Balance",
+            "type": "integer"
+          },
+          "coins_awarded": {
+            "title": "Coins Awarded",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "coins_awarded",
+          "coin_balance"
+        ],
+        "title": "ChallengeClaimResponse",
+        "type": "object"
+      },
+      "ChallengeResponse": {
+        "properties": {
+          "claimed": {
+            "title": "Claimed",
+            "type": "boolean"
+          },
+          "completed": {
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "have": {
+            "title": "Have",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          },
+          "reward_coins": {
+            "title": "Reward Coins",
+            "type": "integer"
+          },
+          "target": {
+            "title": "Target",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "period",
+          "target",
+          "have",
+          "reward_coins",
+          "completed",
+          "claimed"
+        ],
+        "title": "ChallengeResponse",
+        "type": "object"
+      },
       "ConfigLimits": {
         "properties": {
           "scans_per_day": {
@@ -1215,6 +1286,124 @@
         ]
       }
     },
+    "/api/v1/challenges": {
+      "get": {
+        "operationId": "list_challenges",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ChallengeResponse"
+                  },
+                  "title": "Response List Challenges",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not signed in"
+          }
+        },
+        "security": [
+          {
+            "Session Cookie": []
+          }
+        ],
+        "summary": "Active challenges and this player's progress",
+        "tags": [
+          "challenges"
+        ]
+      }
+    },
+    "/api/v1/challenges/{challenge_id}/claim": {
+      "post": {
+        "description": "Idempotent per period: claiming twice in the same period pays once (409 CHALLENGE_ALREADY_CLAIMED on the second try).",
+        "operationId": "claim_challenge",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "challenge_id",
+            "required": true,
+            "schema": {
+              "title": "Challenge Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChallengeClaimResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unknown or inactive challenge"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "CHALLENGE_NOT_UNLOCKED or CHALLENGE_ALREADY_CLAIMED"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "VALIDATION_FAILED (see error.fields)"
+          }
+        },
+        "security": [
+          {
+            "Session Cookie": []
+          }
+        ],
+        "summary": "Claim a completed challenge",
+        "tags": [
+          "challenges"
+        ]
+      }
+    },
     "/api/v1/config": {
       "get": {
         "description": "No sign-in needed. Server time, the Tehran day and week keys and the limits clients must use instead of the phone clock, and the active lounges for the profile picker. Avatar/game catalogues are not included yet.",
@@ -1702,6 +1891,10 @@
     {
       "description": "Flavor team membership. See API_CONTRACT.md#teams.",
       "name": "teams"
+    },
+    {
+      "description": "Automatic challenges and claims. See API_CONTRACT.md#challenges.",
+      "name": "challenges"
     },
     {
       "description": "Liveness/readiness probes. See API_CONTRACT.md#health.",

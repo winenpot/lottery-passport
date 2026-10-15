@@ -7,6 +7,14 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ### Added
 
+- Automatic challenges (C1, B17): `challenges` catalogue table (admin-editable, starts
+  empty) + `challenge_claims` (one row per user per challenge per period, UNIQUE is the
+  idempotent-claim guard). MVP subset of kinds: `team_choice` (once, a player's first team
+  join) and `distinct_flavors` (day/week/month, distinct flavors redeemed). New Tehran
+  month key/boundary helpers in `app/domain/periods.py`. `GET /api/v1/challenges`,
+  `POST /api/v1/challenges/{id}/claim`. New error codes `CHALLENGE_NOT_UNLOCKED`,
+  `CHALLENGE_ALREADY_CLAIMED`.
+
 - Flavor teams (P1/B36): 5 lifetime codes of a flavor unlock its team; `POST /me/team`
   joins/switches among unlocked flavors; switching is locked for 30 days after each join.
   `GET /api/v1/me/team`, `POST /api/v1/me/team`; `POST /api/v1/redemptions` gains

@@ -17,6 +17,14 @@ Parked features (not in the MVP contract): the city passport. See
 Newest first. **Breaking** means a call that worked before needs a change on your side.
 Check `GET /health` → `commit` to see which backend commit is deployed on the demo.
 
+**2026-10-15 (C1)**
+
+- Added: `GET /api/v1/challenges` and `POST /api/v1/challenges/{id}/claim` — see
+  [Challenges and submissions](#challenges-and-submissions). MVP subset: two automatic
+  kinds (`team_choice`, `distinct_flavors`); replaces the earlier `?type=` / title+
+  description draft written against the frontend demo mock.
+- Added: error codes `CHALLENGE_NOT_UNLOCKED` (409), `CHALLENGE_ALREADY_CLAIMED` (409).
+
 **2026-10-15**
 - Added: `GET /api/v1/avatars` (no sign-in needed): the avatar catalogue, `[{id, image_url,
   locked}]`. `PATCH /me avatar_id` picks an unlocked one; `422 AVATAR_LOCKED` otherwise
@@ -201,6 +209,8 @@ and the id in our logs: put it in bug reports.
 | `FLAVOR_NOT_UNLOCKED` | 409 | `POST /me/team` picked a flavor with under 5 lifetime codes (`error.details.required`/`have`) | Show "N more to unlock" |
 | `TEAM_LOCKED` | 409 | `POST /me/team` too soon after the last join (`error.details.switch_allowed_at`) | Show the date it opens |
 | `TEAM_SAME` | 422 | `POST /me/team` picked the player's current team | No-op; show the current team |
+| `CHALLENGE_NOT_UNLOCKED` | 409 | `POST /challenges/{id}/claim` before the target is met (`error.details.required`/`have`) | Show remaining progress |
+| `CHALLENGE_ALREADY_CLAIMED` | 409 | `POST /challenges/{id}/claim` claimed again in the same period | No-op; show it as claimed |
 | `CODE_MALFORMED` | 400 | Not a product code at all | "This is not a TorshX code" |
 | `CODE_MISTYPED` | 400 | Right shape, one character wrong | "Check the characters, especially 0/O and 1/I" |
 | `CODE_INVALID` | 404 | Unknown code, or not released yet | "Code not valid" |
@@ -739,45 +749,82 @@ Last week's top 3 (the «برندگان هفته قبل» tab): `{"week_key": ".
 
 ## Challenges and submissions
 
-### `GET /api/v1/challenges?type=all|daily|weekly|social` (planned, B17)
+Automatic challenges (C1, B17) are live now; social-post submissions and manual
+challenges (B18, "SHOULD" in the plan) are not built yet — see the end of this section.
+
+### `GET /api/v1/challenges` (live, B17; MVP subset)
 
 ```json
-{
-  "day_key": "D:2026-10-10", "week_key": "W:2026-10-10",
-  "items": [
-    {
-      "id": "8d1f...", "type": "daily", "kind": "scan_count",
-      "title": "یک QR محصول TorshX اسکن کن", "description": "...",
-      "target": 1, "progress": 0, "reward_coins": 50,
-      "status": "todo", "ends_at": "2026-10-10T20:30:00Z",
-      "action": {"route": "/scan"}
-    },
-    {
-      "id": "c2aa...", "type": "social", "kind": "social_post", "platform": "instagram",
-      "title": "استوری با #TorshX و منشن @torshx", "description": "...",
-      "target": 3, "progress": 1, "reward_coins": 80,
-      "status": "rejected", "ends_at": "2026-10-16T20:30:00Z",
-      "accepts": ["story", "post", "reel"],
-      "submission": {"id": "f00d...", "status": "rejected", "url": "https://www.instagram.com/stories/...", "reason": "private_account"}
-    }
-  ]
-}
+[
+  {
+    "id": "choose_team",
+    "kind": "team_choice",
+    "period": "once",
+    "target": 1,
+    "have": 0,
+    "reward_coins": 30,
+    "completed": false,
+    "claimed": false
+  },
+  {
+    "id": "discover_3_flavors",
+    "kind": "distinct_flavors",
+    "period": "month",
+    "target": 3,
+    "have": 1,
+    "reward_coins": 100,
+    "completed": false,
+    "claimed": false
+  }
+]
 ```
 
-- `type`: `daily`, `weekly`, `social`.
-- `kind`: `scan_count`, `game_score` (`params.game_id`, `params.threshold`),
-  `streak_days`, `social_post`, `manual`.
-- `status`: `todo`, `in_progress`, `claimable`, `claimed`, `pending`, `approved`,
-  `rejected`.
-- Social challenges pay on approval; there is no claim step.
-- Rejection `reason` values: `private_account`, `missing_hashtag`, `missing_mention`,
-  `deleted`, `expired`, `duplicate`, `not_owner`, `other`.
-- Titles and descriptions come from the admin panel, in Persian.
+Every row is a challenge an admin created in `/admin` (the table starts empty, same as
+avatars/reward rules — nothing shows here until Ashkan or Mehdi adds one). `kind` is the
+closed set this backend knows how to check progress for:
 
-### `POST /api/v1/challenges/{id}/claim` (planned, B17; `Idempotency-Key`)
+- `team_choice`: `have` is 1 once the player has ever joined a flavor team (see
+  [Teams](#teams)), 0 before. Natural `target` is 1; `period` is `once`.
+- `distinct_flavors`: `have` is the number of distinct flavors the player has redeemed a
+  code of within the current period (`day`/`week`/`month`, Tehran calendar).
 
-`200 {"coins_awarded": 50, "coin_balance": 2500, "replayed": false}`.
-Errors: `CHALLENGE_NOT_COMPLETED`, `CHALLENGE_NOT_ACTIVE`.
+`completed = have >= target`. `claimed` is whether this player already claimed this
+challenge for its current period — a completed-and-claimed row stays visible (so the UI
+can show "done ✓") but a further claim is refused.
+
+**Not in this response, by design:** `title`/`description` (Persian copy for a challenge
+is the frontend's job, keyed by `id` — same principle as error codes); a `type` query
+filter (filter client-side on `kind`/`period` if needed); `action.route`. These were in
+an earlier draft of this contract written against the frontend demo mock and are
+superseded by the shape above for every LIVE challenge.
+
+**Not shipped yet** (do not build a client assuming these): `scan_count`/`game_score`/
+`streak_days`/`social_post`/`manual` kinds. "First game"/"Tap Reflex" challenges are
+blocked on G1 (no game-run data exists yet); "5-day login"/"5-day activity" need a
+product decision on how to detect "the player used the app today" before they can be
+built (a long-lived session means a sign-in event does not happen every day a player
+opens the app) — see `docs/vault/Decisions.md` 2026-10-15.
+
+### `POST /api/v1/challenges/{id}/claim` (live, B17; MVP subset)
+
+```http
+POST /api/v1/challenges/choose_team/claim
+```
+
+```http
+200 OK
+{"id": "choose_team", "coins_awarded": 30, "coin_balance": 530}
+```
+
+Idempotent per period: a UNIQUE constraint on `challenge_claims (challenge_id, user_id,
+period_key)` is the actual guard (not just the ledger), so two near-simultaneous clicks
+cannot both pay. No `Idempotency-Key` header is needed — the challenge/period pair makes
+the call idempotent per account, same principle as redemption codes.
+
+Errors: `NOT_FOUND` (404, unknown or inactive challenge id — no request body to
+validate, so this is a path error, unlike `CATALOGUE_UNKNOWN` elsewhere),
+`CHALLENGE_NOT_UNLOCKED` (409, `error.details` has `required` and `have`),
+`CHALLENGE_ALREADY_CLAIMED` (409, already claimed this period).
 
 ### `POST /api/v1/challenges/{id}/submissions` (planned, B18)
 
