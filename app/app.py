@@ -28,6 +28,7 @@ from app.application.admin_users import AdminUserService
 from app.application.app_config import AppConfigService
 from app.application.authentication import AuthenticationService, AuthenticationSettings
 from app.application.avatars import AvatarService
+from app.application.challenges import ChallengeService
 from app.application.coin_adjustments import CoinAdjustmentService
 from app.application.failure_throttle import ThrottleSettings
 from app.application.me import MeService
@@ -51,6 +52,7 @@ from app.infrastructure.postgres.failure_throttle import PostgreSQLFailureThrott
 from app.infrastructure.postgres.repositories import (
     PostgreSQLAvatarCatalogue,
     PostgreSQLChallengeRepository,
+    PostgreSQLChallengesReader,
     PostgreSQLLastScanReader,
     PostgreSQLPassportRepository,
     PostgreSQLSessionRepository,
@@ -99,6 +101,12 @@ OPENAPI_TAGS = [
     {
         "name": "teams",
         "description": "Flavor team membership. See API_CONTRACT.md#teams.",
+    },
+    {
+        "name": "challenges",
+        "description": (
+            "Automatic challenges and claims. See API_CONTRACT.md#challenges."
+        ),
     },
     {
         "name": "health",
@@ -204,6 +212,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         teams=teams_reader,
         last_scans=PostgreSQLLastScanReader(database.session_factory),
     )
+    challenge_service = ChallengeService(
+        reader=PostgreSQLChallengesReader(database.session_factory),
+        teams=teams_reader,
+        unit_of_work=unit_of_work,
+        clock=SystemClock(),
+        zone=resolved_settings.campaign_zone,
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -301,6 +316,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.avatar_service = avatar_service
     application.state.team_service = team_service
     application.state.me_service = me_service
+    application.state.challenge_service = challenge_service
     application.state.sms_sender = sms_sender
     application.state.settings = resolved_settings
     return application

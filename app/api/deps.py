@@ -8,6 +8,7 @@ from app.application.admin_users import AdminUserService
 from app.application.app_config import AppConfigService
 from app.application.authentication import AuthenticationError, AuthenticationService
 from app.application.avatars import AvatarService
+from app.application.challenges import ChallengeService
 from app.application.me import MeService
 from app.application.passports import PassportService
 from app.application.ports import ReadinessChecker
@@ -62,6 +63,10 @@ def get_avatar_service(request: Request) -> AvatarService:
 
 def get_team_service(request: Request) -> TeamService:
     return cast(TeamService, request.app.state.team_service)
+
+
+def get_challenge_service(request: Request) -> ChallengeService:
+    return cast(ChallengeService, request.app.state.challenge_service)
 
 
 def get_me_service(request: Request) -> MeService:

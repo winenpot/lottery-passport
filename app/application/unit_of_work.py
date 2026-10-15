@@ -14,6 +14,7 @@ from typing import Protocol, Self
 from uuid import UUID
 
 from app.domain.audit import NewAuditEntry
+from app.domain.challenges import Challenge, ChallengeKind
 from app.domain.ledger import NewLedgerEntry
 from app.domain.passports import Campaign, CityCode, PassportProgress
 from app.domain.reward_rules import RewardRule
@@ -128,6 +129,36 @@ class TeamsInTransaction(Protocol):
         ...
 
 
+class ChallengesInTransaction(Protocol):
+    """Challenge catalogue + claims (app/domain/challenges.py, C1), inside
+    the unit of work: a claim's own progress check and its ledger write
+    must see the same transaction."""
+
+    async def get(self, challenge_id: str) -> Challenge | None:
+        """An active challenge by id, or ``None`` if unknown/inactive."""
+        ...
+
+    async def get_by_kind(self, kind: ChallengeKind) -> Challenge | None:
+        """The active challenge of this kind, if any (assumed singleton
+        per kind for the MVP)."""
+        ...
+
+    async def distinct_flavors_since(self, user_id: UUID, since: datetime) -> int:
+        """Distinct flavors this user has redeemed a code of since ``since``."""
+        ...
+
+    async def has_claimed(
+        self, challenge_id: str, user_id: UUID, period_key: str
+    ) -> bool: ...
+
+    async def claim(
+        self, challenge_id: str, user_id: UUID, period_key: str, now: datetime
+    ) -> None:
+        """Insert the claim row. UNIQUE (challenge_id, user_id, period_key)
+        is the race guard; the caller locks the user's wallet row first."""
+        ...
+
+
 class UnitOfWork(Protocol):
     # Read-only properties so implementations may expose concrete subtypes.
     @property
@@ -147,6 +178,9 @@ class UnitOfWork(Protocol):
 
     @property
     def teams(self) -> TeamsInTransaction: ...
+
+    @property
+    def challenges(self) -> ChallengesInTransaction: ...
 
     async def __aenter__(self) -> Self: ...
 

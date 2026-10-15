@@ -29,6 +29,7 @@ from app.application.unit_of_work import (
     InsufficientCoinsError,
 )
 from app.domain.audit import NewAuditEntry
+from app.domain.challenges import Challenge, ChallengeKind
 from app.domain.code_batches import BatchStatus
 from app.domain.ledger import NewLedgerEntry
 from app.domain.passports import Campaign, CityCode, PassportProgress
@@ -36,6 +37,7 @@ from app.domain.reward_rules import Cadence, RewardRule
 from app.domain.teams import TeamMembership
 from app.infrastructure.postgres.models import (
     AuditLogModel,
+    ChallengeClaimModel,
     CodeBatchModel,
     CoinLedgerEntryModel,
     PassportProgressModel,
@@ -45,8 +47,12 @@ from app.infrastructure.postgres.models import (
     WalletModel,
 )
 from app.infrastructure.postgres.repositories import (
+    challenge_already_claimed,
     count_flavor_codes,
     current_team_membership,
+    distinct_flavors_count_since,
+    get_challenge_by_id,
+    get_challenge_by_kind,
 )
 
 
@@ -278,6 +284,43 @@ class SqlTeams:
         )
 
 
+class SqlChallenges:
+    """Implements ``ChallengesInTransaction``; shares its queries with the
+    plain ``PostgreSQLChallengesReader`` used by ``GET /challenges``
+    (repositories.py)."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get(self, challenge_id: str) -> Challenge | None:
+        return await get_challenge_by_id(self._session, challenge_id)
+
+    async def get_by_kind(self, kind: ChallengeKind) -> Challenge | None:
+        return await get_challenge_by_kind(self._session, kind)
+
+    async def distinct_flavors_since(self, user_id: UUID, since: datetime) -> int:
+        return await distinct_flavors_count_since(self._session, user_id, since)
+
+    async def has_claimed(
+        self, challenge_id: str, user_id: UUID, period_key: str
+    ) -> bool:
+        return await challenge_already_claimed(
+            self._session, challenge_id, user_id, period_key
+        )
+
+    async def claim(
+        self, challenge_id: str, user_id: UUID, period_key: str, now: datetime
+    ) -> None:
+        await self._session.execute(
+            insert(ChallengeClaimModel).values(
+                challenge_id=challenge_id,
+                user_id=user_id,
+                period_key=period_key,
+                claimed_at=now,
+            )
+        )
+
+
 class SqlAlchemyUnitOfWork:
     """``async with SqlAlchemyUnitOfWork(factory) as uow: ...; await uow.commit()``."""
 
@@ -287,6 +330,7 @@ class SqlAlchemyUnitOfWork:
     audit: SqlAudit
     rules: SqlRewardRules
     teams: SqlTeams
+    challenges: SqlChallenges
 
     def __init__(self, factory: async_sessionmaker[AsyncSession]) -> None:
         self._factory = factory
@@ -302,6 +346,7 @@ class SqlAlchemyUnitOfWork:
         self.audit = SqlAudit(self._session)
         self.rules = SqlRewardRules(self._session)
         self.teams = SqlTeams(self._session)
+        self.challenges = SqlChallenges(self._session)
         return self
 
     async def __aexit__(

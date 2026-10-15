@@ -40,6 +40,7 @@ from app.application.coin_adjustments import (
 from app.infrastructure.postgres.models import (
     AuditLogModel,
     AvatarModel,
+    ChallengeModel,
     CodeBatchModel,
     CoinLedgerEntryModel,
     RewardRuleModel,
@@ -328,6 +329,41 @@ class RewardRuleAdmin(ModelView, model=RewardRuleModel):
     ]
 
 
+class ChallengeAdmin(ModelView, model=ChallengeModel):
+    """Challenge catalogue (C1): starts empty, filled in here. ``kind``
+    must be one of the two app/domain/challenges.py knows how to check
+    progress for (``team_choice``, ``distinct_flavors``) -- the DB CHECK
+    enforces this, there is no dropdown widget for it here. No delete:
+    a challenge with claim history cannot be deleted anyway (FK ON DELETE
+    RESTRICT); switch it off with ``active = false`` instead.
+    """
+
+    name = "Challenge"
+    name_plural = "Challenges"
+    icon = "fa-solid fa-flag-checkered"
+    can_create = True
+    can_edit = True
+    can_delete = False
+    can_export = False
+    column_list = [
+        ChallengeModel.id,
+        ChallengeModel.kind,
+        ChallengeModel.period,
+        ChallengeModel.target,
+        ChallengeModel.reward_coins,
+        ChallengeModel.active,
+    ]
+    column_searchable_list = [ChallengeModel.id]
+    form_columns = [
+        ChallengeModel.id,
+        ChallengeModel.kind,
+        ChallengeModel.period,
+        ChallengeModel.target,
+        ChallengeModel.reward_coins,
+        ChallengeModel.active,
+    ]
+
+
 VIEWS: tuple[type[ModelView], ...] = (
     UserAdmin,
     VenueAdmin,
@@ -336,6 +372,7 @@ VIEWS: tuple[type[ModelView], ...] = (
     CoinLedgerAdmin,
     AvatarAdmin,
     RewardRuleAdmin,
+    ChallengeAdmin,
 )
 
 

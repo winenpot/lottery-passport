@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.application.app_config import AppConfig
+from app.application.challenges import ChallengeClaimResult, ChallengeProgress
 from app.application.redemption_codes import RedemptionResult
 from app.application.teams import FlavorProgress, TeamStatus
 from app.application.wallets import WalletView
@@ -332,3 +333,41 @@ class TeamChangeRequest(BaseModel):
     flavor: str = Field(
         examples=["tokyo"], description="A campaign slug from GET /config flavors."
     )
+
+
+class ChallengeResponse(BaseModel):
+    id: str
+    kind: str
+    period: str
+    target: int
+    have: int
+    reward_coins: int
+    completed: bool
+    claimed: bool
+
+    @classmethod
+    def from_domain(cls, progress: ChallengeProgress) -> "ChallengeResponse":
+        return cls(
+            id=progress.id,
+            kind=progress.kind.value,
+            period=progress.period.value,
+            target=progress.target,
+            have=progress.have,
+            reward_coins=progress.reward_coins,
+            completed=progress.completed,
+            claimed=progress.claimed,
+        )
+
+
+class ChallengeClaimResponse(BaseModel):
+    id: str
+    coins_awarded: int
+    coin_balance: int
+
+    @classmethod
+    def from_result(cls, result: ChallengeClaimResult) -> "ChallengeClaimResponse":
+        return cls(
+            id=result.id,
+            coins_awarded=result.coins_awarded,
+            coin_balance=result.coin_balance,
+        )

@@ -18,6 +18,7 @@ from app.application.profile import NicknameTaken
 from app.application.wallets import WalletReader
 from app.domain.authentication import AuthenticatedSession, AuthenticationChallenge
 from app.domain.avatars import Avatar
+from app.domain.challenges import Challenge, ChallengeKind, ChallengePeriod
 from app.domain.ledger import LedgerEntry, LedgerReason, Wallet
 from app.domain.nickname import Nickname
 from app.domain.passports import Campaign, CityCode, PassportProgress
@@ -27,6 +28,8 @@ from app.domain.venues import Venue
 from app.infrastructure.postgres.models import (
     AuthenticationChallengeModel,
     AvatarModel,
+    ChallengeClaimModel,
+    ChallengeModel,
     CoinLedgerEntryModel,
     PassportProgressModel,
     RedemptionCodeModel,
@@ -352,6 +355,98 @@ class PostgreSQLLastScanReader:
                 .limit(1)
             )
             return CityCode(city) if city is not None else None
+
+
+def challenge_definition_from_model(model: ChallengeModel) -> Challenge:
+    return Challenge(
+        id=model.id,
+        kind=ChallengeKind(model.kind),
+        period=ChallengePeriod(model.period),
+        target=model.target,
+        reward_coins=model.reward_coins,
+        active=model.active,
+    )
+
+
+async def get_challenge_by_id(
+    session: AsyncSession, challenge_id: str
+) -> Challenge | None:
+    """Shared by ``SqlChallenges`` and ``PostgreSQLChallengesReader``."""
+    model = await session.get(ChallengeModel, challenge_id)
+    if model is None or not model.active:
+        return None
+    return challenge_definition_from_model(model)
+
+
+async def get_challenge_by_kind(
+    session: AsyncSession, kind: ChallengeKind
+) -> Challenge | None:
+    """The active challenge of this kind, if any (assumed singleton per
+    kind for the MVP -- see ``ChallengesInTransaction.get_by_kind``)."""
+    model = await session.scalar(
+        select(ChallengeModel).where(
+            ChallengeModel.kind == kind.value, ChallengeModel.active.is_(True)
+        )
+    )
+    return challenge_definition_from_model(model) if model else None
+
+
+async def distinct_flavors_count_since(
+    session: AsyncSession, user_id: UUID, since: datetime
+) -> int:
+    """Shared by ``SqlChallenges`` and ``PostgreSQLChallengesReader``: how
+    many distinct flavors this user has redeemed a code of since ``since``."""
+    result = await session.scalar(
+        select(func.count(func.distinct(RedemptionCodeModel.city))).where(
+            RedemptionCodeModel.redeemed_by_user_id == user_id,
+            RedemptionCodeModel.redeemed_at >= since,
+        )
+    )
+    return int(result or 0)
+
+
+async def challenge_already_claimed(
+    session: AsyncSession, challenge_id: str, user_id: UUID, period_key: str
+) -> bool:
+    """Shared by ``SqlChallenges`` and ``PostgreSQLChallengesReader``."""
+    result = await session.scalar(
+        select(ChallengeClaimModel.id).where(
+            ChallengeClaimModel.challenge_id == challenge_id,
+            ChallengeClaimModel.user_id == user_id,
+            ChallengeClaimModel.period_key == period_key,
+        )
+    )
+    return result is not None
+
+
+class PostgreSQLChallengesReader:
+    """Implements ``ChallengesReader`` (``GET /challenges``): plain reads,
+    no wallet lock, shares its queries with ``SqlChallenges`` (the claim's
+    own unit of work)."""
+
+    def __init__(self, factory: async_sessionmaker[AsyncSession]) -> None:
+        self._factory = factory
+
+    async def list_active(self) -> list[Challenge]:
+        async with self._factory() as session:
+            rows = await session.scalars(
+                select(ChallengeModel)
+                .where(ChallengeModel.active.is_(True))
+                .order_by(ChallengeModel.id)
+            )
+            return [challenge_definition_from_model(row) for row in rows]
+
+    async def distinct_flavors_since(self, user_id: UUID, since: datetime) -> int:
+        async with self._factory() as session:
+            return await distinct_flavors_count_since(session, user_id, since)
+
+    async def has_claimed(
+        self, challenge_id: str, user_id: UUID, period_key: str
+    ) -> bool:
+        async with self._factory() as session:
+            return await challenge_already_claimed(
+                session, challenge_id, user_id, period_key
+            )
 
 
 class PostgreSQLChallengeRepository(AuthenticationChallengeRepository):
