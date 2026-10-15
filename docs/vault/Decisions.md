@@ -229,3 +229,39 @@ Error codes `CHALLENGE_NOT_UNLOCKED` (409, `required`/`have`), `CHALLENGE_ALREAD
 (409). Claim idempotency is a real UNIQUE constraint on `challenge_claims (challenge_id,
 user_id, period_key)`, not just the ledger's own idempotency key — the same shape as
 `team_memberships`' `switch_no` guard.
+
+## 2026-10-15 — daily check-in resolves the login/activity tracking gap; achievements MVP slice
+
+Resolves the open question from the entry above. User's proposal: don't detect a login
+passively — make checking in an explicit, player-initiated action, and let that action's
+own claim history double as the signal.
+
+- **New `daily_checkin` challenge kind** (period `day`, always completed once signed
+  in). The claim itself IS the "player used the app today" signal — no new table, no
+  per-request write. Supersedes "5-day login 30" / "5-day activity 100" from the sheet
+  entirely (same kind of sheet supersession as the Fibonacci→unlock team-rule swap);
+  pay amount stays admin-tunable (`challenges.reward_coins`), not re-guessed here.
+- **Streak** = consecutive Tehran calendar days with a `daily_checkin` claim, computed
+  from `challenge_claims` (`app.domain.periods.current_streak`). Counts from today, or
+  from yesterday if today is not claimed yet, so it does not look broken before the
+  player has had a chance to check in.
+- **Achievements (AC1 MVP slice, pulled forward from B37)**: streak milestones (e.g.
+  3/7/30 days, numbers are Mehdi's to set via `/admin`) auto-unlock and pay through the
+  ledger, inside the SAME transaction as the triggering `daily_checkin` claim. No claim
+  step — "easily claimable" means no second tap, not a faster one.
+- **One-time per player, ever — this is the load-bearing decision.** `user_achievements`
+  is `UNIQUE (achievement_id, user_id)`, not per-period. The user caught the exact
+  failure mode of getting this wrong: if a 3-day and a 7-day milestone paid every time a
+  player reached them, breaking a streak on purpose and rebuilding it (3 days → quit →
+  3 days → quit → ...) would out-earn ever completing an honest 30-day streak, since the
+  short milestones could be farmed roughly weekly while the 30-day one pays once. The
+  one-time-ever guard closes this: once `streak_3`/`streak_7` are unlocked, reaching
+  those streak lengths again pays nothing, so there is no incentive to reset on purpose.
+- **Scope cut from B37's full spec, deliberately**: no `badges` catalogue (images,
+  locked/unlocked art) — needs Ashkan's assets and Mehdi's approved 8-12 item list,
+  which has not happened; no generic `FactPublisher` port — only one fact
+  (`checkin_streak`) exists today, and CLAUDE.md's own rule is to add an abstraction
+  when a second real caller appears, not before; no `/config.features.achievements`
+  gate — F1 does not exist yet either, same ungated state as teams/challenges today.
+  `GET /me/achievements` lists only unlocked achievements (no "locked, X/Y progress"
+  view yet).

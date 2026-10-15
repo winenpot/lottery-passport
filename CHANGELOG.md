@@ -7,6 +7,17 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ### Added
 
+- Daily check-in + achievements (C1 extension / AC1 MVP slice): new `daily_checkin`
+  challenge kind (always completed once signed in; claiming it IS the login signal, no
+  passive tracking needed) — supersedes the planned "5-day login"/"5-day activity" sheet
+  items. `GET /api/v1/challenges` and the claim response gain `streak` (consecutive
+  Tehran days checked in). New `achievements` catalogue (admin-editable, starts empty) +
+  `user_achievements` (`UNIQUE (achievement_id, user_id)`: unlocks once per player, ever
+  — breaking and rebuilding a streak cannot re-pay an already-unlocked milestone).
+  Unlocking is automatic, inside the triggering `daily_checkin` claim's own transaction,
+  and pays through the ledger immediately — no separate claim step. `GET
+  /api/v1/me/achievements`; claim response gains `achievements_unlocked`.
+
 - Automatic challenges (C1, B17): `challenges` catalogue table (admin-editable, starts
   empty) + `challenge_claims` (one row per user per challenge per period, UNIQUE is the
   idempotent-claim guard). MVP subset of kinds: `team_choice` (once, a player's first team

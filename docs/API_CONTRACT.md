@@ -17,6 +17,20 @@ Parked features (not in the MVP contract): the city passport. See
 Newest first. **Breaking** means a call that worked before needs a change on your side.
 Check `GET /health` → `commit` to see which backend commit is deployed on the demo.
 
+**2026-10-15 (AC1 + C1 daily check-in)**
+
+- Added: `daily_checkin` challenge kind (period `day`, `have`/`target` always `1`/`1`).
+  Claiming it IS the "player used the app today" signal — supersedes the earlier-planned
+  "5-day login"/"5-day activity" sheet items (no passive tracking needed). `GET
+  /api/v1/challenges` and the claim response gain a `streak` field (int for
+  `daily_checkin` rows, `null` otherwise) — see
+  [Challenges and submissions](#challenges-and-submissions).
+- Added: `GET /api/v1/me/achievements` — see [Achievements](#achievements). Streak
+  milestones (e.g. 3/7/30 days) auto-unlock and auto-pay once per player, ever, the
+  moment a `daily_checkin` claim crosses them — no claim endpoint for this.
+- Added: `POST /api/v1/challenges/{id}/claim` response gains `achievements_unlocked`
+  (list of `{id, reward_coins}`, auto-paid in the same transaction as the claim).
+
 **2026-10-15 (C1)**
 
 - Added: `GET /api/v1/challenges` and `POST /api/v1/challenges/{id}/claim` — see
@@ -764,7 +778,8 @@ challenges (B18, "SHOULD" in the plan) are not built yet — see the end of this
     "have": 0,
     "reward_coins": 30,
     "completed": false,
-    "claimed": false
+    "claimed": false,
+    "streak": null
   },
   {
     "id": "discover_3_flavors",
@@ -774,7 +789,19 @@ challenges (B18, "SHOULD" in the plan) are not built yet — see the end of this
     "have": 1,
     "reward_coins": 100,
     "completed": false,
-    "claimed": false
+    "claimed": false,
+    "streak": null
+  },
+  {
+    "id": "daily_checkin",
+    "kind": "daily_checkin",
+    "period": "day",
+    "target": 1,
+    "have": 1,
+    "reward_coins": 10,
+    "completed": true,
+    "claimed": false,
+    "streak": 6
   }
 ]
 ```
@@ -787,10 +814,18 @@ closed set this backend knows how to check progress for:
   [Teams](#teams)), 0 before. Natural `target` is 1; `period` is `once`.
 - `distinct_flavors`: `have` is the number of distinct flavors the player has redeemed a
   code of within the current period (`day`/`week`/`month`, Tehran calendar).
+- `daily_checkin`: `have`/`target` are always `1`/`1` (completed the moment the player is
+  signed in) — claiming it IS the "player used the app today" signal, recorded in
+  `challenge_claims` like any other claim. `streak` is this player's current run of
+  consecutive Tehran calendar days with a claim (counting from today, or from yesterday
+  if today has not been claimed yet, so it does not look broken before the player has
+  had a chance). Supersedes the sheet's "5-day login"/"5-day activity" items — see
+  `docs/vault/Decisions.md` 2026-10-15.
 
 `completed = have >= target`. `claimed` is whether this player already claimed this
 challenge for its current period — a completed-and-claimed row stays visible (so the UI
-can show "done ✓") but a further claim is refused.
+can show "done ✓") but a further claim is refused. `streak` is present (an integer) only
+for `daily_checkin` rows; `null` for every other kind.
 
 **Not in this response, by design:** `title`/`description` (Persian copy for a challenge
 is the frontend's job, keyed by `id` — same principle as error codes); a `type` query
@@ -799,11 +834,8 @@ an earlier draft of this contract written against the frontend demo mock and are
 superseded by the shape above for every LIVE challenge.
 
 **Not shipped yet** (do not build a client assuming these): `scan_count`/`game_score`/
-`streak_days`/`social_post`/`manual` kinds. "First game"/"Tap Reflex" challenges are
-blocked on G1 (no game-run data exists yet); "5-day login"/"5-day activity" need a
-product decision on how to detect "the player used the app today" before they can be
-built (a long-lived session means a sign-in event does not happen every day a player
-opens the app) — see `docs/vault/Decisions.md` 2026-10-15.
+`social_post`/`manual` kinds. "First game"/"Tap Reflex" challenges are blocked on G1 (no
+game-run data exists yet).
 
 ### `POST /api/v1/challenges/{id}/claim` (live, B17; MVP subset)
 
@@ -813,7 +845,31 @@ POST /api/v1/challenges/choose_team/claim
 
 ```http
 200 OK
-{"id": "choose_team", "coins_awarded": 30, "coin_balance": 530}
+{
+  "id": "choose_team",
+  "coins_awarded": 30,
+  "coin_balance": 530,
+  "streak": null,
+  "achievements_unlocked": []
+}
+```
+
+Claiming a `daily_checkin` challenge may also auto-unlock a streak achievement in the
+same call — see [Achievements](#achievements):
+
+```http
+POST /api/v1/challenges/daily_checkin/claim
+```
+
+```http
+200 OK
+{
+  "id": "daily_checkin",
+  "coins_awarded": 10,
+  "coin_balance": 560,
+  "streak": 7,
+  "achievements_unlocked": [{"id": "streak_7", "reward_coins": 50}]
+}
 ```
 
 Idempotent per period: a UNIQUE constraint on `challenge_claims (challenge_id, user_id,
@@ -821,10 +877,46 @@ period_key)` is the actual guard (not just the ledger), so two near-simultaneous
 cannot both pay. No `Idempotency-Key` header is needed — the challenge/period pair makes
 the call idempotent per account, same principle as redemption codes.
 
+`streak`/`achievements_unlocked` are present (non-null/non-empty when applicable) only on
+a `daily_checkin` claim; every other kind always returns `streak: null,
+"achievements_unlocked": []`.
+
 Errors: `NOT_FOUND` (404, unknown or inactive challenge id — no request body to
 validate, so this is a path error, unlike `CATALOGUE_UNKNOWN` elsewhere),
 `CHALLENGE_NOT_UNLOCKED` (409, `error.details` has `required` and `have`),
 `CHALLENGE_ALREADY_CLAIMED` (409, already claimed this period).
+
+## Achievements
+
+Auto-unlocked, auto-paid milestones (AC1 MVP slice). There is no claim endpoint and
+never will be for this fact — unlocking happens automatically inside the `daily_checkin`
+claim that crosses the threshold, and pays in the SAME transaction. This is deliberate:
+"easily claimable" means no claim step at all, not a second tap.
+
+### `GET /api/v1/me/achievements` (live, AC1 MVP slice)
+
+```json
+[
+  {"id": "streak_7", "threshold": 7, "reward_coins": 50, "unlocked_at": "2026-10-15T08:30:00Z"},
+  {"id": "streak_3", "threshold": 3, "reward_coins": 20, "unlocked_at": "2026-10-11T08:15:00Z"}
+]
+```
+
+This player's unlocked achievements, newest first. An achievement row (admin-created in
+`/admin`, starts empty) says what `fact` must cross what `threshold` to unlock, and how
+many coins it pays the first (and only) time it does — see `app/domain/achievements.py`.
+
+**One-time per player, ever, not per streak-run.** Breaking a streak and rebuilding it
+does not re-pay an already-unlocked milestone: `user_achievements` has
+`UNIQUE (achievement_id, user_id)`. Without this, a 3-day/7-day pair of achievements
+would be a stronger economy than committing to an actual 30-day streak (break-and-rebuild
+every week beats one long run) — see `docs/vault/Decisions.md` 2026-10-15.
+
+**Not in this response yet:** badge artwork/name (Persian copy and images need Ashkan's
+assets and Mehdi's approved 8-12 item list, AC1's own spec pass — not done); "locked"
+achievements with progress (only unlocked ones list today). `fact` is a closed set, today
+just `checkin_streak` (fed by `daily_checkin` claims); a game high score or a lounge-visit
+count would be a new fact, not a parameter on this one.
 
 ### `POST /api/v1/challenges/{id}/submissions` (planned, B18)
 

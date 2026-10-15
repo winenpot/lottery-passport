@@ -1,6 +1,24 @@
 {
   "components": {
     "schemas": {
+      "AchievementUnlockResponse": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reward_coins": {
+            "title": "Reward Coins",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "reward_coins"
+        ],
+        "title": "AchievementUnlockResponse",
+        "type": "object"
+      },
       "AuthenticationRequest": {
         "properties": {
           "identifier": {
@@ -108,6 +126,14 @@
       },
       "ChallengeClaimResponse": {
         "properties": {
+          "achievements_unlocked": {
+            "description": "Achievements this claim just unlocked, auto-paid in the same transaction -- no separate claim needed.",
+            "items": {
+              "$ref": "#/components/schemas/AchievementUnlockResponse"
+            },
+            "title": "Achievements Unlocked",
+            "type": "array"
+          },
           "coin_balance": {
             "title": "Coin Balance",
             "type": "integer"
@@ -119,6 +145,17 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "streak": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Streak"
           }
         },
         "required": [
@@ -158,6 +195,18 @@
           "reward_coins": {
             "title": "Reward Coins",
             "type": "integer"
+          },
+          "streak": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "DAILY_CHECKIN only; null for every other kind.",
+            "title": "Streak"
           },
           "target": {
             "title": "Target",
@@ -693,6 +742,35 @@
           "flavors"
         ],
         "title": "TeamStatusResponse",
+        "type": "object"
+      },
+      "UnlockedAchievementResponse": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reward_coins": {
+            "title": "Reward Coins",
+            "type": "integer"
+          },
+          "threshold": {
+            "title": "Threshold",
+            "type": "integer"
+          },
+          "unlocked_at": {
+            "format": "date-time",
+            "title": "Unlocked At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "threshold",
+          "reward_coins",
+          "unlocked_at"
+        ],
+        "title": "UnlockedAchievementResponse",
         "type": "object"
       },
       "UserPageResponse": {
@@ -1527,6 +1605,46 @@
         ]
       }
     },
+    "/api/v1/me/achievements": {
+      "get": {
+        "operationId": "list_my_achievements",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UnlockedAchievementResponse"
+                  },
+                  "title": "Response List My Achievements",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not signed in"
+          }
+        },
+        "security": [
+          {
+            "Session Cookie": []
+          }
+        ],
+        "summary": "This player's unlocked achievements",
+        "tags": [
+          "achievements"
+        ]
+      }
+    },
     "/api/v1/me/passports": {
       "get": {
         "description": "Parked for the MVP (ADR 0009): kept out of the player-facing contract but still tracked.",
@@ -1895,6 +2013,10 @@
     {
       "description": "Automatic challenges and claims. See API_CONTRACT.md#challenges.",
       "name": "challenges"
+    },
+    {
+      "description": "Auto-unlocked, auto-paid milestones (streaks today). No claim step. See API_CONTRACT.md#achievements.",
+      "name": "achievements"
     },
     {
       "description": "Liveness/readiness probes. See API_CONTRACT.md#health.",
