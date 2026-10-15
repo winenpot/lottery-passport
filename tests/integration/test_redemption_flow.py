@@ -424,6 +424,7 @@ async def test_redemption_api_end_to_end(test_database_url: str) -> None:
         "coin_balance": 60,  # 10 base + the default 50-coin first-code bonus
         "replayed": False,
         "bonus_awarded": 50,
+        "flavor_unlocked": None,  # one code, not the 5th of this flavor
     }
     assert replay.status_code == 200
     assert replay.json()["replayed"] is True

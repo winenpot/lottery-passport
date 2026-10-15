@@ -7,10 +7,13 @@ from app.api.errors import ApiError
 from app.application.admin_users import AdminUserService
 from app.application.app_config import AppConfigService
 from app.application.authentication import AuthenticationError, AuthenticationService
+from app.application.avatars import AvatarService
+from app.application.me import MeService
 from app.application.passports import PassportService
 from app.application.ports import ReadinessChecker
 from app.application.profile import ProfileService
 from app.application.redemption_codes import RedemptionService
+from app.application.teams import TeamService
 from app.application.wallets import WalletService
 from app.domain.users import User, UserRole
 
@@ -51,6 +54,18 @@ def get_redemption_service(request: Request) -> RedemptionService:
 
 def get_wallet_service(request: Request) -> WalletService:
     return cast(WalletService, request.app.state.wallet_service)
+
+
+def get_avatar_service(request: Request) -> AvatarService:
+    return cast(AvatarService, request.app.state.avatar_service)
+
+
+def get_team_service(request: Request) -> TeamService:
+    return cast(TeamService, request.app.state.team_service)
+
+
+def get_me_service(request: Request) -> MeService:
+    return cast(MeService, request.app.state.me_service)
 
 
 async def get_current_user(

@@ -17,16 +17,21 @@ from app.application.passports import PassportRepository
 from app.application.profile import NicknameTaken
 from app.application.wallets import WalletReader
 from app.domain.authentication import AuthenticatedSession, AuthenticationChallenge
+from app.domain.avatars import Avatar
 from app.domain.ledger import LedgerEntry, LedgerReason, Wallet
 from app.domain.nickname import Nickname
-from app.domain.passports import Campaign, PassportProgress
+from app.domain.passports import Campaign, CityCode, PassportProgress
+from app.domain.teams import TeamMembership
 from app.domain.users import AccountStatus, User, UserRole, VerificationStatus
 from app.domain.venues import Venue
 from app.infrastructure.postgres.models import (
     AuthenticationChallengeModel,
+    AvatarModel,
     CoinLedgerEntryModel,
     PassportProgressModel,
+    RedemptionCodeModel,
     SessionModel,
+    TeamMembershipModel,
     UserModel,
     VenueModel,
     WalletModel,
@@ -47,6 +52,8 @@ def user_from_model(model: UserModel) -> User:
         terms_version=model.terms_version,
         terms_accepted_at=model.terms_accepted_at,
         home_venue_id=model.home_venue_id,
+        location_city=model.location_city,
+        avatar_id=model.avatar_id,
     )
 
 
@@ -181,10 +188,16 @@ class PostgreSQLUserRepository(UserRepository):
         nickname: Nickname | None,
         terms_version: str | None,
         home_venue_id: str | None = None,
+        location_city: str | None = None,
+        avatar_id: str | None = None,
     ) -> User | None:
         values: dict[str, Any] = {"updated_at": now}
         if home_venue_id is not None:
             values["home_venue_id"] = home_venue_id
+        if location_city is not None:
+            values["location_city"] = location_city
+        if avatar_id is not None:
+            values["avatar_id"] = avatar_id
         if nickname is not None:
             values["nickname"] = nickname.display
             values["nickname_key"] = nickname.key
@@ -239,6 +252,106 @@ class PostgreSQLVenueRepository:
                 )
             )
             return found is not None
+
+
+def avatar_from_model(model: AvatarModel) -> Avatar:
+    return Avatar(id=model.id, image_url=model.image_url, locked=model.locked)
+
+
+class PostgreSQLAvatarCatalogue:
+    """Implements ``AvatarCatalogue``."""
+
+    def __init__(self, factory: async_sessionmaker[AsyncSession]) -> None:
+        self._factory = factory
+
+    async def list_active(self) -> list[Avatar]:
+        async with self._factory() as session:
+            rows = await session.scalars(
+                select(AvatarModel)
+                .where(AvatarModel.active.is_(True))
+                .order_by(AvatarModel.sort, AvatarModel.id)
+            )
+            return [avatar_from_model(row) for row in rows]
+
+    async def get_active(self, avatar_id: str) -> Avatar | None:
+        async with self._factory() as session:
+            model = await session.get(AvatarModel, avatar_id)
+            if model is None or not model.active:
+                return None
+            return avatar_from_model(model)
+
+
+def team_membership_from_model(model: TeamMembershipModel) -> TeamMembership:
+    return TeamMembership(
+        user_id=model.user_id,
+        flavor=CityCode(model.flavor),
+        switch_no=model.switch_no,
+        joined_at=model.joined_at,
+    )
+
+
+async def current_team_membership(
+    session: AsyncSession, user_id: UUID
+) -> TeamMembership | None:
+    """Shared by ``SqlTeams`` (unit of work) and ``PostgreSQLTeamsReader``
+    (plain read, no wallet lock): the row with the highest ``switch_no``."""
+    model = await session.scalar(
+        select(TeamMembershipModel)
+        .where(TeamMembershipModel.user_id == user_id)
+        .order_by(TeamMembershipModel.switch_no.desc())
+        .limit(1)
+    )
+    return team_membership_from_model(model) if model else None
+
+
+async def count_flavor_codes(
+    session: AsyncSession, user_id: UUID, flavor: CityCode
+) -> int:
+    """Shared by ``SqlTeams`` and ``PostgreSQLTeamsReader``: a user's
+    lifetime count of redeemed codes of one flavor."""
+    result = await session.scalar(
+        select(func.count()).where(
+            RedemptionCodeModel.redeemed_by_user_id == user_id,
+            RedemptionCodeModel.city == flavor.value,
+        )
+    )
+    return int(result or 0)
+
+
+class PostgreSQLTeamsReader:
+    """Implements ``TeamsReader`` (``GET /me/team``): no wallet lock, so it
+    never serializes against a redemption or a team change in progress."""
+
+    def __init__(self, factory: async_sessionmaker[AsyncSession]) -> None:
+        self._factory = factory
+
+    async def current(self, user_id: UUID) -> TeamMembership | None:
+        async with self._factory() as session:
+            return await current_team_membership(session, user_id)
+
+    async def count_codes(self, user_id: UUID, flavor: CityCode) -> int:
+        async with self._factory() as session:
+            return await count_flavor_codes(session, user_id, flavor)
+
+
+class PostgreSQLLastScanReader:
+    """Implements ``LastScanReader`` (``GET /me``'s flavor mood hint)."""
+
+    def __init__(self, factory: async_sessionmaker[AsyncSession]) -> None:
+        self._factory = factory
+
+    async def last_scanned_flavor(self, user_id: UUID) -> CityCode | None:
+        async with self._factory() as session:
+            city = await session.scalar(
+                select(RedemptionCodeModel.city)
+                .where(
+                    RedemptionCodeModel.redeemed_by_user_id == user_id,
+                    RedemptionCodeModel.redeemed_at.is_not(None),
+                )
+                .order_by(RedemptionCodeModel.redeemed_at.desc())
+                .limit(1)
+            )
+            return CityCode(city) if city is not None else None
 
 
 class PostgreSQLChallengeRepository(AuthenticationChallengeRepository):

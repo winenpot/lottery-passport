@@ -30,6 +30,7 @@ from app.domain.codes import ALPHABET, compute_check_value, generate_code
 from app.domain.ledger import NewLedgerEntry
 from app.domain.passports import Campaign, CityCode, PassportProgress
 from app.domain.reward_rules import Cadence, RewardRule
+from app.domain.teams import TeamMembership
 
 PEPPER = "test-pepper"
 TEHRAN = ZoneInfo("Asia/Tehran")
@@ -52,6 +53,7 @@ class Store:
     ledger: list[NewLedgerEntry] = field(default_factory=list)
     wallets: dict[UUID, int] = field(default_factory=dict)
     rules: dict[str, RewardRule] = field(default_factory=dict)
+    team_memberships: list[TeamMembership] = field(default_factory=list)
 
 
 class FakeCodes:
@@ -134,6 +136,25 @@ class FakeRewardRules:
         return self.store.rules.get(key)
 
 
+class FakeTeams:
+    def __init__(self, store: Store) -> None:
+        self.store = store
+
+    async def current(self, user_id: UUID) -> TeamMembership | None:
+        memberships = [m for m in self.store.team_memberships if m.user_id == user_id]
+        return max(memberships, key=lambda m: m.switch_no) if memberships else None
+
+    async def count_codes(self, user_id: UUID, flavor: CityCode) -> int:
+        return sum(
+            1
+            for code in self.store.codes.values()
+            if code.redeemed_by == user_id and code.city is flavor
+        )
+
+    async def add(self, membership: TeamMembership) -> None:
+        self.store.team_memberships.append(membership)
+
+
 class FakeUnitOfWork:
     def __init__(self, committed: Store) -> None:
         self._committed = committed
@@ -154,6 +175,10 @@ class FakeUnitOfWork:
     @property
     def rules(self) -> FakeRewardRules:
         return FakeRewardRules(self.working)
+
+    @property
+    def teams(self) -> FakeTeams:
+        return FakeTeams(self.working)
 
     async def __aenter__(self) -> Self:
         self.working = copy.deepcopy(self._committed)
@@ -527,3 +552,61 @@ async def test_reward_rule_can_switch_the_bonus_off() -> None:
 
     assert result.bonus_awarded == 0
     assert store.ledger == []
+
+
+# ---------------------------------------------------------------------------
+# Flavor unlock (teams, P1.4)
+# ---------------------------------------------------------------------------
+
+
+async def test_the_fifth_code_of_a_flavor_reports_it_unlocked() -> None:
+    service, store, _ = build()
+    user = uuid4()
+
+    results = [
+        await service.redeem(user, add_code(store, CityCode.MOSCOW)) for _ in range(5)
+    ]
+
+    assert [r.flavor_unlocked for r in results] == [
+        None,
+        None,
+        None,
+        None,
+        CityCode.MOSCOW,
+    ]
+
+
+async def test_a_sixth_code_does_not_report_an_unlock_again() -> None:
+    service, store, _ = build()
+    user = uuid4()
+    for _ in range(5):
+        await service.redeem(user, add_code(store, CityCode.MOSCOW))
+
+    sixth = await service.redeem(user, add_code(store, CityCode.MOSCOW))
+
+    assert sixth.flavor_unlocked is None
+
+
+async def test_flavors_unlock_independently_per_user() -> None:
+    service, store, _ = build()
+    user_a, user_b = uuid4(), uuid4()
+    for _ in range(4):
+        await service.redeem(user_a, add_code(store, CityCode.TOKYO))
+
+    result = await service.redeem(user_b, add_code(store, CityCode.TOKYO))
+
+    assert result.flavor_unlocked is None  # user_b's first code, not user_a's fifth
+
+
+async def test_a_replay_never_reports_an_unlock() -> None:
+    service, store, _ = build()
+    user = uuid4()
+    codes = [add_code(store, CityCode.TOKYO) for _ in range(5)]
+    for code in codes[:-1]:
+        await service.redeem(user, code)
+    first_try = await service.redeem(user, codes[-1])
+
+    replay = await service.redeem(user, codes[-1])
+
+    assert (first_try.flavor_unlocked, replay.replayed) == (CityCode.TOKYO, True)
+    assert replay.flavor_unlocked is None

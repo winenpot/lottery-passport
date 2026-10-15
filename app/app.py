@@ -27,12 +27,15 @@ from app.api.routes import router
 from app.application.admin_users import AdminUserService
 from app.application.app_config import AppConfigService
 from app.application.authentication import AuthenticationService, AuthenticationSettings
+from app.application.avatars import AvatarService
 from app.application.coin_adjustments import CoinAdjustmentService
 from app.application.failure_throttle import ThrottleSettings
+from app.application.me import MeService
 from app.application.passports import PassportService
 from app.application.ports import ReadinessChecker
 from app.application.profile import ProfileService
 from app.application.redemption_codes import RedemptionService
+from app.application.teams import TeamService
 from app.application.unit_of_work import UnitOfWork
 from app.application.wallets import WalletService
 from app.core.config import Settings, get_settings
@@ -46,9 +49,12 @@ from app.infrastructure.authentication import (
 from app.infrastructure.postgres.database import PostgreSQLAdapter
 from app.infrastructure.postgres.failure_throttle import PostgreSQLFailureThrottle
 from app.infrastructure.postgres.repositories import (
+    PostgreSQLAvatarCatalogue,
     PostgreSQLChallengeRepository,
+    PostgreSQLLastScanReader,
     PostgreSQLPassportRepository,
     PostgreSQLSessionRepository,
+    PostgreSQLTeamsReader,
     PostgreSQLUserRepository,
     PostgreSQLVenueRepository,
     PostgreSQLWalletReader,
@@ -85,6 +91,14 @@ OPENAPI_TAGS = [
             "Scanning printed codes and the coin wallet. "
             "See API_CONTRACT.md#scanning-codes."
         ),
+    },
+    {
+        "name": "avatars",
+        "description": "The avatar catalogue. See API_CONTRACT.md#config-and-profile.",
+    },
+    {
+        "name": "teams",
+        "description": "Flavor team membership. See API_CONTRACT.md#teams.",
     },
     {
         "name": "health",
@@ -135,6 +149,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         clock=SystemClock(),
         current_terms_version=resolved_settings.terms_version,
         venues=PostgreSQLVenueRepository(database.session_factory),
+        avatars=PostgreSQLAvatarCatalogue(database.session_factory),
+    )
+    avatar_service = AvatarService(
+        catalogue=PostgreSQLAvatarCatalogue(database.session_factory)
     )
     app_config_service = AppConfigService(
         clock=SystemClock(),
@@ -174,6 +192,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         unit_of_work=unit_of_work,
         users=PostgreSQLUserRepository(database.session_factory),
         clock=SystemClock(),
+    )
+    teams_reader = PostgreSQLTeamsReader(database.session_factory)
+    team_service = TeamService(
+        reader=teams_reader,
+        unit_of_work=unit_of_work,
+        clock=SystemClock(),
+        lock=timedelta(days=resolved_settings.team_lock_days),
+    )
+    me_service = MeService(
+        teams=teams_reader,
+        last_scans=PostgreSQLLastScanReader(database.session_factory),
     )
 
     @asynccontextmanager
@@ -269,6 +298,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.profile_service = profile_service
     application.state.app_config_service = app_config_service
     application.state.coin_adjustment_service = coin_adjustment_service
+    application.state.avatar_service = avatar_service
+    application.state.team_service = team_service
+    application.state.me_service = me_service
     application.state.sms_sender = sms_sender
     application.state.settings = resolved_settings
     return application

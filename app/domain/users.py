@@ -39,6 +39,8 @@ class User:
     terms_version: str | None = None
     terms_accepted_at: datetime | None = None
     home_venue_id: str | None = None
+    location_city: str | None = None
+    avatar_id: str | None = None
 
     @property
     def profile_complete(self) -> bool:

@@ -17,6 +17,7 @@ from app.domain.audit import NewAuditEntry
 from app.domain.ledger import NewLedgerEntry
 from app.domain.passports import Campaign, CityCode, PassportProgress
 from app.domain.reward_rules import RewardRule
+from app.domain.teams import TeamMembership
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +105,29 @@ class RewardRulesInTransaction(Protocol):
         ...
 
 
+class TeamsInTransaction(Protocol):
+    """Flavor team history (app/domain/teams.py), inside the unit of work.
+
+    ``count_codes`` counts a user's LIFETIME redemptions of one flavor (the
+    unlock rule, 2026-10-15), not since any particular date.
+    """
+
+    async def current(self, user_id: UUID) -> TeamMembership | None:
+        """The player's current membership (highest ``switch_no``), or
+        ``None`` before any team has ever been joined."""
+        ...
+
+    async def count_codes(self, user_id: UUID, flavor: CityCode) -> int:
+        """Lifetime count of this user's redeemed codes of one flavor."""
+        ...
+
+    async def add(self, membership: TeamMembership) -> None:
+        """Insert one membership row. UNIQUE (user_id, switch_no) is the
+        race guard; the caller locks the user's wallet row first so this
+        should not actually conflict in normal operation."""
+        ...
+
+
 class UnitOfWork(Protocol):
     # Read-only properties so implementations may expose concrete subtypes.
     @property
@@ -120,6 +144,9 @@ class UnitOfWork(Protocol):
 
     @property
     def rules(self) -> RewardRulesInTransaction: ...
+
+    @property
+    def teams(self) -> TeamsInTransaction: ...
 
     async def __aenter__(self) -> Self: ...
 

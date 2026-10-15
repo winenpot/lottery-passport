@@ -52,6 +52,13 @@ class ErrorDetail(BaseModel):
     fields: list[FieldError] | None = Field(
         default=None, description="Only on VALIDATION_FAILED."
     )
+    details: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Structured extra data for a specific error code, for example "
+            "``{required, have}`` on TEAM/FLAVOR errors. Absent otherwise."
+        ),
+    )
 
 
 class ErrorResponse(BaseModel):
@@ -85,12 +92,15 @@ def error_body(
     message: str,
     request_id: str | None,
     fields: list[dict[str, str]] | None = None,
+    details: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     detail: dict[str, Any] = {"code": code, "message": message}
     if request_id is not None:
         detail["request_id"] = request_id
     if fields is not None:
         detail["fields"] = fields
+    if details is not None:
+        detail["details"] = details
     return {"error": detail}
 
 
@@ -108,12 +118,14 @@ class ApiError(Exception):
         code: str,
         message: str,
         retry_after_seconds: int | None = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(code)
         self.status_code = status_code
         self.code = code
         self.message = message
         self.retry_after_seconds = retry_after_seconds
+        self.details = details
 
 
 async def api_error_handler(request: Request, error: Exception) -> JSONResponse:
@@ -128,7 +140,10 @@ async def api_error_handler(request: Request, error: Exception) -> JSONResponse:
     return JSONResponse(
         status_code=error.status_code,
         content=error_body(
-            error.code, error.message, request_id_from_scope(request.scope)
+            error.code,
+            error.message,
+            request_id_from_scope(request.scope),
+            details=error.details,
         ),
         headers=headers,
     )

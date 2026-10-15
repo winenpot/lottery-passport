@@ -39,6 +39,7 @@ from app.application.coin_adjustments import (
 )
 from app.infrastructure.postgres.models import (
     AuditLogModel,
+    AvatarModel,
     CodeBatchModel,
     CoinLedgerEntryModel,
     RewardRuleModel,
@@ -259,6 +260,37 @@ class CoinLedgerAdmin(ReadOnlyView, model=CoinLedgerEntryModel):
     column_default_sort = (CoinLedgerEntryModel.created_at, True)
 
 
+class AvatarAdmin(ModelView, model=AvatarModel):
+    """Avatar catalogue (P1): starts empty, filled in here. ``locked``
+    avatars show up but ``PATCH /me avatar_id`` refuses picking them
+    (422 AVATAR_LOCKED) until an unlock rule exists (AFTER LAUNCH)."""
+
+    name = "Avatar"
+    name_plural = "Avatars"
+    icon = "fa-solid fa-image"
+    can_create = True
+    can_edit = True
+    can_delete = False
+    can_export = False
+    column_list = [
+        AvatarModel.id,
+        AvatarModel.image_url,
+        AvatarModel.locked,
+        AvatarModel.sort,
+        AvatarModel.active,
+    ]
+    column_searchable_list = [AvatarModel.id]
+    column_default_sort = (AvatarModel.sort, False)
+    form_columns = [
+        AvatarModel.id,
+        AvatarModel.image_url,
+        AvatarModel.locked,
+        AvatarModel.unlock_rule,
+        AvatarModel.sort,
+        AvatarModel.active,
+    ]
+
+
 class RewardRuleAdmin(ModelView, model=RewardRuleModel):
     """Admin-tunable reward amounts (ADR 0010): no deploy to retune a
     reward or turn it off.
@@ -302,6 +334,7 @@ VIEWS: tuple[type[ModelView], ...] = (
     CodeBatchAdmin,
     WalletAdmin,
     CoinLedgerAdmin,
+    AvatarAdmin,
     RewardRuleAdmin,
 )
 

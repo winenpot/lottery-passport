@@ -29,6 +29,7 @@ from app.application.unit_of_work import ClaimedCode, UnitOfWork, UnitOfWorkFact
 from app.domain.codes import CodeFormatError, CodeProblem, parse_code
 from app.domain.ledger import LedgerReason, NewLedgerEntry
 from app.domain.passports import CAMPAIGN_BY_CITY, ENTRIES_PER_CODE, CityCode
+from app.domain.teams import unlocks_now
 
 FIRST_CODE_BONUS_KEY = "first_code"
 
@@ -63,6 +64,7 @@ class RedemptionResult:
     coin_balance: int
     replayed: bool
     bonus_awarded: int = 0
+    flavor_unlocked: CityCode | None = None
 
 
 def hash_redemption_code(code: str, pepper: str) -> str:
@@ -185,6 +187,7 @@ class RedemptionService:
                 )
             )
         balance, bonus = await self._award_first_code_bonus(uow, user_id, balance, now)
+        flavor_codes = await uow.teams.count_codes(user_id, claimed.city)
         return RedemptionResult(
             city=claimed.city,
             entries_added=ENTRIES_PER_CODE,
@@ -193,6 +196,7 @@ class RedemptionService:
             coin_balance=balance,
             replayed=False,
             bonus_awarded=bonus,
+            flavor_unlocked=claimed.city if unlocks_now(flavor_codes) else None,
         )
 
     async def _award_first_code_bonus(

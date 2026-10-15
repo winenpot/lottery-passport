@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # Welcome bonus on a user's first successfully redeemed code (ADR 0010);
     # a `reward_rules` row for key "first_code" overrides or disables it.
     first_code_bonus_coins: int = Field(default=50, ge=0, le=100_000)
+    # Flavor team switch lock (app/domain/teams.py, P1): days after each join
+    # or switch before the player may change team again.
+    team_lock_days: int = Field(default=30, ge=1, le=365)
     campaign_timezone: str = "Asia/Tehran"
     # Current terms of service; players accept it by sending this exact value.
     terms_version: str = "2026-10-01"

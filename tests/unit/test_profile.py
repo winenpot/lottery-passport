@@ -10,18 +10,24 @@ from fastapi.testclient import TestClient
 from app.api.deps import (
     get_app_config_service,
     get_current_user,
+    get_me_service,
     get_profile_service,
 )
 from app.app import create_app
 from app.application.app_config import AppConfigService
 from app.application.authentication import AuthenticationError
+from app.application.me import MeExtras
 from app.application.profile import (
+    AvatarLocked,
+    AvatarUnknown,
+    LocationCityUnknown,
     NicknameTaken,
     ProfileService,
     TermsVersionMismatch,
     VenueUnknown,
 )
 from app.core.config import Settings
+from app.domain.avatars import Avatar
 from app.domain.calendar import campaign_period
 from app.domain.nickname import Nickname, NicknameError, parse_nickname
 from app.domain.users import AccountStatus, User, UserRole, VerificationStatus
@@ -149,11 +155,17 @@ class FakeStore:
         nickname: Nickname | None,
         terms_version: str | None,
         home_venue_id: str | None = None,
+        location_city: str | None = None,
+        avatar_id: str | None = None,
     ) -> User | None:
         if self.user is None:
             return None
         if home_venue_id is not None:
             self.user.home_venue_id = home_venue_id
+        if location_city is not None:
+            self.user.location_city = location_city
+        if avatar_id is not None:
+            self.user.avatar_id = avatar_id
         if nickname is not None:
             if nickname.key in self.taken:
                 raise NicknameTaken(nickname.display)
@@ -164,9 +176,33 @@ class FakeStore:
         return self.user
 
 
-def service(store: FakeStore | None = None) -> tuple[ProfileService, FakeStore]:
+class FakeMeService:
+    async def extras(self, user_id: UUID) -> MeExtras:
+        return MeExtras(team=None, last_scanned_flavor=None)
+
+
+class FakeAvatars:
+    def __init__(self) -> None:
+        self.avatars = [
+            Avatar(id="avatar-1", image_url="https://x.invalid/1.png", locked=False),
+            Avatar(id="avatar-2", image_url="https://x.invalid/2.png", locked=True),
+        ]
+
+    async def list_active(self) -> list[Avatar]:
+        return list(self.avatars)
+
+    async def get_active(self, avatar_id: str) -> Avatar | None:
+        return next((a for a in self.avatars if a.id == avatar_id), None)
+
+
+def service(
+    store: FakeStore | None = None, avatars: FakeAvatars | None = None
+) -> tuple[ProfileService, FakeStore]:
     store = store or FakeStore()
-    return ProfileService(store, FakeClock(), "2026-10-01", FakeVenues()), store
+    service_ = ProfileService(
+        store, FakeClock(), "2026-10-01", FakeVenues(), avatars or FakeAvatars()
+    )
+    return service_, store
 
 
 async def test_profile_is_complete_once_nickname_and_terms_are_set() -> None:
@@ -235,6 +271,55 @@ async def test_home_venue_must_be_an_active_venue() -> None:
     assert store.user is not None and store.user.home_venue_id == "parsa"
 
 
+async def test_location_city_must_be_a_supported_city() -> None:
+    profile, store = service()
+
+    user = await profile.update(
+        UUID(int=1),
+        nickname=None,
+        accept_terms_version=None,
+        location_city="ahvaz",
+    )
+    assert user.location_city == "ahvaz"
+
+    with pytest.raises(LocationCityUnknown):
+        await profile.update(
+            UUID(int=1),
+            nickname=None,
+            accept_terms_version=None,
+            location_city="paris",  # a flavor, not a location city
+        )
+    assert store.user is not None and store.user.location_city == "ahvaz"
+
+
+async def test_avatar_must_be_known_and_unlocked() -> None:
+    profile, store = service()
+
+    user = await profile.update(
+        UUID(int=1), nickname=None, accept_terms_version=None, avatar_id="avatar-1"
+    )
+    assert user.avatar_id == "avatar-1"
+
+    with pytest.raises(AvatarUnknown):
+        await profile.update(
+            UUID(int=1), nickname=None, accept_terms_version=None, avatar_id="nowhere"
+        )
+    with pytest.raises(AvatarLocked):
+        await profile.update(
+            UUID(int=1), nickname=None, accept_terms_version=None, avatar_id="avatar-2"
+        )
+    assert store.user is not None and store.user.avatar_id == "avatar-1"
+
+
+async def test_an_avatar_pick_without_a_configured_catalogue_is_refused() -> None:
+    profile = ProfileService(FakeStore(), FakeClock(), "2026-10-01", FakeVenues())
+
+    with pytest.raises(AvatarUnknown):
+        await profile.update(
+            UUID(int=1), nickname=None, accept_terms_version=None, avatar_id="avatar-1"
+        )
+
+
 # --- routes ---------------------------------------------------------------
 
 
@@ -249,6 +334,7 @@ def client(store: FakeStore | None = None) -> tuple[TestClient, FakeStore]:
     app.dependency_overrides[get_app_config_service] = lambda: AppConfigService(
         FakeClock(), TEHRAN, "2026-10-01", 20, FakeVenues()
     )
+    app.dependency_overrides[get_me_service] = lambda: FakeMeService()
     assert store.user is not None
     user = store.user
     app.dependency_overrides[get_current_user] = lambda: user

@@ -19,7 +19,7 @@ from types import TracebackType
 from typing import Self
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -33,6 +33,7 @@ from app.domain.code_batches import BatchStatus
 from app.domain.ledger import NewLedgerEntry
 from app.domain.passports import Campaign, CityCode, PassportProgress
 from app.domain.reward_rules import Cadence, RewardRule
+from app.domain.teams import TeamMembership
 from app.infrastructure.postgres.models import (
     AuditLogModel,
     CodeBatchModel,
@@ -40,7 +41,12 @@ from app.infrastructure.postgres.models import (
     PassportProgressModel,
     RedemptionCodeModel,
     RewardRuleModel,
+    TeamMembershipModel,
     WalletModel,
+)
+from app.infrastructure.postgres.repositories import (
+    count_flavor_codes,
+    current_team_membership,
 )
 
 
@@ -248,6 +254,30 @@ class SqlRewardRules:
         )
 
 
+class SqlTeams:
+    """Implements ``TeamsInTransaction``; shares its queries with the plain
+    ``PostgreSQLTeamsReader`` used by ``GET /me/team`` (repositories.py)."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def current(self, user_id: UUID) -> TeamMembership | None:
+        return await current_team_membership(self._session, user_id)
+
+    async def count_codes(self, user_id: UUID, flavor: CityCode) -> int:
+        return await count_flavor_codes(self._session, user_id, flavor)
+
+    async def add(self, membership: TeamMembership) -> None:
+        await self._session.execute(
+            insert(TeamMembershipModel).values(
+                user_id=membership.user_id,
+                flavor=membership.flavor.value,
+                switch_no=membership.switch_no,
+                joined_at=membership.joined_at,
+            )
+        )
+
+
 class SqlAlchemyUnitOfWork:
     """``async with SqlAlchemyUnitOfWork(factory) as uow: ...; await uow.commit()``."""
 
@@ -256,6 +286,7 @@ class SqlAlchemyUnitOfWork:
     ledger: SqlLedger
     audit: SqlAudit
     rules: SqlRewardRules
+    teams: SqlTeams
 
     def __init__(self, factory: async_sessionmaker[AsyncSession]) -> None:
         self._factory = factory
@@ -270,6 +301,7 @@ class SqlAlchemyUnitOfWork:
         self.ledger = SqlLedger(self._session)
         self.audit = SqlAudit(self._session)
         self.rules = SqlRewardRules(self._session)
+        self.teams = SqlTeams(self._session)
         return self
 
     async def __aexit__(

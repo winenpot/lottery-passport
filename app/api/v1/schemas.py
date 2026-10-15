@@ -5,7 +5,9 @@ from pydantic import BaseModel, Field
 
 from app.application.app_config import AppConfig
 from app.application.redemption_codes import RedemptionResult
+from app.application.teams import FlavorProgress, TeamStatus
 from app.application.wallets import WalletView
+from app.domain.avatars import Avatar
 from app.domain.passports import CAMPAIGN_BY_CITY, PassportProgress
 from app.domain.users import User
 
@@ -51,6 +53,14 @@ class UserResponse(BaseModel):
     display_name: str | None
     nickname: str | None
     home_venue_id: str | None
+    location_city: str | None
+    avatar_id: str | None
+    team: str | None = Field(
+        description="Current flavor team (campaign slug, e.g. 'tokyo'), or null."
+    )
+    last_scanned_flavor: str | None = Field(
+        description="Flavor of the most recently redeemed code, or null."
+    )
     terms_accepted: bool
     profile_complete: bool
     account_status: str
@@ -60,13 +70,23 @@ class UserResponse(BaseModel):
     updated_at: datetime
 
     @classmethod
-    def from_domain(cls, user: User) -> "UserResponse":
+    def from_domain(
+        cls,
+        user: User,
+        *,
+        team: str | None = None,
+        last_scanned_flavor: str | None = None,
+    ) -> "UserResponse":
         return cls(
             id=user.id,
             identifier=user.identifier,
             display_name=user.display_name,
             nickname=user.nickname,
             home_venue_id=user.home_venue_id,
+            location_city=user.location_city,
+            avatar_id=user.avatar_id,
+            team=team,
+            last_scanned_flavor=last_scanned_flavor,
             terms_accepted=user.terms_accepted_at is not None,
             profile_complete=user.profile_complete,
             account_status=user.account_status.value,
@@ -100,6 +120,16 @@ class UserUpdate(BaseModel):
         default=None,
         max_length=40,
         description="An ``id`` from ``GET /config`` ``venues``.",
+    )
+    location_city: str | None = Field(
+        default=None,
+        max_length=40,
+        description="One of ``location_cities`` ids from ``GET /config``.",
+    )
+    avatar_id: str | None = Field(
+        default=None,
+        max_length=40,
+        description="An unlocked ``id`` from ``GET /avatars``.",
     )
 
 
@@ -200,6 +230,10 @@ class RedemptionResponse(BaseModel):
     coin_balance: int
     replayed: bool
     bonus_awarded: int = 0
+    flavor_unlocked: str | None = Field(
+        default=None,
+        description="Flavor (campaign slug) unlocked by this redemption, or null.",
+    )
 
     @classmethod
     def from_result(cls, result: RedemptionResult) -> "RedemptionResponse":
@@ -211,6 +245,11 @@ class RedemptionResponse(BaseModel):
             coin_balance=result.coin_balance,
             replayed=result.replayed,
             bonus_awarded=result.bonus_awarded,
+            flavor_unlocked=(
+                CAMPAIGN_BY_CITY[result.flavor_unlocked].value
+                if result.flavor_unlocked is not None
+                else None
+            ),
         )
 
 
@@ -241,3 +280,55 @@ class WalletResponse(BaseModel):
                 for entry in view.recent
             ],
         )
+
+
+class AvatarResponse(BaseModel):
+    id: str
+    image_url: str
+    locked: bool
+
+    @classmethod
+    def from_domain(cls, avatar: Avatar) -> "AvatarResponse":
+        return cls(id=avatar.id, image_url=avatar.image_url, locked=avatar.locked)
+
+
+class FlavorProgressResponse(BaseModel):
+    flavor: str
+    codes: int
+    unlocked: bool
+
+    @classmethod
+    def from_domain(cls, progress: FlavorProgress) -> "FlavorProgressResponse":
+        return cls(
+            flavor=CAMPAIGN_BY_CITY[progress.flavor].value,
+            codes=progress.codes,
+            unlocked=progress.unlocked,
+        )
+
+
+class TeamStatusResponse(BaseModel):
+    team: str | None = Field(
+        description="Current flavor team (campaign slug), or null."
+    )
+    joined_at: datetime | None
+    switch_allowed_at: datetime | None = Field(
+        description="When the next team change is allowed; null before any join."
+    )
+    flavors: list[FlavorProgressResponse] = Field(
+        description="Lifetime code count per flavor, for the 'N more to unlock' UI."
+    )
+
+    @classmethod
+    def from_domain(cls, status: TeamStatus) -> "TeamStatusResponse":
+        return cls(
+            team=CAMPAIGN_BY_CITY[status.team.flavor].value if status.team else None,
+            joined_at=status.team.joined_at if status.team else None,
+            switch_allowed_at=status.switch_allowed_at,
+            flavors=[FlavorProgressResponse.from_domain(f) for f in status.flavors],
+        )
+
+
+class TeamChangeRequest(BaseModel):
+    flavor: str = Field(
+        examples=["tokyo"], description="A campaign slug from GET /config flavors."
+    )
