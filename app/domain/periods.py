@@ -8,7 +8,7 @@ caller's. Keys match the format ``docs/ARCHITECTURE.md`` documents for
 ``W:<date of the Saturday it starts>``, a month is ``M:<year>-<month>``.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 # Python's Monday=0 .. Sunday=6; the Tehran week starts Saturday.
@@ -17,6 +17,10 @@ _SATURDAY = 5
 
 def _local_date(moment: datetime, zone: ZoneInfo) -> date:
     return moment.astimezone(zone).date()
+
+
+def _local_midnight(local_date_value: date, zone: ZoneInfo) -> datetime:
+    return datetime.combine(local_date_value, time.min, tzinfo=zone).astimezone(UTC)
 
 
 def tehran_day_key(moment: datetime, zone: ZoneInfo) -> str:
@@ -35,3 +39,20 @@ def tehran_month_key(moment: datetime, zone: ZoneInfo) -> str:
     """``M:2026-10`` for the Tehran calendar month ``moment`` falls in."""
     today = _local_date(moment, zone)
     return f"M:{today.year:04d}-{today.month:02d}"
+
+
+def tehran_day_start(moment: datetime, zone: ZoneInfo) -> datetime:
+    """UTC instant of the most recent Tehran midnight."""
+    return _local_midnight(_local_date(moment, zone), zone)
+
+
+def tehran_week_start(moment: datetime, zone: ZoneInfo) -> datetime:
+    """UTC instant of the Saturday midnight that starts this Tehran week."""
+    today = _local_date(moment, zone)
+    saturday = today - timedelta(days=(today.weekday() - _SATURDAY) % 7)
+    return _local_midnight(saturday, zone)
+
+
+def tehran_month_start(moment: datetime, zone: ZoneInfo) -> datetime:
+    """UTC instant of the first day of this Tehran calendar month."""
+    return _local_midnight(_local_date(moment, zone).replace(day=1), zone)

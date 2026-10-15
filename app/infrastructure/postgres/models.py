@@ -437,3 +437,66 @@ class AuditLogModel(Base):
         Index("ix_audit_log_actor_time", "actor_user_id", "created_at"),
         Index("ix_audit_log_entity", "entity", "entity_id"),
     )
+
+
+class ChallengeModel(Base):
+    """Admin-tunable challenge catalogue (C1): starts empty, filled in
+    ``/admin``, same pattern as ``avatars``/``reward_rules``. ``kind`` is
+    the closed set app/domain/challenges.py knows how to check progress
+    for; ``target``/``reward_coins``/``active`` are Mehdi's to tune."""
+
+    __tablename__ = "challenges"
+
+    id: Mapped[str] = mapped_column(String(60), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(30), nullable=False)
+    period: Mapped[str] = mapped_column(String(10), nullable=False)
+    target: Mapped[int] = mapped_column(Integer, nullable=False)
+    reward_coins: Mapped[int] = mapped_column(Integer, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint("target > 0", name="ck_challenges_target_positive"),
+        CheckConstraint(
+            "reward_coins >= 0", name="ck_challenges_reward_coins_non_negative"
+        ),
+        CheckConstraint(
+            "kind IN ('team_choice', 'distinct_flavors')", name="ck_challenges_kind"
+        ),
+        CheckConstraint(
+            "period IN ('once', 'day', 'week', 'month')", name="ck_challenges_period"
+        ),
+    )
+
+
+class ChallengeClaimModel(Base):
+    """One row per user per challenge per period claimed (C1). The unique
+    constraint is the idempotent-claim guard, the same shape as
+    ``team_memberships``' ``switch_no`` guard; it is what actually stops a
+    double pay under concurrency, not the caller's own checks."""
+
+    __tablename__ = "challenge_claims"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    challenge_id: Mapped[str] = mapped_column(
+        String(60), ForeignKey("challenges.id", ondelete="RESTRICT"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    period_key: Mapped[str] = mapped_column(String(20), nullable=False)
+    claimed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "challenge_id",
+            "user_id",
+            "period_key",
+            name="uq_challenge_claims_challenge_user_period",
+        ),
+        Index("ix_challenge_claims_user", "user_id"),
+    )
