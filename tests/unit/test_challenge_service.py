@@ -9,7 +9,7 @@ this file is about the challenge engine's own plumbing.
 
 import copy
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from types import TracebackType
 from typing import Self
 from uuid import UUID, uuid4
@@ -18,6 +18,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from app.application.challenges import ChallengeService
+from app.domain.achievements import Achievement, AchievementFact
 from app.domain.challenges import (
     Challenge,
     ChallengeClaimError,
@@ -29,7 +30,7 @@ from app.domain.passports import CityCode
 from app.domain.teams import TeamMembership
 
 ZONE = ZoneInfo("Asia/Tehran")
-NOW = datetime(2026, 10, 15, 9, 0, tzinfo=UTC)
+NOW = datetime(2026, 10, 15, 9, 0, tzinfo=UTC)  # D:2026-10-15 in Tehran
 
 
 @dataclass
@@ -39,11 +40,21 @@ class Store:
     flavors_since: dict[UUID, int] = field(default_factory=dict)  # test-set progress
     claims: set[tuple[str, UUID, str]] = field(default_factory=set)
     challenges: dict[str, Challenge] = field(default_factory=dict)
+    achievements: dict[str, Achievement] = field(default_factory=dict)
+    user_achievements: set[tuple[str, UUID]] = field(default_factory=set)
 
 
 def _current_team(store: Store, user_id: UUID) -> TeamMembership | None:
     mine = [m for m in store.team_memberships if m.user_id == user_id]
     return max(mine, key=lambda m: m.switch_no) if mine else None
+
+
+def _checkin_dates(store: Store, challenge_id: str, user_id: UUID) -> set[date]:
+    return {
+        date.fromisoformat(key.removeprefix("D:"))
+        for (cid, uid, key) in store.claims
+        if cid == challenge_id and uid == user_id
+    }
 
 
 class FakeTeamsReader:
@@ -66,6 +77,9 @@ class FakeChallengesReader:
 
     async def distinct_flavors_since(self, user_id: UUID, since: datetime) -> int:
         return self.store.flavors_since.get(user_id, 0)
+
+    async def checkin_days(self, challenge_id: str, user_id: UUID) -> set[date]:
+        return _checkin_dates(self.store, challenge_id, user_id)
 
     async def has_claimed(
         self, challenge_id: str, user_id: UUID, period_key: str
@@ -119,6 +133,9 @@ class FakeChallenges:
     async def distinct_flavors_since(self, user_id: UUID, since: datetime) -> int:
         return self.store.flavors_since.get(user_id, 0)
 
+    async def checkin_days(self, challenge_id: str, user_id: UUID) -> set[date]:
+        return _checkin_dates(self.store, challenge_id, user_id)
+
     async def has_claimed(
         self, challenge_id: str, user_id: UUID, period_key: str
     ) -> bool:
@@ -128,6 +145,22 @@ class FakeChallenges:
         self, challenge_id: str, user_id: UUID, period_key: str, now: datetime
     ) -> None:
         self.store.claims.add((challenge_id, user_id, period_key))
+
+
+class FakeAchievements:
+    def __init__(self, store: Store) -> None:
+        self.store = store
+
+    async def list_active_by_fact(self, fact: AchievementFact) -> list[Achievement]:
+        return [
+            a for a in self.store.achievements.values() if a.fact is fact and a.active
+        ]
+
+    async def already_unlocked(self, achievement_id: str, user_id: UUID) -> bool:
+        return (achievement_id, user_id) in self.store.user_achievements
+
+    async def unlock(self, achievement_id: str, user_id: UUID, now: datetime) -> None:
+        self.store.user_achievements.add((achievement_id, user_id))
 
 
 class FakeUnitOfWork:
@@ -146,6 +179,10 @@ class FakeUnitOfWork:
     @property
     def challenges(self) -> FakeChallenges:
         return FakeChallenges(self.working)
+
+    @property
+    def achievements(self) -> FakeAchievements:
+        return FakeAchievements(self.working)
 
     async def __aenter__(self) -> Self:
         self.working = copy.deepcopy(self._committed)
@@ -198,6 +235,29 @@ def distinct_flavors_challenge(target: int = 3, reward: int = 100) -> Challenge:
         kind=ChallengeKind.DISTINCT_FLAVORS,
         period=ChallengePeriod.MONTH,
         target=target,
+        reward_coins=reward,
+        active=True,
+    )
+
+
+def daily_checkin_challenge(reward: int = 10) -> Challenge:
+    return Challenge(
+        id="daily_checkin",
+        kind=ChallengeKind.DAILY_CHECKIN,
+        period=ChallengePeriod.DAY,
+        target=1,
+        reward_coins=reward,
+        active=True,
+    )
+
+
+def streak_achievement(
+    achievement_id: str, threshold: int, reward: int = 20
+) -> Achievement:
+    return Achievement(
+        id=achievement_id,
+        fact=AchievementFact.CHECKIN_STREAK,
+        threshold=threshold,
         reward_coins=reward,
         active=True,
     )
@@ -329,3 +389,121 @@ async def test_two_different_users_claim_independently() -> None:
     # Bob's own claim is unaffected by Alice's.
     result = await service.claim(bob, "choose_team")
     assert result.coins_awarded == 30
+
+
+async def test_daily_checkin_is_always_completed_and_pays() -> None:
+    user = uuid4()
+    store = Store(challenges={"daily_checkin": daily_checkin_challenge(reward=10)})
+    service, _ = build(store)
+
+    progress = await service.list(user)
+    assert (progress[0].have, progress[0].target, progress[0].completed) == (
+        1,
+        1,
+        True,
+    )
+
+    result = await service.claim(user, "daily_checkin")
+    assert (result.coins_awarded, result.coin_balance, result.streak) == (10, 10, 1)
+
+
+async def test_claiming_daily_checkin_twice_the_same_day_is_refused() -> None:
+    user = uuid4()
+    store = Store(challenges={"daily_checkin": daily_checkin_challenge()})
+    service, store = build(store)
+    await service.claim(user, "daily_checkin")
+
+    with pytest.raises(ChallengeClaimError) as caught:
+        await service.claim(user, "daily_checkin")
+    assert caught.value.reason is ChallengeClaimRefusal.ALREADY_CLAIMED
+
+
+async def test_list_reports_the_current_streak_for_daily_checkin_only() -> None:
+    user = uuid4()
+    store = Store(
+        challenges={
+            "choose_team": team_choice_challenge(),
+            "daily_checkin": daily_checkin_challenge(),
+        },
+        claims={
+            ("daily_checkin", user, "D:2026-10-13"),
+            ("daily_checkin", user, "D:2026-10-14"),
+        },
+    )
+    service, _ = build(store)
+
+    progress = await service.list(user)
+    by_id = {p.id: p for p in progress}
+    assert by_id["daily_checkin"].streak == 2  # today not claimed yet, chain intact
+    assert by_id["choose_team"].streak is None
+
+
+async def test_claiming_daily_checkin_unlocks_a_streak_achievement_and_pays_both() -> (
+    None
+):
+    user = uuid4()
+    store = Store(
+        challenges={"daily_checkin": daily_checkin_challenge(reward=10)},
+        achievements={
+            "streak_3": streak_achievement("streak_3", threshold=3, reward=20)
+        },
+        claims={
+            ("daily_checkin", user, "D:2026-10-13"),
+            ("daily_checkin", user, "D:2026-10-14"),
+        },
+    )
+    service, store = build(store)
+
+    result = await service.claim(user, "daily_checkin")
+
+    assert result.streak == 3
+    assert [u.id for u in result.achievements_unlocked] == ["streak_3"]
+    assert result.coin_balance == 10 + 20  # challenge reward + achievement reward
+    assert ("streak_3", user) in store.user_achievements
+
+
+async def test_achievement_unlock_is_one_time_even_after_a_rebuilt_streak() -> None:
+    """The exploit the economy must not allow: breaking and rebuilding a
+    streak must not re-pay an already-unlocked milestone (see
+    docs/vault/Decisions.md 2026-10-15 on daily check-ins/streaks)."""
+    user = uuid4()
+    store = Store(
+        challenges={"daily_checkin": daily_checkin_challenge(reward=10)},
+        achievements={
+            "streak_3": streak_achievement("streak_3", threshold=3, reward=20)
+        },
+        user_achievements={("streak_3", user)},  # already unlocked on an earlier run
+        claims={
+            # a fresh, rebuilt 3-day run ending today
+            ("daily_checkin", user, "D:2026-10-13"),
+            ("daily_checkin", user, "D:2026-10-14"),
+        },
+    )
+    service, store = build(store)
+
+    result = await service.claim(user, "daily_checkin")
+
+    assert result.streak == 3
+    assert result.achievements_unlocked == []  # no second payout
+    assert result.coin_balance == 10  # challenge reward only, no achievement bonus
+
+
+async def test_two_milestones_crossed_in_one_claim_both_unlock() -> None:
+    """Defensive: if a streak crosses several thresholds at once, every
+    newly-qualifying achievement unlocks in that same claim, not just one."""
+    user = uuid4()
+    store = Store(
+        challenges={"daily_checkin": daily_checkin_challenge(reward=10)},
+        achievements={
+            "streak_1": streak_achievement("streak_1", threshold=1, reward=5),
+            "streak_2": streak_achievement("streak_2", threshold=2, reward=15),
+        },
+        claims={("daily_checkin", user, "D:2026-10-14")},
+    )
+    service, store = build(store)
+
+    result = await service.claim(user, "daily_checkin")
+
+    assert result.streak == 2
+    assert {u.id for u in result.achievements_unlocked} == {"streak_1", "streak_2"}
+    assert result.coin_balance == 10 + 5 + 15

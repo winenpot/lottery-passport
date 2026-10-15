@@ -10,7 +10,11 @@ from fastapi.testclient import TestClient
 
 from app.api.deps import get_challenge_service, get_current_user
 from app.app import create_app
-from app.application.challenges import ChallengeClaimResult, ChallengeProgress
+from app.application.challenges import (
+    AchievementUnlock,
+    ChallengeClaimResult,
+    ChallengeProgress,
+)
 from app.core.config import Settings
 from app.domain.challenges import (
     ChallengeClaimError,
@@ -96,6 +100,8 @@ def test_claiming_a_completed_challenge() -> None:
         "id": "choose_team",
         "coins_awarded": 30,
         "coin_balance": 30,
+        "streak": None,
+        "achievements_unlocked": [],
     }
 
 
@@ -137,3 +143,47 @@ def test_claiming_before_completion_carries_required_and_have() -> None:
         "CHALLENGE_NOT_UNLOCKED",
     )
     assert body["error"]["details"] == {"required": 3, "have": 1}
+
+
+def test_claiming_a_daily_checkin_surfaces_streak_and_unlocked_achievements() -> None:
+    service = FakeChallengeService()
+    service.claim_result = ChallengeClaimResult(
+        id="daily_checkin",
+        coins_awarded=10,
+        coin_balance=30,
+        streak=3,
+        achievements_unlocked=[AchievementUnlock(id="streak_3", reward_coins=20)],
+    )
+
+    response = client(service).post("/api/v1/challenges/daily_checkin/claim")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": "daily_checkin",
+        "coins_awarded": 10,
+        "coin_balance": 30,
+        "streak": 3,
+        "achievements_unlocked": [{"id": "streak_3", "reward_coins": 20}],
+    }
+
+
+def test_list_surfaces_the_streak_field_on_the_daily_checkin_card() -> None:
+    service = FakeChallengeService()
+    service.progress = [
+        ChallengeProgress(
+            id="daily_checkin",
+            kind=ChallengeKind.DAILY_CHECKIN,
+            period=ChallengePeriod.DAY,
+            target=1,
+            have=1,
+            reward_coins=10,
+            completed=True,
+            claimed=False,
+            streak=4,
+        )
+    ]
+
+    response = client(service).get("/api/v1/challenges")
+
+    assert response.status_code == 200
+    assert response.json()[0]["streak"] == 4

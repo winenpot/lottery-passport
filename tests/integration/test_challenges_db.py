@@ -26,10 +26,12 @@ from app.domain.challenges import ChallengeClaimError, ChallengeClaimRefusal
 from app.domain.passports import CityCode
 from app.infrastructure.postgres.database import PostgreSQLAdapter
 from app.infrastructure.postgres.models import (
+    AchievementModel,
     ChallengeClaimModel,
     ChallengeModel,
     RedemptionCodeModel,
     TeamMembershipModel,
+    UserAchievementModel,
 )
 from app.infrastructure.postgres.repositories import (
     PostgreSQLChallengesReader,
@@ -143,6 +145,54 @@ async def add_redeemed_code(
         )
 
 
+async def add_checkin_claim(
+    database: PostgreSQLAdapter, challenge_id: str, user_id: UUID, period_key: str
+) -> None:
+    """Backfills a prior day's check-in directly (no wallet lock needed --
+    this models history, not a live claim through the service)."""
+    async with database.session_factory() as session, session.begin():
+        await session.execute(
+            insert(ChallengeClaimModel).values(
+                challenge_id=challenge_id,
+                user_id=user_id,
+                period_key=period_key,
+                claimed_at=datetime.now(UTC),
+            )
+        )
+
+
+async def add_achievement(
+    database: PostgreSQLAdapter,
+    achievement_id: str,
+    fact: str,
+    threshold: int,
+    reward_coins: int,
+) -> None:
+    async with database.session_factory() as session, session.begin():
+        await session.execute(
+            insert(AchievementModel).values(
+                id=achievement_id,
+                fact=fact,
+                threshold=threshold,
+                reward_coins=reward_coins,
+                active=True,
+                created_at=datetime.now(UTC),
+            )
+        )
+
+
+async def delete_achievement(database: PostgreSQLAdapter, achievement_id: str) -> None:
+    async with database.session_factory() as session, session.begin():
+        await session.execute(
+            delete(UserAchievementModel).where(
+                UserAchievementModel.achievement_id == achievement_id
+            )
+        )
+        await session.execute(
+            delete(AchievementModel).where(AchievementModel.id == achievement_id)
+        )
+
+
 async def test_challenge_checks_reject_bad_rows(database: PostgreSQLAdapter) -> None:
     with pytest.raises(DBAPIError, match="ck_challenges_kind"):
         await add_challenge(database, f"it-{uuid4().hex[:8]}", "bogus", "once", 1, 10)
@@ -239,4 +289,83 @@ async def test_distinct_flavors_claim_counts_within_the_month(
         result = await service.claim(user_id, challenge_id)
         assert result.coins_awarded == 100
     finally:
+        await delete_challenge(database, challenge_id)
+
+
+async def test_achievement_checks_reject_bad_rows(database: PostgreSQLAdapter) -> None:
+    with pytest.raises(DBAPIError, match="ck_achievements_fact"):
+        await add_achievement(database, f"it-{uuid4().hex[:8]}", "bogus_fact", 3, 20)
+    with pytest.raises(DBAPIError, match="ck_achievements_threshold_positive"):
+        await add_achievement(
+            database, f"it-{uuid4().hex[:8]}", "checkin_streak", 0, 20
+        )
+    with pytest.raises(DBAPIError, match="ck_achievements_reward_coins_non_negative"):
+        await add_achievement(
+            database, f"it-{uuid4().hex[:8]}", "checkin_streak", 3, -1
+        )
+
+
+async def test_an_achievement_cannot_be_unlocked_twice_for_the_same_user(
+    database: PostgreSQLAdapter,
+) -> None:
+    achievement_id = f"it-streak-{uuid4().hex[:8]}"
+    await add_achievement(database, achievement_id, "checkin_streak", 3, 20)
+    try:
+        user_id = await new_user_id(database)
+        async with database.session_factory() as session, session.begin():
+            await session.execute(
+                insert(UserAchievementModel).values(
+                    achievement_id=achievement_id,
+                    user_id=user_id,
+                    unlocked_at=datetime.now(UTC),
+                )
+            )
+        with pytest.raises(
+            IntegrityError, match="uq_user_achievements_achievement_user"
+        ):
+            async with database.session_factory() as session, session.begin():
+                await session.execute(
+                    insert(UserAchievementModel).values(
+                        achievement_id=achievement_id,
+                        user_id=user_id,
+                        unlocked_at=datetime.now(UTC),
+                    )
+                )
+    finally:
+        await delete_achievement(database, achievement_id)
+
+
+async def test_daily_checkin_streak_unlocks_an_achievement_end_to_end(
+    database: PostgreSQLAdapter,
+) -> None:
+    """The widened ``ck_challenges_kind`` CHECK (daily_checkin) and the
+    achievement unlock-and-pay both happen in this one claim, in the same
+    transaction as the check-in itself."""
+    challenge_id = f"it-daily-checkin-{uuid4().hex[:8]}"
+    achievement_id = f"it-streak-3-{uuid4().hex[:8]}"
+    await add_challenge(database, challenge_id, "daily_checkin", "day", 1, 10)
+    await add_achievement(database, achievement_id, "checkin_streak", 3, 20)
+    try:
+        user_id = await new_user_id(database)
+        now = datetime(2026, 10, 15, 9, 0, tzinfo=UTC)  # D:2026-10-15 in Tehran
+        service = make_service(database, now)
+        await add_checkin_claim(database, challenge_id, user_id, "D:2026-10-13")
+        await add_checkin_claim(database, challenge_id, user_id, "D:2026-10-14")
+
+        result = await service.claim(user_id, challenge_id)
+
+        assert result.streak == 3
+        assert [u.id for u in result.achievements_unlocked] == [achievement_id]
+        assert result.coin_balance == 10 + 20
+
+        # Claiming again tomorrow (a 4th consecutive day) must not re-pay
+        # the already-unlocked 3-day milestone.
+        tomorrow = datetime(2026, 10, 16, 9, 0, tzinfo=UTC)
+        service_tomorrow = make_service(database, tomorrow)
+        result_tomorrow = await service_tomorrow.claim(user_id, challenge_id)
+        assert result_tomorrow.streak == 4
+        assert result_tomorrow.achievements_unlocked == []
+        assert result_tomorrow.coin_balance == 10 + 20 + 10
+    finally:
+        await delete_achievement(database, achievement_id)
         await delete_challenge(database, challenge_id)
