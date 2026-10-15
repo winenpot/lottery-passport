@@ -18,6 +18,7 @@ class LedgerReason(StrEnum):
     CODE_REDEMPTION = "code_redemption"
     FIRST_CODE_BONUS = "first_code_bonus"
     CHALLENGE_REWARD = "challenge_reward"
+    ACHIEVEMENT_REWARD = "achievement_reward"
     TOURNAMENT_PRIZE = "tournament_prize"
     SOCIAL_POST_REWARD = "social_post_reward"
     ADMIN_ADJUSTMENT = "admin_adjustment"

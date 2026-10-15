@@ -463,7 +463,8 @@ class ChallengeModel(Base):
             "reward_coins >= 0", name="ck_challenges_reward_coins_non_negative"
         ),
         CheckConstraint(
-            "kind IN ('team_choice', 'distinct_flavors')", name="ck_challenges_kind"
+            "kind IN ('team_choice', 'distinct_flavors', 'daily_checkin')",
+            name="ck_challenges_kind",
         ),
         CheckConstraint(
             "period IN ('once', 'day', 'week', 'month')", name="ck_challenges_period"
@@ -499,4 +500,56 @@ class ChallengeClaimModel(Base):
             name="uq_challenge_claims_challenge_user_period",
         ),
         Index("ix_challenge_claims_user", "user_id"),
+    )
+
+
+class AchievementModel(Base):
+    """Admin-tunable achievement catalogue (AC1 MVP slice): starts empty,
+    filled in ``/admin``, same pattern as ``challenges``/avatars/
+    reward_rules. ``fact`` is the closed set app/domain/achievements.py
+    knows how to check a player's progress against."""
+
+    __tablename__ = "achievements"
+
+    id: Mapped[str] = mapped_column(String(60), primary_key=True)
+    fact: Mapped[str] = mapped_column(String(30), nullable=False)
+    threshold: Mapped[int] = mapped_column(Integer, nullable=False)
+    reward_coins: Mapped[int] = mapped_column(Integer, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint("threshold > 0", name="ck_achievements_threshold_positive"),
+        CheckConstraint(
+            "reward_coins >= 0", name="ck_achievements_reward_coins_non_negative"
+        ),
+        CheckConstraint("fact IN ('checkin_streak')", name="ck_achievements_fact"),
+    )
+
+
+class UserAchievementModel(Base):
+    """One row per player per achievement ever unlocked (AC1). The unique
+    constraint is the only-once guard, the same shape as
+    ``challenge_claims``; there is no claim step -- unlocking IS the pay."""
+
+    __tablename__ = "user_achievements"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    achievement_id: Mapped[str] = mapped_column(
+        String(60), ForeignKey("achievements.id", ondelete="RESTRICT"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    unlocked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "achievement_id", "user_id", name="uq_user_achievements_achievement_user"
+        ),
+        Index("ix_user_achievements_user", "user_id"),
     )

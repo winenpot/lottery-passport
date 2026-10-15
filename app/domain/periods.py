@@ -56,3 +56,26 @@ def tehran_week_start(moment: datetime, zone: ZoneInfo) -> datetime:
 def tehran_month_start(moment: datetime, zone: ZoneInfo) -> datetime:
     """UTC instant of the first day of this Tehran calendar month."""
     return _local_midnight(_local_date(moment, zone).replace(day=1), zone)
+
+
+def tehran_date(moment: datetime, zone: ZoneInfo) -> date:
+    """The Tehran calendar date ``moment`` falls in (public wrapper, for
+    callers outside this module that need the date itself, not a key)."""
+    return _local_date(moment, zone)
+
+
+def current_streak(claimed_dates: set[date], today: date) -> int:
+    """Consecutive calendar days ending at ``today`` with a claim in
+    ``claimed_dates`` (C1's daily check-in, and any future daily fact).
+
+    Counts backward from ``today`` itself, or from yesterday if today has
+    no claim yet -- a player who has not checked in YET today still has
+    whatever streak they walked in with; the streak only breaks once a
+    full day passes with no claim, not the moment a new day starts.
+    """
+    cursor = today if today in claimed_dates else today - timedelta(days=1)
+    streak = 0
+    while cursor in claimed_dates:
+        streak += 1
+        cursor -= timedelta(days=1)
+    return streak
