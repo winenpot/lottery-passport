@@ -1,6 +1,8 @@
 """The admin panel against PostgreSQL: real sign-in, every view renders."""
 
 import random
+from datetime import UTC, datetime
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -113,8 +115,7 @@ async def test_editing_a_lounge_writes_an_audit_row(test_database_url: str) -> N
     sender = application.state.sms_sender
     assert isinstance(sender, ConsoleSmsSender)
     engine = _pgbouncer_safe_engine(settings.database_url)
-    venue_id: str | None = None
-    original_name: str | None = None
+    venue_id = f"audit-{uuid4().hex}"
 
     with TestClient(application, follow_redirects=False) as client:
         client.post(
@@ -135,19 +136,21 @@ async def test_editing_a_lounge_writes_an_audit_row(test_database_url: str) -> N
                     ),
                     {"phone": phone},
                 )
+                await connection.execute(
+                    VenueModel.__table__.insert().values(
+                        id=venue_id,
+                        name="CI audit test lounge",
+                        city="tehran",
+                        active=True,
+                        created_at=datetime.now(UTC),
+                    )
+                )
             client.post("/admin/login", data={"action": "send", "phone": phone})
             assert sender.last_code is not None
             done = client.post(
                 "/admin/login", data={"action": "verify", "code": sender.last_code}
             )
             assert done.status_code == 302
-
-            async with engine.begin() as connection:
-                venue_id, original_name = (
-                    await connection.execute(
-                        select(VenueModel.id, VenueModel.name).limit(1)
-                    )
-                ).one()
 
             edited = client.post(
                 f"/admin/venue-model/edit/{venue_id}",
@@ -181,9 +184,7 @@ async def test_editing_a_lounge_writes_an_audit_row(test_database_url: str) -> N
                     text("UPDATE users SET role = 'player' WHERE identifier = :phone"),
                     {"phone": phone},
                 )
-                if venue_id is not None and original_name is not None:
-                    await connection.execute(
-                        text("UPDATE venues SET name = :name WHERE id = :id"),
-                        {"name": original_name, "id": venue_id},
-                    )
+                await connection.execute(
+                    text("DELETE FROM venues WHERE id = :id"), {"id": venue_id}
+                )
             await engine.dispose()
