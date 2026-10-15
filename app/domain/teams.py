@@ -1,42 +1,45 @@
-"""Flavor teams with Fibonacci switching (vault Decisions 2026-10-14 evening).
+"""Flavor teams: unlock by scanning, choose, then a monthly switch lock.
 
-A team is a TorshX flavor (``CityCode``), not a place. Membership is
-exclusive: a player is on at most one team at a time.
+Rule (vault Decisions 2026-10-15, Mehdi + Ashkan; replaces the Fibonacci
+rule of 2026-10-14 evening):
 
-* The first join is automatic, on the redemption that brings one flavor to
-  ``JOIN_THRESHOLD`` (5) codes.
-* After that a switch is the player's choice and needs the next Fibonacci
-  number of codes of the TARGET flavor: 8 for the first switch, 13 for the
-  second, then 21, 34, ...
-* Codes count since the last team change, so each switch is harder than the
-  one before (lifetime counts would make later switches free).
+* A team is a TorshX flavor (``CityCode``), not a place. Membership is
+  exclusive: a player is on at most one team at a time.
+* Redeeming ``UNLOCK_THRESHOLD`` (5) codes of a flavor unlocks it for good
+  (lifetime count). The unlock earns that flavor's badge (AC1).
+* The player CHOOSES a team among the unlocked flavors; nothing joins
+  automatically.
+* Joining locks the player in for ``TEAM_LOCK`` (30 days from joining).
+  After that they may switch to any other unlocked flavor, including one
+  they left earlier, which starts a new lock.
 
 ``switch_no`` numbers the memberships of one player: 0 is the first join,
 1 the first switch, and so on. The current team is the highest number.
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 from uuid import UUID
 
 from app.domain.passports import CityCode
 
-JOIN_THRESHOLD = 5
-_FIRST_SWITCH_THRESHOLD = 8
+UNLOCK_THRESHOLD = 5
+TEAM_LOCK = timedelta(days=30)
 
 
-def switch_threshold(switch_no: int) -> int:
-    """Codes of one flavor needed to take membership number ``switch_no``.
+def is_unlocked(flavor_codes: int) -> bool:
+    """Whether a lifetime count of one flavor's codes unlocks its team."""
+    return flavor_codes >= UNLOCK_THRESHOLD
 
-    0 -> 5 (join), 1 -> 8, 2 -> 13, 3 -> 21, ...
+
+def unlocks_now(flavor_codes_after: int) -> bool:
+    """True on the redemption that brings a flavor to exactly the threshold.
+
+    A user's redemptions are serialized (wallet row lock) and each adds one
+    code, so the count passes through the threshold exactly once.
     """
-    if switch_no < 0:
-        raise ValueError(f"switch_no must be >= 0, got {switch_no}")
-    current, following = JOIN_THRESHOLD, _FIRST_SWITCH_THRESHOLD
-    for _ in range(switch_no):
-        current, following = following, current + following
-    return current
+    return flavor_codes_after == UNLOCK_THRESHOLD
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,63 +49,59 @@ class TeamMembership:
     switch_no: int
     joined_at: datetime
 
-
-def next_required(current: TeamMembership | None) -> int:
-    """Codes of the target flavor the player's next team change needs."""
-    return switch_threshold(0 if current is None else current.switch_no + 1)
+    def switch_allowed_at(self, lock: timedelta = TEAM_LOCK) -> datetime:
+        return self.joined_at + lock
 
 
-def should_auto_join(current: TeamMembership | None, flavor_codes: int) -> bool:
-    """True when a player without a team has reached the join threshold.
-
-    Only the first join is automatic; a player already on a team never
-    changes team by redeeming.
-    """
-    return current is None and flavor_codes >= JOIN_THRESHOLD
-
-
-class SwitchRefusal(StrEnum):
-    NOT_JOINED = "not_joined"
+class TeamChangeRefusal(StrEnum):
     SAME_TEAM = "same_team"
-    THRESHOLD_NOT_MET = "threshold_not_met"
+    FLAVOR_NOT_UNLOCKED = "flavor_not_unlocked"
+    TEAM_LOCKED = "team_locked"
 
 
-class TeamSwitchError(Exception):
-    def __init__(self, reason: SwitchRefusal, required: int, have: int) -> None:
+class TeamChangeError(Exception):
+    def __init__(
+        self,
+        reason: TeamChangeRefusal,
+        *,
+        required: int | None = None,
+        have: int | None = None,
+        allowed_at: datetime | None = None,
+    ) -> None:
         super().__init__(reason.value)
         self.reason = reason
         self.required = required
         self.have = have
+        self.allowed_at = allowed_at
 
 
-def switch_team(
+def change_team(
+    user_id: UUID,
     current: TeamMembership | None,
     target: CityCode,
-    target_codes_since_change: int,
+    target_codes: int,
     now: datetime,
+    lock: timedelta = TEAM_LOCK,
 ) -> TeamMembership:
-    """The membership a requested switch creates, or ``TeamSwitchError``.
+    """The membership a join or switch creates, or ``TeamChangeError``.
 
-    ``target_codes_since_change`` counts the target flavor's codes redeemed
-    after ``current.joined_at``.
+    ``target_codes`` is the lifetime count of the target flavor's codes.
     """
-    required = next_required(current)
-    if current is None:
-        # The first team is never picked: it comes from the 5th code.
-        raise TeamSwitchError(
-            SwitchRefusal.NOT_JOINED, required, target_codes_since_change
+    if current is not None and current.flavor is target:
+        raise TeamChangeError(TeamChangeRefusal.SAME_TEAM)
+    if not is_unlocked(target_codes):
+        raise TeamChangeError(
+            TeamChangeRefusal.FLAVOR_NOT_UNLOCKED,
+            required=UNLOCK_THRESHOLD,
+            have=target_codes,
         )
-    if current.flavor is target:
-        raise TeamSwitchError(
-            SwitchRefusal.SAME_TEAM, required, target_codes_since_change
-        )
-    if target_codes_since_change < required:
-        raise TeamSwitchError(
-            SwitchRefusal.THRESHOLD_NOT_MET, required, target_codes_since_change
+    if current is not None and now < current.switch_allowed_at(lock):
+        raise TeamChangeError(
+            TeamChangeRefusal.TEAM_LOCKED, allowed_at=current.switch_allowed_at(lock)
         )
     return TeamMembership(
-        user_id=current.user_id,
+        user_id=user_id,
         flavor=target,
-        switch_no=current.switch_no + 1,
+        switch_no=0 if current is None else current.switch_no + 1,
         joined_at=now,
     )

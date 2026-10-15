@@ -5,74 +5,89 @@ import pytest
 
 from app.domain.passports import CityCode
 from app.domain.teams import (
-    JOIN_THRESHOLD,
-    SwitchRefusal,
+    TEAM_LOCK,
+    UNLOCK_THRESHOLD,
+    TeamChangeError,
+    TeamChangeRefusal,
     TeamMembership,
-    TeamSwitchError,
-    next_required,
-    should_auto_join,
-    switch_team,
-    switch_threshold,
+    change_team,
+    is_unlocked,
+    unlocks_now,
 )
 
 NOW = datetime(2026, 10, 15, 9, 0, tzinfo=UTC)
 
 
-def test_thresholds_follow_fibonacci_from_five() -> None:
-    assert [switch_threshold(n) for n in range(7)] == [5, 8, 13, 21, 34, 55, 89]
+def test_five_codes_unlock_a_flavor() -> None:
+    assert UNLOCK_THRESHOLD == 5
+    assert not is_unlocked(4)
+    assert is_unlocked(5)
+    assert is_unlocked(40)
 
 
-def test_negative_switch_number_is_rejected() -> None:
-    with pytest.raises(ValueError):
-        switch_threshold(-1)
+def test_the_unlock_fires_once_on_the_fifth_code() -> None:
+    assert [count for count in range(1, 20) if unlocks_now(count)] == [5]
 
 
-def test_auto_join_only_without_a_team_and_at_five_codes() -> None:
+def test_the_lock_lasts_thirty_days() -> None:
+    assert timedelta(days=30) == TEAM_LOCK
+
+
+def test_first_join_needs_an_unlocked_flavor() -> None:
     user_id = uuid4()
-    on_team = TeamMembership(user_id, CityCode.TOKYO, 0, NOW)
 
-    assert not should_auto_join(None, JOIN_THRESHOLD - 1)
-    assert should_auto_join(None, JOIN_THRESHOLD)
-    assert not should_auto_join(on_team, 100)
+    with pytest.raises(TeamChangeError) as caught:
+        change_team(user_id, None, CityCode.TOKYO, 4, NOW)
+    assert caught.value.reason is TeamChangeRefusal.FLAVOR_NOT_UNLOCKED
+    assert (caught.value.required, caught.value.have) == (5, 4)
+
+    team = change_team(user_id, None, CityCode.TOKYO, 5, NOW)
+    assert team == TeamMembership(user_id, CityCode.TOKYO, 0, NOW)
 
 
-def test_walk_join_five_then_switch_eight_then_switch_thirteen() -> None:
+def test_switching_is_locked_for_thirty_days_after_joining() -> None:
     user_id = uuid4()
-    assert next_required(None) == 5
+    team = TeamMembership(user_id, CityCode.TOKYO, 0, NOW)
+    almost = NOW + TEAM_LOCK - timedelta(seconds=1)
+
+    with pytest.raises(TeamChangeError) as caught:
+        change_team(user_id, team, CityCode.MOSCOW, 12, almost)
+    assert caught.value.reason is TeamChangeRefusal.TEAM_LOCKED
+    assert caught.value.allowed_at == NOW + TEAM_LOCK
+
+    switched = change_team(user_id, team, CityCode.MOSCOW, 12, NOW + TEAM_LOCK)
+    assert (switched.flavor, switched.switch_no) == (CityCode.MOSCOW, 1)
+    assert switched.joined_at == NOW + TEAM_LOCK
+
+
+def test_switching_after_the_lock_still_needs_the_target_unlocked() -> None:
+    user_id = uuid4()
     team = TeamMembership(user_id, CityCode.TOKYO, 0, NOW)
 
-    assert next_required(team) == 8
-    team = switch_team(team, CityCode.MOSCOW, 8, NOW + timedelta(days=1))
-    assert (team.flavor, team.switch_no) == (CityCode.MOSCOW, 1)
-
-    assert next_required(team) == 13
-    team = switch_team(team, CityCode.PARIS, 13, NOW + timedelta(days=2))
-    assert (team.flavor, team.switch_no, team.user_id) == (CityCode.PARIS, 2, user_id)
-    assert team.joined_at == NOW + timedelta(days=2)
-    assert next_required(team) == 21
+    with pytest.raises(TeamChangeError) as caught:
+        change_team(user_id, team, CityCode.MOSCOW, 4, NOW + timedelta(days=60))
+    assert caught.value.reason is TeamChangeRefusal.FLAVOR_NOT_UNLOCKED
 
 
-def test_seven_target_codes_are_not_enough_for_the_first_switch() -> None:
-    team = TeamMembership(uuid4(), CityCode.TOKYO, 0, NOW)
+def test_a_switch_starts_a_new_lock_and_going_back_is_allowed_later() -> None:
+    user_id = uuid4()
+    team = TeamMembership(user_id, CityCode.TOKYO, 0, NOW)
+    team = change_team(user_id, team, CityCode.MOSCOW, 5, NOW + TEAM_LOCK)
 
-    with pytest.raises(TeamSwitchError) as caught:
-        switch_team(team, CityCode.MOSCOW, 7, NOW)
+    with pytest.raises(TeamChangeError) as caught:
+        change_team(
+            user_id, team, CityCode.TOKYO, 5, NOW + TEAM_LOCK + timedelta(days=1)
+        )
+    assert caught.value.reason is TeamChangeRefusal.TEAM_LOCKED
 
-    assert caught.value.reason is SwitchRefusal.THRESHOLD_NOT_MET
-    assert (caught.value.required, caught.value.have) == (8, 7)
-
-
-def test_switching_needs_a_current_team() -> None:
-    with pytest.raises(TeamSwitchError) as caught:
-        switch_team(None, CityCode.MOSCOW, 50, NOW)
-
-    assert caught.value.reason is SwitchRefusal.NOT_JOINED
+    back = change_team(user_id, team, CityCode.TOKYO, 5, NOW + 2 * TEAM_LOCK)
+    assert (back.flavor, back.switch_no) == (CityCode.TOKYO, 2)
 
 
-def test_switching_to_the_current_team_is_refused() -> None:
-    team = TeamMembership(uuid4(), CityCode.TOKYO, 0, NOW)
+def test_choosing_the_current_team_is_refused() -> None:
+    user_id = uuid4()
+    team = TeamMembership(user_id, CityCode.TOKYO, 0, NOW)
 
-    with pytest.raises(TeamSwitchError) as caught:
-        switch_team(team, CityCode.TOKYO, 50, NOW)
-
-    assert caught.value.reason is SwitchRefusal.SAME_TEAM
+    with pytest.raises(TeamChangeError) as caught:
+        change_team(user_id, team, CityCode.TOKYO, 50, NOW + 2 * TEAM_LOCK)
+    assert caught.value.reason is TeamChangeRefusal.SAME_TEAM
