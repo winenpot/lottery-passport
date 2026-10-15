@@ -14,7 +14,7 @@ Lock order is always wallet row first, then code row, so two users racing
 for one code cannot deadlock.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from types import TracebackType
 from typing import Self
 from uuid import UUID, uuid4
@@ -28,6 +28,7 @@ from app.application.unit_of_work import (
     CodeLookup,
     InsufficientCoinsError,
 )
+from app.domain.achievements import Achievement, AchievementFact
 from app.domain.audit import NewAuditEntry
 from app.domain.challenges import Challenge, ChallengeKind
 from app.domain.code_batches import BatchStatus
@@ -44,15 +45,19 @@ from app.infrastructure.postgres.models import (
     RedemptionCodeModel,
     RewardRuleModel,
     TeamMembershipModel,
+    UserAchievementModel,
     WalletModel,
 )
 from app.infrastructure.postgres.repositories import (
+    achievement_already_unlocked,
     challenge_already_claimed,
+    checkin_dates,
     count_flavor_codes,
     current_team_membership,
     distinct_flavors_count_since,
     get_challenge_by_id,
     get_challenge_by_kind,
+    list_active_achievements_by_fact,
 )
 
 
@@ -301,6 +306,9 @@ class SqlChallenges:
     async def distinct_flavors_since(self, user_id: UUID, since: datetime) -> int:
         return await distinct_flavors_count_since(self._session, user_id, since)
 
+    async def checkin_days(self, challenge_id: str, user_id: UUID) -> set[date]:
+        return await checkin_dates(self._session, challenge_id, user_id)
+
     async def has_claimed(
         self, challenge_id: str, user_id: UUID, period_key: str
     ) -> bool:
@@ -321,6 +329,32 @@ class SqlChallenges:
         )
 
 
+class SqlAchievements:
+    """Implements ``AchievementsInTransaction``; shares its queries with the
+    plain ``PostgreSQLAchievementsReader`` used by ``GET /me/achievements``
+    (repositories.py)."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def list_active_by_fact(self, fact: AchievementFact) -> list[Achievement]:
+        return await list_active_achievements_by_fact(self._session, fact)
+
+    async def already_unlocked(self, achievement_id: str, user_id: UUID) -> bool:
+        return await achievement_already_unlocked(
+            self._session, achievement_id, user_id
+        )
+
+    async def unlock(self, achievement_id: str, user_id: UUID, now: datetime) -> None:
+        await self._session.execute(
+            insert(UserAchievementModel).values(
+                achievement_id=achievement_id,
+                user_id=user_id,
+                unlocked_at=now,
+            )
+        )
+
+
 class SqlAlchemyUnitOfWork:
     """``async with SqlAlchemyUnitOfWork(factory) as uow: ...; await uow.commit()``."""
 
@@ -331,6 +365,7 @@ class SqlAlchemyUnitOfWork:
     rules: SqlRewardRules
     teams: SqlTeams
     challenges: SqlChallenges
+    achievements: SqlAchievements
 
     def __init__(self, factory: async_sessionmaker[AsyncSession]) -> None:
         self._factory = factory
@@ -347,6 +382,7 @@ class SqlAlchemyUnitOfWork:
         self.rules = SqlRewardRules(self._session)
         self.teams = SqlTeams(self._session)
         self.challenges = SqlChallenges(self._session)
+        self.achievements = SqlAchievements(self._session)
         return self
 
     async def __aexit__(

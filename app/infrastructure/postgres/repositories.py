@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, cast
 from uuid import UUID
 
@@ -16,6 +16,7 @@ from app.application.authentication import (
 from app.application.passports import PassportRepository
 from app.application.profile import NicknameTaken
 from app.application.wallets import WalletReader
+from app.domain.achievements import Achievement, AchievementFact, UnlockedAchievement
 from app.domain.authentication import AuthenticatedSession, AuthenticationChallenge
 from app.domain.avatars import Avatar
 from app.domain.challenges import Challenge, ChallengeKind, ChallengePeriod
@@ -26,6 +27,7 @@ from app.domain.teams import TeamMembership
 from app.domain.users import AccountStatus, User, UserRole, VerificationStatus
 from app.domain.venues import Venue
 from app.infrastructure.postgres.models import (
+    AchievementModel,
     AuthenticationChallengeModel,
     AvatarModel,
     ChallengeClaimModel,
@@ -35,6 +37,7 @@ from app.infrastructure.postgres.models import (
     RedemptionCodeModel,
     SessionModel,
     TeamMembershipModel,
+    UserAchievementModel,
     UserModel,
     VenueModel,
     WalletModel,
@@ -419,6 +422,21 @@ async def challenge_already_claimed(
     return result is not None
 
 
+async def checkin_dates(
+    session: AsyncSession, challenge_id: str, user_id: UUID
+) -> set[date]:
+    """Shared by ``SqlChallenges`` and ``PostgreSQLChallengesReader``: every
+    Tehran date this user has claimed a ``DAILY_CHECKIN`` challenge
+    (``period_key`` is always ``D:<date>`` for that kind)."""
+    rows = await session.scalars(
+        select(ChallengeClaimModel.period_key).where(
+            ChallengeClaimModel.challenge_id == challenge_id,
+            ChallengeClaimModel.user_id == user_id,
+        )
+    )
+    return {date.fromisoformat(key.removeprefix("D:")) for key in rows}
+
+
 class PostgreSQLChallengesReader:
     """Implements ``ChallengesReader`` (``GET /challenges``): plain reads,
     no wallet lock, shares its queries with ``SqlChallenges`` (the claim's
@@ -440,6 +458,10 @@ class PostgreSQLChallengesReader:
         async with self._factory() as session:
             return await distinct_flavors_count_since(session, user_id, since)
 
+    async def checkin_days(self, challenge_id: str, user_id: UUID) -> set[date]:
+        async with self._factory() as session:
+            return await checkin_dates(session, challenge_id, user_id)
+
     async def has_claimed(
         self, challenge_id: str, user_id: UUID, period_key: str
     ) -> bool:
@@ -447,6 +469,75 @@ class PostgreSQLChallengesReader:
             return await challenge_already_claimed(
                 session, challenge_id, user_id, period_key
             )
+
+
+def achievement_definition_from_model(model: AchievementModel) -> Achievement:
+    return Achievement(
+        id=model.id,
+        fact=AchievementFact(model.fact),
+        threshold=model.threshold,
+        reward_coins=model.reward_coins,
+        active=model.active,
+    )
+
+
+async def list_active_achievements_by_fact(
+    session: AsyncSession, fact: AchievementFact
+) -> list[Achievement]:
+    """Shared by ``SqlAchievements`` and ``PostgreSQLAchievementsReader``."""
+    rows = await session.scalars(
+        select(AchievementModel).where(
+            AchievementModel.fact == fact.value, AchievementModel.active.is_(True)
+        )
+    )
+    return [achievement_definition_from_model(row) for row in rows]
+
+
+async def achievement_already_unlocked(
+    session: AsyncSession, achievement_id: str, user_id: UUID
+) -> bool:
+    """Shared by ``SqlAchievements`` and ``PostgreSQLAchievementsReader``."""
+    result = await session.scalar(
+        select(UserAchievementModel.id).where(
+            UserAchievementModel.achievement_id == achievement_id,
+            UserAchievementModel.user_id == user_id,
+        )
+    )
+    return result is not None
+
+
+class PostgreSQLAchievementsReader:
+    """Implements a plain read for ``GET /me/achievements``: this player's
+    unlocked achievements, newest first."""
+
+    def __init__(self, factory: async_sessionmaker[AsyncSession]) -> None:
+        self._factory = factory
+
+    async def list_unlocked(self, user_id: UUID) -> list[UnlockedAchievement]:
+        async with self._factory() as session:
+            rows = await session.execute(
+                select(
+                    UserAchievementModel.achievement_id,
+                    AchievementModel.threshold,
+                    AchievementModel.reward_coins,
+                    UserAchievementModel.unlocked_at,
+                )
+                .join(
+                    AchievementModel,
+                    AchievementModel.id == UserAchievementModel.achievement_id,
+                )
+                .where(UserAchievementModel.user_id == user_id)
+                .order_by(UserAchievementModel.unlocked_at.desc())
+            )
+            return [
+                UnlockedAchievement(
+                    id=row[0],
+                    threshold=row[1],
+                    reward_coins=row[2],
+                    unlocked_at=row[3],
+                )
+                for row in rows
+            ]
 
 
 class PostgreSQLChallengeRepository(AuthenticationChallengeRepository):

@@ -4,10 +4,15 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.application.app_config import AppConfig
-from app.application.challenges import ChallengeClaimResult, ChallengeProgress
+from app.application.challenges import (
+    AchievementUnlock,
+    ChallengeClaimResult,
+    ChallengeProgress,
+)
 from app.application.redemption_codes import RedemptionResult
 from app.application.teams import FlavorProgress, TeamStatus
 from app.application.wallets import WalletView
+from app.domain.achievements import UnlockedAchievement
 from app.domain.avatars import Avatar
 from app.domain.passports import CAMPAIGN_BY_CITY, PassportProgress
 from app.domain.users import User
@@ -344,6 +349,9 @@ class ChallengeResponse(BaseModel):
     reward_coins: int
     completed: bool
     claimed: bool
+    streak: int | None = Field(
+        default=None, description="DAILY_CHECKIN only; null for every other kind."
+    )
 
     @classmethod
     def from_domain(cls, progress: ChallengeProgress) -> "ChallengeResponse":
@@ -356,13 +364,31 @@ class ChallengeResponse(BaseModel):
             reward_coins=progress.reward_coins,
             completed=progress.completed,
             claimed=progress.claimed,
+            streak=progress.streak,
         )
+
+
+class AchievementUnlockResponse(BaseModel):
+    id: str
+    reward_coins: int
+
+    @classmethod
+    def from_domain(cls, unlock: AchievementUnlock) -> "AchievementUnlockResponse":
+        return cls(id=unlock.id, reward_coins=unlock.reward_coins)
 
 
 class ChallengeClaimResponse(BaseModel):
     id: str
     coins_awarded: int
     coin_balance: int
+    streak: int | None = None
+    achievements_unlocked: list[AchievementUnlockResponse] = Field(
+        default_factory=list,
+        description=(
+            "Achievements this claim just unlocked, auto-paid in the same "
+            "transaction -- no separate claim needed."
+        ),
+    )
 
     @classmethod
     def from_result(cls, result: ChallengeClaimResult) -> "ChallengeClaimResponse":
@@ -370,4 +396,27 @@ class ChallengeClaimResponse(BaseModel):
             id=result.id,
             coins_awarded=result.coins_awarded,
             coin_balance=result.coin_balance,
+            streak=result.streak,
+            achievements_unlocked=[
+                AchievementUnlockResponse.from_domain(u)
+                for u in result.achievements_unlocked
+            ],
+        )
+
+
+class UnlockedAchievementResponse(BaseModel):
+    id: str
+    threshold: int
+    reward_coins: int
+    unlocked_at: datetime
+
+    @classmethod
+    def from_domain(
+        cls, achievement: UnlockedAchievement
+    ) -> "UnlockedAchievementResponse":
+        return cls(
+            id=achievement.id,
+            threshold=achievement.threshold,
+            reward_coins=achievement.reward_coins,
+            unlocked_at=achievement.unlocked_at,
         )

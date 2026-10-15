@@ -4,6 +4,7 @@ from fastapi import Depends, Request, Security, status
 from fastapi.security import APIKeyCookie
 
 from app.api.errors import ApiError
+from app.application.achievements import AchievementService
 from app.application.admin_users import AdminUserService
 from app.application.app_config import AppConfigService
 from app.application.authentication import AuthenticationError, AuthenticationService
@@ -67,6 +68,10 @@ def get_team_service(request: Request) -> TeamService:
 
 def get_challenge_service(request: Request) -> ChallengeService:
     return cast(ChallengeService, request.app.state.challenge_service)
+
+
+def get_achievement_service(request: Request) -> AchievementService:
+    return cast(AchievementService, request.app.state.achievement_service)
 
 
 def get_me_service(request: Request) -> MeService:

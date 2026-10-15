@@ -8,11 +8,12 @@ therefore succeed or fail together.
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
 
+from app.domain.achievements import Achievement, AchievementFact
 from app.domain.audit import NewAuditEntry
 from app.domain.challenges import Challenge, ChallengeKind
 from app.domain.ledger import NewLedgerEntry
@@ -147,6 +148,12 @@ class ChallengesInTransaction(Protocol):
         """Distinct flavors this user has redeemed a code of since ``since``."""
         ...
 
+    async def checkin_days(self, challenge_id: str, user_id: UUID) -> set[date]:
+        """Every Tehran calendar date this user has claimed ``challenge_id``
+        (a ``DAILY_CHECKIN`` challenge) on -- the raw data a streak is
+        computed from (``app.domain.periods.current_streak``)."""
+        ...
+
     async def has_claimed(
         self, challenge_id: str, user_id: UUID, period_key: str
     ) -> bool: ...
@@ -156,6 +163,24 @@ class ChallengesInTransaction(Protocol):
     ) -> None:
         """Insert the claim row. UNIQUE (challenge_id, user_id, period_key)
         is the race guard; the caller locks the user's wallet row first."""
+        ...
+
+
+class AchievementsInTransaction(Protocol):
+    """Achievement catalogue + unlocks (app/domain/achievements.py, AC1),
+    inside the unit of work: the fact check and its ledger write must see
+    the same transaction as the triggering claim."""
+
+    async def list_active_by_fact(self, fact: AchievementFact) -> list[Achievement]:
+        """Active achievements checked against this fact (assumed few per
+        fact for the MVP; iterated in full on every triggering claim)."""
+        ...
+
+    async def already_unlocked(self, achievement_id: str, user_id: UUID) -> bool: ...
+
+    async def unlock(self, achievement_id: str, user_id: UUID, now: datetime) -> None:
+        """Insert the unlock row. UNIQUE (achievement_id, user_id) is the
+        only-once guard; the caller locks the user's wallet row first."""
         ...
 
 
@@ -181,6 +206,9 @@ class UnitOfWork(Protocol):
 
     @property
     def challenges(self) -> ChallengesInTransaction: ...
+
+    @property
+    def achievements(self) -> AchievementsInTransaction: ...
 
     async def __aenter__(self) -> Self: ...
 

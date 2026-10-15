@@ -38,12 +38,14 @@ from app.application.coin_adjustments import (
     UserNotFoundError,
 )
 from app.infrastructure.postgres.models import (
+    AchievementModel,
     AuditLogModel,
     AvatarModel,
     ChallengeModel,
     CodeBatchModel,
     CoinLedgerEntryModel,
     RewardRuleModel,
+    UserAchievementModel,
     UserModel,
     VenueModel,
     WalletModel,
@@ -331,11 +333,11 @@ class RewardRuleAdmin(ModelView, model=RewardRuleModel):
 
 class ChallengeAdmin(ModelView, model=ChallengeModel):
     """Challenge catalogue (C1): starts empty, filled in here. ``kind``
-    must be one of the two app/domain/challenges.py knows how to check
-    progress for (``team_choice``, ``distinct_flavors``) -- the DB CHECK
-    enforces this, there is no dropdown widget for it here. No delete:
-    a challenge with claim history cannot be deleted anyway (FK ON DELETE
-    RESTRICT); switch it off with ``active = false`` instead.
+    must be one of the three app/domain/challenges.py knows how to check
+    progress for (``team_choice``, ``distinct_flavors``, ``daily_checkin``)
+    -- the DB CHECK enforces this, there is no dropdown widget for it here.
+    No delete: a challenge with claim history cannot be deleted anyway (FK
+    ON DELETE RESTRICT); switch it off with ``active = false`` instead.
     """
 
     name = "Challenge"
@@ -364,6 +366,59 @@ class ChallengeAdmin(ModelView, model=ChallengeModel):
     ]
 
 
+class AchievementAdmin(ModelView, model=AchievementModel):
+    """Achievement catalogue (AC1 MVP slice): starts empty, filled in here.
+    ``fact`` is the one app/domain/achievements.py knows how to check a
+    streak against today (``checkin_streak``) -- the DB CHECK enforces
+    this. ``threshold`` is a day count (e.g. 3/7/30). Unlocking is
+    automatic and pays once per player the moment a ``daily_checkin``
+    claim crosses it -- there is no claim button, no badge/image field yet
+    (AC1's full spec -- artwork, the approved 8-12 list -- has not
+    happened). No delete: an achievement with unlock history cannot be
+    deleted anyway (FK ON DELETE RESTRICT); switch it off with
+    ``active = false`` instead.
+    """
+
+    name = "Achievement"
+    name_plural = "Achievements"
+    icon = "fa-solid fa-medal"
+    can_create = True
+    can_edit = True
+    can_delete = False
+    can_export = False
+    column_list = [
+        AchievementModel.id,
+        AchievementModel.fact,
+        AchievementModel.threshold,
+        AchievementModel.reward_coins,
+        AchievementModel.active,
+    ]
+    column_searchable_list = [AchievementModel.id]
+    form_columns = [
+        AchievementModel.id,
+        AchievementModel.fact,
+        AchievementModel.threshold,
+        AchievementModel.reward_coins,
+        AchievementModel.active,
+    ]
+
+
+class UserAchievementAdmin(ReadOnlyView, model=UserAchievementModel):
+    """Who unlocked what, and when -- for support, not for editing (the
+    ledger entry it paid, if any, is the source of truth for the coins)."""
+
+    name = "Unlocked achievement"
+    name_plural = "Unlocked achievements"
+    icon = "fa-solid fa-trophy"
+    column_list = [
+        UserAchievementModel.user_id,
+        UserAchievementModel.achievement_id,
+        UserAchievementModel.unlocked_at,
+    ]
+    column_sortable_list = [UserAchievementModel.unlocked_at]
+    column_default_sort = (UserAchievementModel.unlocked_at, True)
+
+
 VIEWS: tuple[type[ModelView], ...] = (
     UserAdmin,
     VenueAdmin,
@@ -373,6 +428,8 @@ VIEWS: tuple[type[ModelView], ...] = (
     AvatarAdmin,
     RewardRuleAdmin,
     ChallengeAdmin,
+    AchievementAdmin,
+    UserAchievementAdmin,
 )
 
 

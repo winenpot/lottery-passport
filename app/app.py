@@ -24,6 +24,7 @@ from app.api.middleware import (
     RequestLoggingMiddleware,
 )
 from app.api.routes import router
+from app.application.achievements import AchievementService
 from app.application.admin_users import AdminUserService
 from app.application.app_config import AppConfigService
 from app.application.authentication import AuthenticationService, AuthenticationSettings
@@ -50,6 +51,7 @@ from app.infrastructure.authentication import (
 from app.infrastructure.postgres.database import PostgreSQLAdapter
 from app.infrastructure.postgres.failure_throttle import PostgreSQLFailureThrottle
 from app.infrastructure.postgres.repositories import (
+    PostgreSQLAchievementsReader,
     PostgreSQLAvatarCatalogue,
     PostgreSQLChallengeRepository,
     PostgreSQLChallengesReader,
@@ -106,6 +108,13 @@ OPENAPI_TAGS = [
         "name": "challenges",
         "description": (
             "Automatic challenges and claims. See API_CONTRACT.md#challenges."
+        ),
+    },
+    {
+        "name": "achievements",
+        "description": (
+            "Auto-unlocked, auto-paid milestones (streaks today). No claim "
+            "step. See API_CONTRACT.md#achievements."
         ),
     },
     {
@@ -219,6 +228,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         clock=SystemClock(),
         zone=resolved_settings.campaign_zone,
     )
+    achievement_service = AchievementService(
+        reader=PostgreSQLAchievementsReader(database.session_factory),
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -317,6 +329,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.team_service = team_service
     application.state.me_service = me_service
     application.state.challenge_service = challenge_service
+    application.state.achievement_service = achievement_service
     application.state.sms_sender = sms_sender
     application.state.settings = resolved_settings
     return application
