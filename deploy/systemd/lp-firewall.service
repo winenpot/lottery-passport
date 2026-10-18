@@ -1,0 +1,15 @@
+# Installed by deploy/server/install-app.sh (@USER@ unused here, @BASE@ replaced).
+# Re-applies the "origin ports only for ArvanCloud" rules after Docker (re)starts.
+[Unit]
+Description=lottery-passport: origin ports only for ArvanCloud (DOCKER-USER)
+After=docker.service
+Requires=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=@BASE@/repo/deploy/server/firewall.sh
+
+[Install]
+WantedBy=docker.service

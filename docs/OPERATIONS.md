@@ -57,60 +57,40 @@ thing a server needs from outside is `ghcr.io` (public image, no login) and `git
 
 ## Server setup (once per VM)
 
-Ubuntu Server 24.04 LTS. `<user>` is the deploy user (`data` on atpg; `deploy` on
-production, created for this); it must be in the `docker` group.
+Two idempotent scripts in [`deploy/server/`](../deploy/server/) do it all; run them again
+any time. `<user>` is the deploy user (`data` on atpg, `torshx` on production); it needs
+passwordless sudo for setup only.
 
 ```bash
-# 1. Production VM only: updates, firewall, time, SSH (atpg is already managed)
-apt-get update && apt-get -y upgrade
-apt-get -y install ufw unattended-upgrades git curl restic fail2ban
-timedatectl set-timezone UTC            # the server runs in UTC; Tehran time is an app setting
-# SSH keys only, after a second key login works:
-sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication no/; s/^#\?PermitRootLogin .*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
-systemctl restart ssh
-# Firewall: ufw does NOT filter ports published by Docker (Docker writes its own
-# iptables rules). Use ufw for SSH, and the DOCKER-USER chain for 80/443 (below).
-ufw default deny incoming && ufw default allow outgoing
-ufw allow from <your-office-or-vpn-ip> to any port 22 proto tcp
-ufw enable
+# on the server, as <user>
+git clone https://github.com/winenpot/lottery-passport.git /tmp/lp && cd /tmp/lp
 
-# 2. Docker Engine + Compose plugin (provider mirror of Docker's apt repository, or
-#    Ubuntu's packages), then a Docker Hub mirror and log limits in /etc/docker/daemon.json:
-#    {"registry-mirrors": ["https://docker.arvancloud.ir"],
-#     "log-driver": "json-file", "log-opts": {"max-size": "20m", "max-file": "5"}}
-systemctl restart docker
+# 1. Production VM only (atpg is a shared, already-managed server):
+#    snaps removed, desktop services off and masked, text mode, updates, Docker (Ubuntu's
+#    packages, the same versions as atpg) with the domestic Docker Hub mirrors and log
+#    limits, UTC, journal capped at 500 MB, automatic security updates, ufw = SSH only.
+sudo deploy/server/provision.sh
+#    after a provider snapshot: uninstall the desktop packages too
+sudo deploy/server/provision.sh --purge-desktop
+#    after the owner's key is in authorized_keys and a key login works (it refuses otherwise):
+sudo deploy/server/provision.sh --harden-ssh
 
-# 3. Layout (deploy/compose.yml explains each directory)
-base=/opt/lottery-passport              # staging: /home/data/lottery-passport
-install -d -o <user> -g <user> -m 750 "$base" "$base/state" "$base/site" "$base/web/releases"
-install -d -o <user> -g <user> -m 700 "$base/var"
-sudo -u <user> git clone https://github.com/winenpot/lottery-passport.git "$base/repo"
-sudo -u <user> cp "$base/repo/deploy/site-examples/"*.conf "$base/site/"   # staging: admin_allow.conf = "allow all;"
-
-# 4. Settings: start from the example, generate every secret ON the server
-sudo -u <user> install -m 600 "$base/repo/deploy/env/<staging|production>.env.example" "$base/.env"
-#    edit .env; e.g. openssl rand -base64 48 | tr -d '\n/+=' | cut -c1-48 for each <generated>
-
-# 5. The deploy agent
-sed -e "s|@USER@|<user>|g" -e "s|@BASE@|$base|g" "$base/repo/deploy/systemd/lp-deploy.service" \
-  > /etc/systemd/system/lp-deploy.service
-cp "$base/repo/deploy/systemd/lp-deploy.timer" /etc/systemd/system/
-systemctl daemon-reload && systemctl enable --now lp-deploy.timer
-journalctl -u lp-deploy -f                                    # watch the first deploy
+# 2. The stack: layout, repo clone, .env with every secret generated on the server (never
+#    printed), placeholder page, a temporary self-signed certificate on production,
+#    lp-firewall.service and lp-deploy.timer (the first deploy follows within a minute).
+sudo deploy/server/install-app.sh production /opt/lottery-passport torshx
+#    then fill the values it lists (Kavenegar key) in /opt/lottery-passport/.env
+journalctl -u lp-deploy -f
 ```
 
-**Origin port only for ArvanCloud.** Everyone must come through Arvan (TLS, WAF, client IP
-header). Docker-published ports bypass ufw, so filter them in `DOCKER-USER`, using the same
-ranges as `deploy/nginx/snippets/arvan_realip.conf` (example for staging's 8098; production
-uses 80 and 443):
-
-```bash
-for r in $(grep -oP '(?<=set_real_ip_from )[0-9./]+' "$base/repo/deploy/nginx/snippets/arvan_realip.conf"); do
-  iptables -I DOCKER-USER -p tcp -m conntrack --ctorigdstport 8098 -s "$r" -j RETURN
-done
-iptables -A DOCKER-USER -p tcp -m conntrack --ctorigdstport 8098 -j DROP
-# persist (iptables-persistent / netfilter-persistent save) and re-run after Arvan changes its list
-```
+**Origin ports only for ArvanCloud.** Everyone must come through Arvan (TLS, WAF, client IP
+header). Docker-published ports bypass ufw, so
+[`deploy/server/firewall.sh`](../deploy/server/firewall.sh) (run by `lp-firewall.service`
+whenever Docker starts) rebuilds a chain `LP-ORIGIN` under `DOCKER-USER`: the published ports
+(8098 on staging; 80 and 443 on production) accept new connections only from the ranges in
+`deploy/nginx/snippets/arvan_realip.conf`. After Arvan changes its list: refresh that file
+(`deploy/nginx/update_arvan_ips.sh`), commit, and the next deploy plus
+`sudo systemctl restart lp-firewall` apply it.
 
 Check that Ubuntu's clock is synchronized (`timedatectl`). If international NTP servers are
 unreachable, configure the domestic NTP servers your provider documents.

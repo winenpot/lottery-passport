@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+# Provision a fresh Ubuntu VM as a lottery-passport host (production).
+# Idempotent: safe to run again. Run as root (sudo). See docs/OPERATIONS.md.
+#
+#   sudo deploy/server/provision.sh                 trim + packages + Docker + host settings
+#   sudo deploy/server/provision.sh --purge-desktop  also uninstall the desktop (take a
+#                                                    provider snapshot first)
+#   sudo deploy/server/provision.sh --harden-ssh     keys only, no root login; refuses
+#                                                    unless 2+ keys are authorized
+#
+# Not for atpg: it is a shared server with its own setup.
+set -euo pipefail
+
+# Services a server never needs (desktop image leftovers). Disabled, not
+# removed, so the first step is reversible.
+DESKTOP_SERVICES=(
+    gdm cups cups-browsed avahi-daemon colord ModemManager wpa_supplicant fwupd
+    power-profiles-daemon switcheroo-control upower udisks2 accounts-daemon
+    rtkit-daemon whoopsie apport kerneloops snapd snapd.socket snapd.apparmor
+)
+# Kept explicitly: apt's autoremove after purging the desktop would otherwise
+# take them along. NetworkManager holds this server's IP address.
+KEEP_PACKAGES=(
+    network-manager openssh-server systemd-resolved chrony cron rsyslog
+    unattended-upgrades open-vm-tools ufw iptables nftables sudo
+    ca-certificates curl git restic docker.io docker-compose-v2
+)
+DESKTOP_PACKAGES=(
+    'ubuntu-desktop*' 'gnome-*' 'gdm3' 'evolution*' 'ibus*' 'update-notifier*'
+    'apport*' 'cups*' 'avahi-*' 'colord*' 'modemmanager' 'fwupd*'
+    'xwayland' 'mutter*' 'yelp*' 'libreoffice*' 'thunderbird*' 'whoopsie'
+)
+
+main() {
+    [[ $EUID -eq 0 ]] || die "run as root (sudo)"
+    local purge=0 harden=0
+    for arg in "$@"; do
+        case "$arg" in
+            --purge-desktop) purge=1 ;;
+            --harden-ssh) harden=1 ;;
+            *) die "unknown option $arg" ;;
+        esac
+    done
+
+    step "snaps removed (needs snapd running, so before the services go)"
+    remove_snaps
+
+    step "text mode, desktop services off"
+    systemctl set-default multi-user.target >/dev/null
+    for unit in "${DESKTOP_SERVICES[@]}"; do
+        if systemctl list-unit-files "$unit*" --no-legend 2>/dev/null | grep -q .; then
+            systemctl disable --now "$unit" >/dev/null 2>&1 || true
+            systemctl mask "$unit" >/dev/null 2>&1 || true
+        fi
+    done
+
+    step "packages"
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -q
+    apt-get -y -q -o Dpkg::Options::=--force-confold upgrade
+    apt-get -y -q install --no-install-recommends "${KEEP_PACKAGES[@]}"
+    apt-mark manual "${KEEP_PACKAGES[@]}" >/dev/null
+
+    if [[ $purge -eq 1 ]]; then
+        step "purge desktop packages"
+        # shellcheck disable=SC2068 # globs are for apt, not the shell
+        apt-get -y -q purge ${DESKTOP_PACKAGES[@]} || true
+        apt-get -y -q autoremove --purge
+        apt-get -y -q purge snapd || true
+    fi
+
+    step "time, journal, automatic security updates"
+    timedatectl set-timezone UTC
+    install -d /etc/systemd/journald.conf.d
+    printf '[Journal]\nSystemMaxUse=500M\n' >/etc/systemd/journald.conf.d/lp.conf
+    systemctl restart systemd-journald
+    printf 'APT::Periodic::Update-Package-Lists "1";\nAPT::Periodic::Unattended-Upgrade "1";\n' \
+        >/etc/apt/apt.conf.d/20auto-upgrades
+
+    step "Docker: domestic Docker Hub mirrors, log limits, live restore"
+    install -d /etc/docker
+    cat >/etc/docker/daemon.json <<'JSON'
+{
+  "registry-mirrors": [
+    "https://docker.arvancloud.ir",
+    "https://docker.iranserver.com",
+    "https://registry.docker.ir"
+  ],
+  "log-driver": "json-file",
+  "log-opts": {"max-size": "20m", "max-file": "5"},
+  "live-restore": true
+}
+JSON
+    systemctl enable docker >/dev/null
+    systemctl restart docker
+    if [[ -n "${SUDO_USER:-}" ]]; then
+        usermod -aG docker "$SUDO_USER"
+    fi
+
+    step "host firewall (SSH only; Docker-published ports: lp-firewall.service)"
+    local ssh_port
+    ssh_port="$(sshd -T 2>/dev/null | awk '$1 == "port" {print $2; exit}')"
+    ufw default deny incoming >/dev/null
+    ufw default allow outgoing >/dev/null
+    ufw allow "${ssh_port:-22}/tcp" >/dev/null
+    ufw --force enable >/dev/null
+
+    if [[ $harden -eq 1 ]]; then
+        harden_ssh
+    fi
+
+    step "done"
+    free -m | sed -n 2p
+    systemctl list-units --type=service --state=running --no-legend --plain |
+        awk '{print $1}' | tr '\n' ' '
+    echo
+}
+
+remove_snaps() {
+    command -v snap >/dev/null || return 0
+    # Apps first, then the runtimes they depend on, snapd last.
+    local name
+    for _ in 1 2 3; do
+        while read -r name; do
+            [[ -n "$name" && "$name" != snapd ]] || continue
+            snap remove --purge "$name" >/dev/null 2>&1 || true
+        done < <(snap list 2>/dev/null | awk 'NR > 1 {print $1}')
+    done
+}
+
+harden_ssh() {
+    step "SSH: keys only, no root login"
+    local user="${SUDO_USER:-root}" keys
+    keys="$(grep -cE '^(ssh-|ecdsa-|sk-)' "$(getent passwd "$user" | cut -d: -f6)/.ssh/authorized_keys" || true)"
+    if [[ "${keys:-0}" -lt 2 ]]; then
+        echo "  REFUSED: $user has $keys authorized key(s). Add the owner's key too, and test" >&2
+        echo "  a key login, or nobody but the deploy machine can get in afterwards." >&2
+        return 1
+    fi
+    cat >/etc/ssh/sshd_config.d/10-lp-hardening.conf <<'CONF'
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+CONF
+    sshd -t
+    systemctl reload ssh
+}
+
+step() { printf '\n== %s\n' "$*"; }
+die() {
+    echo "provision.sh: $*" >&2
+    exit 1
+}
+
+main "$@"
