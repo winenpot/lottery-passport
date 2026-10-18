@@ -1,6 +1,6 @@
 # ADR-0006: Domestic hosting on a single VM with Docker Compose
 
-**Status:** Accepted (supersedes the Render demo deployment in `render.yaml`)
+**Status:** Accepted (supersedes the Render demo deployment; `render.yaml` removed 2026-10-18, deploys per ADR-0010)
 **Date:** 2026-10-07
 **Deciders:** Backend developer; CEO (cost)
 
@@ -16,7 +16,7 @@ regions is high. The team has no dedicated DevOps person.
 - Host staging and production on **Iranian VMs** (two separate VMs), each running Docker Compose with nginx, api, worker and postgres.
 - Keep everything on the request path domestic: fonts, scripts, images, SMS providers, monitoring targets.
 - Off-site backups go to a second location (another domestic provider's object storage; a copy abroad is optional and is not on the request path).
-- Keep `render.yaml` only as a historical demo artefact; do not use it for this campaign.
+- ~~Keep `render.yaml` only as a historical demo artefact.~~ Removed 2026-10-18; the Render demo is retired.
 
 ## Options considered
 

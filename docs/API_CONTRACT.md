@@ -17,6 +17,15 @@ Parked features (not in the MVP contract): the city passport. See
 Newest first. **Breaking** means a call that worked before needs a change on your side.
 Check `GET /health` → `commit` to see which backend commit is deployed on the demo.
 
+**2026-10-18 (staging moves home)**
+
+- The Render test API (`lottery-passport.onrender.com`) is retired. Staging is
+  `https://staging.torshx.com`: the frontend build and the API on ONE origin (`/api/*`,
+  `/health`, `/ready`, `/docs`, `/admin` go to the API, everything else is the build). No
+  CORS, `SameSite=Lax` cookie, no cold start. Every master commit that passes CI deploys
+  there automatically; `GET /health` → `commit` shows which one is live.
+- Production will be `https://play.torshx.com`, same layout.
+
 **2026-10-18 (staging SMS gates)**
 
 - Added: `403 PHONE_NOT_ALLOWED` on `POST /auth/request`: on the staging server real SMS go
@@ -174,12 +183,12 @@ Check `GET /health` → `commit` to see which backend commit is deployed on the 
 
 ## Hosts, CORS and cookies
 
-Hostnames are **not final**. Current assumption:
+| Environment | Frontend and API (one origin) | Database |
+|---|---|---|
+| Staging | `https://staging.torshx.com` | Its own PostgreSQL, test data |
+| Production | `https://play.torshx.com` | Its own PostgreSQL |
 
-| Environment | Frontend | API | Database |
-|---|---|---|---|
-| Test (now) | `torshx.com` or a preview URL | Render web service (`https://<service>.onrender.com`) | Supabase Postgres |
-| Production | `torshx.com` (subject to change) | `api.torshx.com`, or same origin under `/api` (to decide) | to decide |
+Printed QR codes point at `https://torshx.com/b/<code>`, which redirects to the app.
 
 Rules that hold whatever the final names are:
 
@@ -191,9 +200,9 @@ Rules that hold whatever the final names are:
    of origins (`CORS_ORIGINS`, never `*`), and the cookie is `SameSite=Lax` with no
    `Domain` attribute.
 3. **Never rely on a cross-site cookie** (frontend on `torshx.com`, API on
-   `onrender.com`). Safari and Firefox block third-party cookies, so sign-in would work in
-   desktop Chrome and fail on iPhone. To test against Render, use rule 1 (proxy) or the
-   Vite dev proxy (`server.proxy`).
+   another registrable domain). Safari and Firefox block third-party cookies, so sign-in
+   would work in desktop Chrome and fail on iPhone. For local work, use the Vite dev proxy
+   (`server.proxy`) against staging.
 4. Plain `http://<ip>:<port>` frontends (the current demo) are cross-site **and** insecure.
    Browsers allow the camera (QR scanning), WebOTP and `Secure` cookies only on HTTPS
    pages, and Safari blocks the cross-site cookie anyway. They are fine for looking at
@@ -207,9 +216,8 @@ Rules that hold whatever the final names are:
    `403 CSRF_REJECTED`. **Send it on every write, sign-in calls included**: the check applies
    whenever the browser still holds a session cookie, even an expired one, so a returning
    player's `POST /auth/request` without the header would be rejected.
-7. **Demo only (Render):** the cookie is `SameSite=None; Secure` so the cross-site demo
-   frontend can sign in from Chrome. Safari, Firefox (strict) and private windows may still
-   drop it; rules 1-4 are the real fix and staging/production use `SameSite=Lax`.
+7. Staging and production use `SameSite=Lax`. `SameSite=None` exists only for a
+   cross-site setup and is not used by any deployed environment.
 
 ## Errors
 
@@ -1188,14 +1196,13 @@ never shift or repeat rows. Errors: `CURSOR_INVALID`, `ADMIN_REQUIRED`, `AUTH_RE
 `GET /health` → `{"status": "ok", "version": "0.1.0", "commit": "579f8f1", "environment": "demo"}`
 (process is up; `commit` is the deployed git commit, so you can tell whether a backend change is
 live yet; null when unknown). `GET /ready` → `{"status": "ready"}`, or `503 SERVICE_UNAVAILABLE`
-if the database is unreachable. Not under `/api/v1`; used by monitoring and the Render health
-check. The first call after a quiet period on the free Render plan can take about a minute
-(the service sleeps); call `/health` once before a test session.
+if the database is unreachable. Not under `/api/v1`; used by the deploy agent, CI and uptime
+checks.
 
 ## OpenAPI
 
 - `GET /openapi.json`, Swagger UI at `/docs` and ReDoc at `/redoc` are on in development
-  and test (Render). In production they are off, or behind admin auth.
+  and on staging. In production they answer 404.
 - Every endpoint has a tag matching a section of this file, a summary, typed request and
   response models with examples, and the list of error codes it can return.
 - `operationId`s are stable (for example `redeem_code`, `get_spin`), so the frontend can

@@ -3,18 +3,17 @@
 Usage (stdlib only, nothing to install)::
 
     uv run python -m scripts.smoke_demo \\
-        --base-url https://lottery-passport.onrender.com \\
-        --origin http://86.104.82.71:8000 \\
+        --base-url https://staging.torshx.com \\
+        --origin https://staging.torshx.com \\
         [--code TO-XXX-XXX-XXX]
 
 It behaves like the browser app: sends ``Origin``, keeps the session cookie,
 adds ``X-Requested-With`` on writes. Sign-in uses a random ``0969`` test
-number (demo only: the API returns the code in ``test_code``), so run it
-against the demo, never production. ``--code`` redeems one demo code twice
+number (demo/staging only: the API returns the code in ``test_code``), so run
+it against staging, never production. ``--code`` redeems one demo code twice
 (second call must be an idempotent replay); without it that step is skipped.
 
-Exit status 1 if any step fails. The first request is timed on its own: on the
-free Render plan it shows the cold-start wait.
+Exit status 1 if any step fails. The first request is timed on its own.
 """
 
 import argparse
@@ -374,15 +373,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--origin",
         required=True,
-        help="the frontend origin to send, e.g. http://86.104.82.71:8000",
+        help="the frontend origin to send, e.g. https://staging.torshx.com",
     )
     parser.add_argument("--code", help="one demo code to redeem (twice: first, replay)")
     arguments = parser.parse_args(argv)
-    if (
-        "onrender.com" not in arguments.base_url
-        and "localhost" not in arguments.base_url
-    ):
-        print("note: this signs in with 0969 test numbers; use it on the demo only")
+    if "staging" not in arguments.base_url and "localhost" not in arguments.base_url:
+        print("note: this signs in with 0969 test numbers; use it on staging only")
     report = Report()
     run(
         Client(arguments.base_url, arguments.origin),

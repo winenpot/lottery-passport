@@ -26,8 +26,8 @@ def test_health_shows_the_deployed_commit_shortened() -> None:
     assert body["commit"] == "579f8f1"
 
 
-def test_render_commit_variable_is_the_source(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("RENDER_GIT_COMMIT", "abcdef1234567")
+def test_git_commit_variable_is_the_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GIT_COMMIT", "abcdef1234567")
     assert Settings(_env_file=None).git_commit == "abcdef1234567"  # type: ignore[call-arg]
 
 

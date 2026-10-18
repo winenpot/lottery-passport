@@ -130,4 +130,5 @@ deployment files, load-test tooling. 131 automated tests, including concurrency 
 
 Not yet: phone/SMS sign-in (still email; B10–B11), profile and lounges, challenges,
 submissions, leaderboard, tournaments, admin panel. The day-by-day plan is in [ROADMAP.md](ROADMAP.md).
-`render.yaml` is the original demo deployment and is not used for the campaign.
+Deployment: CI builds one image per commit; staging (atpg) deploys it automatically, production
+after an approved release. See [docs/OPERATIONS.md](docs/OPERATIONS.md#deploying-a-release).

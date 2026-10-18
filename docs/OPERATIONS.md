@@ -272,10 +272,8 @@ written; a test proves that OTP codes, session tokens and full phone numbers nev
 
 A user's `request_id` (from an error body or the `X-Request-ID` header) finds the exact line.
 
-- **Render demo**: dashboard, service, Logs (search the `request_id`); live tail with
-  `render logs` (Render CLI). Hobby workspaces keep 7 days; over 6,000 lines a minute per
-  instance are dropped. Optional: a Log Stream to Better Stack (free: 3 GB a month, 3 days).
-- **Production VM**: `docker compose logs api --since 1h | grep csrf_rejected`. Size: roughly
+- **Staging and production**: `deploy/compose.sh logs api --since 1h | grep csrf_rejected`
+  (on the server, from the base directory). Size: roughly
   1 GB a day uncompressed at 100k daily players, so plain files are enough for search; keep them
   with daily rotation and gzip (the Docker default of `20m x 5` holds only about two hours at
   peak), and decide how long phone and IP data may be kept.

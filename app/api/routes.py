@@ -69,7 +69,9 @@ async def health(request: Request) -> LivenessResponse:
     response_model=HealthResponse,
     tags=["health"],
     summary="Database readiness",
-    description="503 if the database is unreachable. Used by the Render health check.",
+    description=(
+        "503 if the database is unreachable. Used by deploy checks and uptime probes."
+    ),
     responses={503: {"model": ErrorResponse, "description": "Database unreachable"}},
 )
 async def ready(

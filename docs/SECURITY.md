@@ -127,19 +127,20 @@ Submission URLs: parse, accept only `https://instagram.com` or `https://www.inst
   player cookie is, ends after 1 hour idle or 8 hours total. Panel forms cannot send
   `X-Requested-With`, so `CsrfMiddleware` instead rejects any `/admin` write whose `Origin`
   is not the panel's own host. Exports are off (they would put phone numbers in files).
-  **Not yet:** the IP allow-list (needs nginx, B23; the Render demo has none), the audit log
+  **Not yet:** the IP allow-list (nginx `site/admin_allow.conf`, live with the server nginx), the audit log
   (step 2) and write actions (step 3).
 
 ## Secrets inventory
 
 | Secret | Used by | Stored in | Rotation |
 |---|---|---|---|
+| (none in GitHub) | CI | CI only uses its own `GITHUB_TOKEN` to push images; servers pull, so no deploy key or server secret is stored in GitHub | n/a |
 | `REDEMPTION_CODE_PEPPER` | API, code generator | Password manager (two holders), server `.env` | **Never after codes are printed**: all hashes depend on it. If it leaks: void affected batches, print new ones with a new pepper (a second-pepper scheme would be needed; ask before doing this) |
 | OTP secret (B10) | API | Password manager, `.env` | Any time; outstanding codes just stop working |
 | Database passwords | API, worker, backups | `.env` on the server | On staff change |
 | SMS provider API keys | Worker | `.env` | On staff change; immediately if leaked (the key is part of the request URL for some providers, so never log URLs) |
 | Backup repository password | Backup job | Password manager (two holders) | Rarely; losing it loses every backup |
-| `ADMIN_SESSION_SECRET` | API (admin panel cookie) | `.env` / Render env | Any time; every admin signs in again |
+| `ADMIN_SESSION_SECRET` | API (admin panel cookie) | server `.env` | Any time; every admin signs in again |
 
 ## Logging and privacy
 

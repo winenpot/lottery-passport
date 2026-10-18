@@ -2,8 +2,8 @@
 
 Quick commands for day-to-day work. Run from the repo root. Scripts talk to the
 database in `DATABASE_URL` (from `.env`), so check which database that is first.
-In production, prefix with
-`docker compose -f compose.prod.yml run --rm api` and drop `uv run`.
+On a server, prefix with
+`docker compose -f deploy/compose.yml run --rm api` and drop `uv run`.
 
 ## Which database am I on?
 
@@ -12,7 +12,7 @@ In production, prefix with
 grep '^DATABASE_URL' .env | sed -E 's#//[^@]*@#//***@#'
 ```
 
-Port 6543 is the Supabase PgBouncer pooler.
+Port 6543 is the (retired) Supabase PgBouncer pooler.
 
 ## Admins
 
@@ -101,24 +101,25 @@ uv run python -m scripts.export_openapi     # refresh docs/openapi.json after ro
 Run the first four before every commit; CI fails on ruff errors. Commit messages
 need a gitmoji, a type and a description, e.g. `✨ feat(auth): add login`.
 
-## Demo smoke test (before telling the frontend a change is live)
+## Staging smoke test (before telling the frontend a change is live)
 
-Runs the whole frontend path against the Render demo (CORS, error shape, test-number sign-in,
-cookie, CSRF, profile, scan, sign-out). Needs one fresh demo code per run.
+Runs the whole frontend path against staging (error shape, test-number sign-in, cookie,
+CSRF, profile, scan, sign-out). Needs one fresh staging code per run, generated ON the
+staging server (its pepper never leaves it).
 
 ```bash
-# one-off: 3 demo codes, activate the batch (prints the batch id)
-set -a; . ./.env; set +a
-uv run python -m scripts.generate_codes --city tokyo --quantity 3 --coins-per-code 10 \
-  --label "DEMO smoke-test codes" --base-url http://86.104.82.71:8000 \
-  --output var/redemption-codes/demo-smoke-N.csv
-uv run python -m scripts.code_batches activate <batch-id>
-# every run
-uv run python -m scripts.smoke_demo --base-url https://lottery-passport.onrender.com \
-  --origin http://86.104.82.71:8000 --code <one printed_code from the CSV>
+# on atpg (ssh atpg), one-off: 3 staging codes, activate the batch (prints the batch id)
+cd /home/data/lottery-passport
+repo/deploy/compose.sh run --rm -v "$PWD/var:/app/var" api python -m scripts.generate_codes \
+  --city tokyo --quantity 3 --coins-per-code 10 --label "STAGING smoke-test codes" \
+  --base-url https://staging.torshx.com --output var/redemption-codes/smoke-N.csv
+repo/deploy/compose.sh run --rm api python -m scripts.code_batches activate <batch-id>
+# every run, from your machine
+uv run python -m scripts.smoke_demo --base-url https://staging.torshx.com \
+  --origin https://staging.torshx.com --code <one printed_code from the CSV>
 ```
 
-The demo shares its pepper with the local `.env`; never use that pepper for a print run.
+Never use a staging pepper for a print run.
 
 ## Dependencies
 

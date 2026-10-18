@@ -4,7 +4,7 @@ from typing import Literal, Self
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.domain.phone import PhoneNumberError, normalize_iranian_mobile
@@ -13,11 +13,9 @@ from app.domain.phone import PhoneNumberError, normalize_iranian_mobile
 class Settings(BaseSettings):
     app_name: str = "Lottery Passport API"
     environment: str = "development"
-    # The deployed commit, shown by GET /health. Render sets RENDER_GIT_COMMIT;
-    # anywhere else set GIT_COMMIT at build/deploy time. None when unknown.
-    git_commit: str | None = Field(
-        default=None, validation_alias=AliasChoices("GIT_COMMIT", "RENDER_GIT_COMMIT")
-    )
+    # The deployed commit, shown by GET /health. Baked into the image at build
+    # time (Dockerfile ARG GIT_COMMIT, set by CI). None when unknown.
+    git_commit: str | None = None
     port: int = Field(default=8000, ge=1, le=65535)
     forwarded_allow_ips: str = "127.0.0.1"
     redemption_code_pepper: SecretStr | None = None

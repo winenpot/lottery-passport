@@ -1,12 +1,10 @@
 # Production image for the API and the worker.
 #
-# Built on the server itself (docs/OPERATIONS.md). Two things make that work
-# from inside Iran:
-#   * the base image comes through a Docker Hub mirror configured in
-#     /etc/docker/daemon.json ("registry-mirrors"), or a pre-loaded image;
-#   * Python packages come from requirements.txt, exported from uv.lock WITH
-#     hashes, so any PyPI mirror can be used (PIP_INDEX_URL) without trusting
-#     it: pip refuses a package whose hash does not match.
+# Built once per commit by CI and pushed to GHCR; servers only pull it
+# (docs/adr/0010-pull-based-deploys-from-ghcr.md). A local build from inside
+# Iran still works: Python packages come from requirements.txt, exported from
+# uv.lock WITH hashes, so any PyPI mirror can be used (PIP_INDEX_URL) without
+# trusting it: pip refuses a package whose hash does not match.
 # Pin the base image by digest once you have pulled it once:
 #   FROM python:3.13-slim-bookworm@sha256:<digest>
 FROM python:3.13-slim-bookworm AS runtime
@@ -33,6 +31,11 @@ COPY alembic.ini main.py ./
 
 RUN chown -R app:app /app
 USER app
+
+# The commit GET /health reports; CI passes it (--build-arg GIT_COMMIT=<sha>).
+# Late in the file so a new commit does not invalidate the dependency layer.
+ARG GIT_COMMIT=
+ENV GIT_COMMIT=${GIT_COMMIT}
 
 EXPOSE 8000
 

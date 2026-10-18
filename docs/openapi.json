@@ -2223,7 +2223,7 @@
     },
     "/ready": {
       "get": {
-        "description": "503 if the database is unreachable. Used by the Render health check.",
+        "description": "503 if the database is unreachable. Used by deploy checks and uptime probes.",
         "operationId": "ready",
         "responses": {
           "200": {
