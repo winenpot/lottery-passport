@@ -56,17 +56,20 @@ main() {
 
     step "packages"
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update -q
-    apt-get -y -q -o Dpkg::Options::=--force-confold upgrade
-    apt-get -y -q install --no-install-recommends "${KEEP_PACKAGES[@]}"
+    # A fresh VM runs apt on its own at boot (unattended-upgrades, the desktop
+    # updater): wait for its lock instead of failing.
+    local apt=(apt-get -q -o DPkg::Lock::Timeout=900)
+    "${apt[@]}" update
+    "${apt[@]}" -y -o Dpkg::Options::=--force-confold upgrade
+    "${apt[@]}" -y install --no-install-recommends "${KEEP_PACKAGES[@]}"
     apt-mark manual "${KEEP_PACKAGES[@]}" >/dev/null
 
     if [[ $purge -eq 1 ]]; then
         step "purge desktop packages"
         # shellcheck disable=SC2068 # globs are for apt, not the shell
-        apt-get -y -q purge ${DESKTOP_PACKAGES[@]} || true
-        apt-get -y -q autoremove --purge
-        apt-get -y -q purge snapd || true
+        "${apt[@]}" -y purge ${DESKTOP_PACKAGES[@]} || true
+        "${apt[@]}" -y autoremove --purge
+        "${apt[@]}" -y purge snapd || true
     fi
 
     step "time, journal, automatic security updates"
