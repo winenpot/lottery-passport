@@ -134,6 +134,8 @@ JSON
 
 remove_snaps() {
     command -v snap >/dev/null || return 0
+    # snapd masked by an earlier run: `snap` would wait for it forever.
+    systemctl is-active --quiet snapd.socket snapd || return 0
     # Apps first, then the runtimes they depend on, snapd last.
     local name
     for _ in 1 2 3; do
