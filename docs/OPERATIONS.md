@@ -144,7 +144,7 @@ Config changes ship like code: commit, CI, and `deploy.sh` runs `nginx -t` befor
   ```bash
   curl https://get.acme.sh | sh -s email=<you>
   export Arvan_Token="<token from the Arvan panel, DNS scope only>"
-  ~/.acme.sh/acme.sh --issue --dns dns_arvan -d play.torshx.com --server letsencrypt
+  ~/.acme.sh/acme.sh --issue --dns dns_arvan -d play.torshx.com -d torshx.com --server letsencrypt
   ~/.acme.sh/acme.sh --install-cert -d play.torshx.com \
     --key-file /opt/lottery-passport/tls/privkey.pem \
     --fullchain-file /opt/lottery-passport/tls/fullchain.pem \

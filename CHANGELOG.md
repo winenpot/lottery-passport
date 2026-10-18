@@ -13,6 +13,8 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
   rollback; production follows an approved `v*` release (no rebuild). One nginx config for
   both environments (`deploy/nginx/`), Arvan client IP, `/b/` and `/q/` redacted in logs.
   Replaces `compose.prod.yml` and the build-on-server `deploy.sh`.
+- Production nginx answers the bare domain `torshx.com` (where printed QR codes point):
+  `/b/*` and `/q/*` 302 to `play.torshx.com`, everything else to `www.torshx.com`.
 - Server setup as idempotent scripts: `deploy/server/provision.sh` (trim a desktop image,
   Docker with domestic mirrors, host settings, optional SSH hardening that refuses to lock
   the owner out), `install-app.sh` (layout, generated secrets, systemd units) and
