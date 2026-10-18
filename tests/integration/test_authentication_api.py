@@ -9,8 +9,10 @@ from app.infrastructure.sms import ConsoleSmsSender
 
 
 def random_iranian_phone() -> str:
-    subscriber = "".join(str(random.randint(0, 9)) for _ in range(9))
-    return f"+989{subscriber}"
+    # 0912 prefix: never a 0969 test number, which would answer with test_code
+    # (a fully random subscriber number hit 0969 once in ~100 runs).
+    subscriber = "".join(str(random.randint(0, 9)) for _ in range(7))
+    return f"+98912{subscriber}"
 
 
 @pytest.mark.asyncio
