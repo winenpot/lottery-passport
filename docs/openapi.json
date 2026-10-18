@@ -269,6 +269,11 @@
             "title": "Server Time",
             "type": "string"
           },
+          "terms_required": {
+            "description": "false: signing up and scanning do not need accepted terms (test environments until the legal text exists). Always true in production.",
+            "title": "Terms Required",
+            "type": "boolean"
+          },
           "terms_version": {
             "title": "Terms Version",
             "type": "string"
@@ -302,6 +307,7 @@
           "day_ends_at",
           "week_ends_at",
           "terms_version",
+          "terms_required",
           "limits",
           "nickname",
           "location_cities",
@@ -1637,7 +1643,7 @@
         ]
       },
       "patch": {
-        "description": "Send any of ``display_name``, ``nickname``, ``accept_terms_version``, ``home_venue_id``, ``location_city`` and ``avatar_id``; only the fields sent change. ``profile_complete`` becomes true once a nickname is set and the terms are accepted.",
+        "description": "Send any of ``display_name``, ``nickname``, ``accept_terms_version``, ``home_venue_id``, ``location_city`` and ``avatar_id``; only the fields sent change. ``profile_complete`` becomes true once a nickname is set and the terms are accepted (only the nickname when ``/config`` says ``terms_required: false``).",
         "operationId": "update_me",
         "requestBody": {
           "content": {

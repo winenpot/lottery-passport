@@ -8,6 +8,7 @@ from app.api.deps import (
     get_me_service,
     get_passport_service,
     get_profile_service,
+    get_terms_required,
 )
 from app.api.errors import ApiError, ErrorResponse
 from app.api.v1.schemas import (
@@ -38,10 +39,13 @@ _AUTH_REQUIRED: dict[int | str, dict[str, Any]] = {
 }
 
 
-async def _response(user: User, me_service: MeService) -> UserResponse:
+async def _response(
+    user: User, me_service: MeService, *, terms_required: bool
+) -> UserResponse:
     extras = await me_service.extras(user.id)
     return UserResponse.from_domain(
         user,
+        terms_required=terms_required,
         team=CAMPAIGN_BY_CITY[extras.team].value if extras.team else None,
         last_scanned_flavor=(
             CAMPAIGN_BY_CITY[extras.last_scanned_flavor].value
@@ -60,8 +64,9 @@ async def _response(user: User, me_service: MeService) -> UserResponse:
 async def get_me(
     current_user: Annotated[User, Depends(get_current_user)],
     me_service: Annotated[MeService, Depends(get_me_service)],
+    terms_required: Annotated[bool, Depends(get_terms_required)],
 ) -> UserResponse:
-    return await _response(current_user, me_service)
+    return await _response(current_user, me_service, terms_required=terms_required)
 
 
 @router.patch(
@@ -72,7 +77,8 @@ async def get_me(
         "Send any of ``display_name``, ``nickname``, ``accept_terms_version``, "
         "``home_venue_id``, ``location_city`` and ``avatar_id``; only the fields "
         "sent change. ``profile_complete`` becomes true once a nickname is set "
-        "and the terms are accepted."
+        "and the terms are accepted (only the nickname when ``/config`` says "
+        "``terms_required: false``)."
     ),
     responses={
         **_AUTH_REQUIRED,
@@ -92,6 +98,7 @@ async def update_me(
     auth_service: Annotated[AuthenticationService, Depends(get_authentication_service)],
     profile_service: Annotated[ProfileService, Depends(get_profile_service)],
     me_service: Annotated[MeService, Depends(get_me_service)],
+    terms_required: Annotated[bool, Depends(get_terms_required)],
 ) -> UserResponse:
     user = current_user
     sent = payload.model_fields_set
@@ -127,7 +134,7 @@ async def update_me(
         user = await auth_service.update_display_name(
             current_user.id, payload.display_name
         )
-    return await _response(user, me_service)
+    return await _response(user, me_service, terms_required=terms_required)
 
 
 @router.get(

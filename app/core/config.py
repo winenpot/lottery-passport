@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     campaign_timezone: str = "Asia/Tehran"
     # Current terms of service; players accept it by sending this exact value.
     terms_version: str = "2026-10-01"
+    # false: sign-up and scanning do not need accepted terms (staging/demo, until
+    # the legal text exists). Production refuses false (validator below).
+    terms_required: bool = True
     kavenegar_otp_api_key: SecretStr | None = None
     # Signs the admin panel's session cookie. Unset: a random key per process
     # (admin sessions end on restart); required in staging/production.
@@ -151,6 +154,8 @@ class Settings(BaseSettings):
             )
         if self.session_cookie_samesite == "none" and not self.secure_session_cookies:
             raise ValueError("SESSION_COOKIE_SAMESITE=none requires Secure cookies")
+        if self.environment.lower() == "production" and not self.terms_required:
+            raise ValueError("TERMS_REQUIRED=false is not allowed in production")
         # demo is the throwaway test deployment (test API, test DB, test
         # frontend, possibly plain http): only staging/production are strict.
         if self.environment.lower() in {"staging", "production"}:

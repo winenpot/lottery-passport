@@ -2,7 +2,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, Security, status
 
-from app.api.deps import get_authentication_service, session_cookie
+from app.api.deps import (
+    get_authentication_service,
+    get_terms_required,
+    session_cookie,
+)
 from app.api.errors import ApiError, ErrorResponse
 from app.api.v1.schemas import (
     AuthenticationRequest,
@@ -95,6 +99,7 @@ async def verify_authentication(
     response: Response,
     service: Annotated[AuthenticationService, Depends(get_authentication_service)],
     settings: Annotated[Settings, Depends(get_settings)],
+    terms_required: Annotated[bool, Depends(get_terms_required)],
 ) -> UserResponse:
     try:
         result = await service.verify_challenge(payload.identifier, payload.code)
@@ -112,7 +117,7 @@ async def verify_authentication(
         secure=settings.secure_session_cookies,
         samesite=settings.session_cookie_samesite,
     )
-    return UserResponse.from_domain(result.user)
+    return UserResponse.from_domain(result.user, terms_required=terms_required)
 
 
 @router.post(

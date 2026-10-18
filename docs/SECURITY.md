@@ -171,3 +171,5 @@ Run on D12 (B25) and before every major release.
       `# TODO: remove this on production` blocks (`app/application/authentication.py`,
       `app/app.py`). They are already off when `ENVIRONMENT` is staging/production;
       `grep -rn "TODO: remove this on production" app` must print nothing
+- [ ] `TERMS_REQUIRED` unset or `true` in production (the app refuses `false` there), and the
+      real terms/privacy text is published at the URLs the frontend shows

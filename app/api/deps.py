@@ -39,6 +39,11 @@ def get_app_config_service(request: Request) -> AppConfigService:
     return cast(AppConfigService, request.app.state.app_config_service)
 
 
+def get_terms_required(request: Request) -> bool:
+    """``TERMS_REQUIRED`` of the app being served (not the env-cached Settings)."""
+    return bool(request.app.state.settings.terms_required)
+
+
 def get_admin_user_service(request: Request) -> AdminUserService:
     return cast(AdminUserService, request.app.state.admin_user_service)
 
@@ -97,13 +102,15 @@ async def get_current_user(
 
 async def require_complete_profile(
     current_user: Annotated[User, Depends(get_current_user)],
+    terms_required: Annotated[bool, Depends(get_terms_required)],
 ) -> User:
     """Gate for actions that need a finished sign-up (scanning codes).
 
     Terms are checked first: accepting them is the first onboarding step the
-    player can still be missing, and the frontend shows that screen.
+    player can still be missing, and the frontend shows that screen. With
+    ``TERMS_REQUIRED=false`` (never in production) only the nickname counts.
     """
-    if current_user.terms_accepted_at is None:
+    if terms_required and current_user.terms_accepted_at is None:
         raise ApiError(
             status.HTTP_403_FORBIDDEN,
             "TERMS_NOT_ACCEPTED",

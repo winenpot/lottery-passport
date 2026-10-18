@@ -17,6 +17,15 @@ Parked features (not in the MVP contract): the city passport. See
 Newest first. **Breaking** means a call that worked before needs a change on your side.
 Check `GET /health` → `commit` to see which backend commit is deployed on the demo.
 
+**2026-10-18 (optional terms outside production)**
+
+- Added: `GET /config` returns `terms_required` (bool). When `false` (test environments
+  only, until the legal text exists; production always `true`), `profile_complete`
+  needs only a nickname and `POST /redemptions` no longer answers
+  `403 TERMS_NOT_ACCEPTED`. `terms_accepted` stays `false` until the player really
+  accepts: never send `accept_terms_version` on the player's behalf. Explicit
+  acceptance still works as before.
+
 **2026-10-15 (G1 mini-games)**
 
 - Added: `POST /api/v1/mini-games/{mini_game_id}/runs` and
@@ -351,7 +360,7 @@ profile setup before anything else. Errors: `OTP_INVALID`.
 ### `GET /api/v1/config` (live, partial; no authentication)
 
 Live today: `server_time`, `timezone`, `day_key`, `week_key`, `day_ends_at`, `week_ends_at`,
-`terms_version`, `limits.scans_per_day`, `nickname` limits, `location_cities` (the four real
+`terms_version`, `terms_required`, `limits.scans_per_day`, `nickname` limits, `location_cities` (the four real
 cities with lounges; not passport cities, which are flavors, `[{id, name}]` with Persian names: `tehran`, `ahvaz`, `mashhad`, `isfahan`) and `venues` (active lounges,
 ordered by name, each `{"id", "name", "location_city", "address"}`; empty until the lounges are entered). The rest
 of the example below (other limits, `avatars`, `favorite_games`, social and support fields) is
@@ -366,6 +375,7 @@ planned with the catalogue work.
   "day_ends_at": "2026-10-10T20:30:00Z",
   "week_ends_at": "2026-10-16T20:30:00Z",
   "terms_version": "2026-10-01",
+  "terms_required": true,
   "limits": {
     "scans_per_day": 5,
     "coins_per_scan": 50,
@@ -436,13 +446,16 @@ All fields are optional; the response is the Me object.
   never a flavor).
 - `avatar_id`: an avatar `id` from `GET /avatars` that is not `locked`.
 - `profile_complete` becomes true once the nickname is set and the terms are accepted.
+  When `/config` says `terms_required: false` (test environments only), the nickname
+  alone is enough and `terms_accepted` stays `false`.
 
 Errors: `NICKNAME_INVALID` (422), `NICKNAME_TAKEN` (409), `TERMS_VERSION_INVALID` (422, reload
 `/config`), `CATALOGUE_UNKNOWN` (422, unknown or inactive `home_venue_id`, `location_city` or
 `avatar_id`; later also games), `AVATAR_LOCKED` (422, the avatar exists but is locked).
 
 `POST /redemptions` requires `profile_complete` (live since 2026-10-13): without accepted terms
-it answers `403 TERMS_NOT_ACCEPTED`, without a nickname `403 PROFILE_INCOMPLETE`. Send players
+it answers `403 TERMS_NOT_ACCEPTED` (only when `terms_required` is true), without a nickname
+`403 PROFILE_INCOMPLETE`. Send players
 through profile setup before the camera opens.
 
 The demo's setup has no T&C checkbox. Add one to step 3 (or replace the "points are demo"

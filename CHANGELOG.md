@@ -7,6 +7,11 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ### Added
 
+- `TERMS_REQUIRED` setting (default `true`; production refuses `false`). With `false`,
+  `profile_complete` needs only a nickname and redemption skips `TERMS_NOT_ACCEPTED`, so
+  test environments work while the legal text does not exist yet; `terms_accepted` stays
+  honest (never set on the player's behalf). `GET /config` exposes `terms_required`.
+
 - Mini-games (G1, B38): our own in-app reaction game (`tap_reflex`), not the physical
   arcade machines at the OxinGame lounges. `POST /api/v1/mini-games/{mini_game_id}/runs`
   issues a server-chosen per-round delay array; `POST /api/v1/mini-games/runs/{run_id}/finish`

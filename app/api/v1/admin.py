@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import get_admin_user_service, require_admin
+from app.api.deps import get_admin_user_service, get_terms_required, require_admin
 from app.api.errors import ApiError, ErrorResponse
 from app.api.v1.schemas import UserPageResponse, UserResponse
 from app.application.admin_users import AdminUserService, UserCursor
@@ -50,12 +50,16 @@ def decode_cursor(value: str) -> UserCursor:
 async def list_users(
     _admin: Annotated[User, Depends(require_admin)],
     service: Annotated[AdminUserService, Depends(get_admin_user_service)],
+    terms_required: Annotated[bool, Depends(get_terms_required)],
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     cursor: str | None = None,
 ) -> UserPageResponse:
     after = decode_cursor(cursor) if cursor else None
     page = await service.list_users(limit, after)
     return UserPageResponse(
-        items=[UserResponse.from_domain(user) for user in page.items],
+        items=[
+            UserResponse.from_domain(user, terms_required=terms_required)
+            for user in page.items
+        ],
         next_cursor=encode_cursor(page.next_cursor) if page.next_cursor else None,
     )

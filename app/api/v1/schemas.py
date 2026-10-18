@@ -81,6 +81,7 @@ class UserResponse(BaseModel):
         cls,
         user: User,
         *,
+        terms_required: bool,
         team: str | None = None,
         last_scanned_flavor: str | None = None,
     ) -> "UserResponse":
@@ -95,7 +96,7 @@ class UserResponse(BaseModel):
             team=team,
             last_scanned_flavor=last_scanned_flavor,
             terms_accepted=user.terms_accepted_at is not None,
-            profile_complete=user.profile_complete,
+            profile_complete=user.is_profile_complete(terms_required=terms_required),
             account_status=user.account_status.value,
             verification_status=user.verification_status.value,
             role=user.role.value,
@@ -171,6 +172,12 @@ class ConfigResponse(BaseModel):
     day_ends_at: datetime
     week_ends_at: datetime
     terms_version: str
+    terms_required: bool = Field(
+        description=(
+            "false: signing up and scanning do not need accepted terms (test "
+            "environments until the legal text exists). Always true in production."
+        )
+    )
     limits: ConfigLimits
     nickname: NicknameLimits
     location_cities: list[LocationCityResponse] = Field(
@@ -188,6 +195,7 @@ class ConfigResponse(BaseModel):
             day_ends_at=config.period.day_ends_at,
             week_ends_at=config.period.week_ends_at,
             terms_version=config.terms_version,
+            terms_required=config.terms_required,
             limits=ConfigLimits(scans_per_day=config.scans_per_day),
             nickname=NicknameLimits(
                 min_length=config.nickname_min_length,

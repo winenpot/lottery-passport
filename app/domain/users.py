@@ -44,4 +44,14 @@ class User:
 
     @property
     def profile_complete(self) -> bool:
-        return self.nickname is not None and self.terms_accepted_at is not None
+        """Strict rule (production): nickname set AND current terms accepted."""
+        return self.is_profile_complete(terms_required=True)
+
+    def is_profile_complete(self, *, terms_required: bool) -> bool:
+        """Finished sign-up. Outside production terms can be switched off
+        (``TERMS_REQUIRED=false``) until the legal text exists; acceptance is
+        then simply not needed, never assumed (``terms_accepted_at`` stays
+        whatever the player really did)."""
+        if self.nickname is None:
+            return False
+        return not terms_required or self.terms_accepted_at is not None

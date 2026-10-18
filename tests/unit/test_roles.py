@@ -43,6 +43,6 @@ async def test_a_player_is_rejected() -> None:
 def test_user_response_carries_the_role() -> None:
     from app.api.v1.schemas import UserResponse
 
-    response = UserResponse.from_domain(make_user(UserRole.ADMIN))
+    response = UserResponse.from_domain(make_user(UserRole.ADMIN), terms_required=True)
 
     assert response.role == "admin"

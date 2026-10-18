@@ -15,6 +15,7 @@ class AppConfig:
     timezone: str
     period: CampaignPeriod
     terms_version: str
+    terms_required: bool
     scans_per_day: int
     nickname_min_length: int
     nickname_max_length: int
@@ -32,11 +33,14 @@ class AppConfigService:
         terms_version: str,
         scans_per_day: int,
         venues: VenueCatalogue,
+        *,
+        terms_required: bool = True,
     ) -> None:
         self._venues = venues
         self._clock = clock
         self._zone = zone
         self._terms_version = terms_version
+        self._terms_required = terms_required
         self._scans_per_day = scans_per_day
 
     async def current(self) -> AppConfig:
@@ -46,6 +50,7 @@ class AppConfigService:
             timezone=self._zone.key,
             period=campaign_period(now, self._zone),
             terms_version=self._terms_version,
+            terms_required=self._terms_required,
             scans_per_day=self._scans_per_day,
             nickname_min_length=NICKNAME_MIN_LENGTH,
             nickname_max_length=NICKNAME_MAX_LENGTH,

@@ -187,6 +187,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         terms_version=resolved_settings.terms_version,
         scans_per_day=resolved_settings.redemption_daily_limit_per_user,
         venues=PostgreSQLVenueRepository(database.session_factory),
+        terms_required=resolved_settings.terms_required,
     )
     passport_service = PassportService(
         passports=PostgreSQLPassportRepository(database.session_factory)
