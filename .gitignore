@@ -42,3 +42,7 @@ docs/vault/.obsidian/
 graphify-out/.graphify_*
 graphify-out/20*/
 graphify-out/cost.json
+
+# Frontend reference clone (adam13m99/TorshX, a separate repo). Read-only reference:
+# never committed, linted, built or deployed from here. See the 2026-10-18 CI/CD plan.
+/frontend/
