@@ -105,3 +105,12 @@ services:
 
 volumes:
   pgdata:
+
+networks:
+  default:
+    # Explicit subnet: on a host with many Compose projects (atpg), Docker's
+    # default address pools run out ("all predefined address pools have been
+    # fully subnetted"). atpg's convention is 10.200.<n>.0/24 per project.
+    ipam:
+      config:
+        - subnet: ${LP_SUBNET:-10.200.98.0/24}

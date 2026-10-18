@@ -209,7 +209,8 @@ switched atomically):
 
 ```bash
 # copy Arman's accepted artifact (check its sha256 first) into a new release directory
-rsync -a --delete dist/ <user>@server:<base>/web/releases/2026-10-20-1/
+rsync -a --delete --chmod=Da+rx,Fa+r dist/ <user>@server:<base>/web/releases/2026-10-20-1/
+# nginx runs as uid 101 inside its container: release files must be world-readable
 
 # on the server: renaming a symlink is atomic, so no request sees a half-copied site
 cd <base>/web
