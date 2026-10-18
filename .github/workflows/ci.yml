@@ -1,9 +1,19 @@
 name: CI
 
+# quality: every push and PR. image + staging-verify: master pushes only.
+# Deploys are pull-based (docs/adr/0011-pull-based-deploys-from-ghcr.md): the
+# image job moves the :staging tag, atpg's deploy agent notices within a
+# minute, and staging-verify waits until the public /health shows this commit.
 on:
   pull_request:
   push:
     branches: [main, master]
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
   quality:
@@ -43,4 +53,83 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run mypy app main.py scripts
       - run: uv run pytest
-      - run: docker build --tag lottery-passport-api:ci .
+      - name: docker build (PRs; master builds in the image job)
+        if: github.event_name == 'pull_request'
+        run: docker build --tag lottery-passport-api:ci .
+
+  image:
+    needs: quality
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    # Runs one at a time, in push order, so an older commit never moves
+    # :staging after a newer one.
+    concurrency:
+      group: image-master
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push ${{ env.IMAGE }}:sha-${{ github.sha }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          provenance: false
+          tags: ${{ env.IMAGE }}:sha-${{ github.sha }}
+          build-args: GIT_COMMIT=${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Move :staging (only if this is still the newest master commit)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          head="$(gh api "repos/${{ github.repository }}/commits/master" --jq .sha)"
+          if [ "$head" != "$GITHUB_SHA" ]; then
+            echo "master moved on to $head; its own run moves :staging"
+            exit 0
+          fi
+          docker buildx imagetools create --tag "$IMAGE:staging" "$IMAGE:sha-$GITHUB_SHA"
+
+  staging-verify:
+    needs: image
+    # Set the repository variable STAGING_URL (https://staging.torshx.com)
+    # once staging answers; until then this job is skipped.
+    if: vars.STAGING_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Wait until staging serves ${{ github.sha }}
+        env:
+          URL: ${{ vars.STAGING_URL }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          want="${GITHUB_SHA:0:7}"
+          live=""
+          for _ in $(seq 1 60); do
+            live="$(curl -fsS -m 10 "$URL/health" | jq -r .commit 2>/dev/null || true)"
+            if [ "$live" = "$want" ]; then
+              echo "staging serves $want"
+              exit 0
+            fi
+            head="$(gh api "repos/${{ github.repository }}/commits/master" --jq .sha)"
+            if [ "$head" != "$GITHUB_SHA" ]; then
+              echo "superseded by $head; that run verifies staging"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "staging still serves '${live}', not $want (deploy failed or rolled back:"
+          echo "on atpg run /home/data/lottery-passport/repo/deploy/deploy.sh --status)"
+          exit 1

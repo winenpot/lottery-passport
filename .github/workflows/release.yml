@@ -1,0 +1,70 @@
+name: Release
+
+# Promote an image that CI already built and staging already ran to
+# production. No rebuild: the bytes that passed staging are the bytes that
+# ship. Tag a commit on master as vYYYY.MM.DD-N and push the tag; the
+# `production` environment waits for a required reviewer, then :production
+# moves and the production deploy agent picks it up within a minute.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+concurrency:
+  group: release-production
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: The tagged commit is on master
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/master
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: The image exists (CI green on master)
+        run: docker buildx imagetools inspect "$IMAGE:sha-$GITHUB_SHA" >/dev/null
+      - name: Move :production and add :${{ github.ref_name }}
+        run: |
+          docker buildx imagetools create \
+            --tag "$IMAGE:production" --tag "$IMAGE:${{ github.ref_name }}" \
+            "$IMAGE:sha-$GITHUB_SHA"
+
+  production-verify:
+    needs: promote
+    if: vars.PRODUCTION_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Wait until production serves ${{ github.sha }}
+        env:
+          URL: ${{ vars.PRODUCTION_URL }}
+        run: |
+          want="${GITHUB_SHA:0:7}"
+          live=""
+          for _ in $(seq 1 60); do
+            live="$(curl -fsS -m 10 "$URL/health" | jq -r .commit 2>/dev/null || true)"
+            if [ "$live" = "$want" ]; then
+              echo "production serves $want"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "production still serves '${live}', not $want; deploy.sh --status on the server"
+          exit 1
