@@ -1,0 +1,17 @@
+# Installed by docs/OPERATIONS.md "Server setup" with @USER@ and @BASE@ replaced:
+#   sed -e "s|@USER@|data|g" -e "s|@BASE@|/home/data/lottery-passport|g" \
+#     deploy/systemd/lp-deploy.service | sudo tee /etc/systemd/system/lp-deploy.service
+[Unit]
+Description=lottery-passport: deploy the channel image if it moved (ADR-0011)
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+# The user must be in the docker group.
+User=@USER@
+ExecStart=@BASE@/repo/deploy/deploy.sh
+# A first deploy pulls images and runs migrations.
+TimeoutStartSec=15min
+# Exit 1 (failed pull or deploy) shows in `systemctl status`, not as a crash loop.
+SuccessExitStatus=0

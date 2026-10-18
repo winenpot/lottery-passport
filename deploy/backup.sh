@@ -14,7 +14,7 @@ set -a
 # shellcheck source=/dev/null
 source "$deploy_dir/backup.env"
 set +a
-compose=(docker compose -f "$deploy_dir/compose.prod.yml")
+compose=("$deploy_dir/compose.sh")
 
 mkdir -p "$DUMP_DIR"
 chmod 700 "$DUMP_DIR"

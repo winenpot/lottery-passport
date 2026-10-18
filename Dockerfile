@@ -1,7 +1,7 @@
 # Production image for the API and the worker.
 #
 # Built once per commit by CI and pushed to GHCR; servers only pull it
-# (docs/adr/0010-pull-based-deploys-from-ghcr.md). A local build from inside
+# (docs/adr/0011-pull-based-deploys-from-ghcr.md). A local build from inside
 # Iran still works: Python packages come from requirements.txt, exported from
 # uv.lock WITH hashes, so any PyPI mirror can be used (PIP_INDEX_URL) without
 # trusting it: pip refuses a package whose hash does not match.

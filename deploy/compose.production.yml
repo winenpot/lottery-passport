@@ -1,0 +1,9 @@
+# Production additions to compose.yml (compose.sh adds this file when
+# ENVIRONMENT=production): TLS on 443 at the origin, so the ArvanCloud ->
+# server hop is encrypted (OTP codes and session cookies cross it).
+services:
+  nginx:
+    ports:
+      - "${HTTPS_PUBLISH:-0.0.0.0:443}:443"
+    volumes:
+      - ${LP_BASE:?}/tls:/etc/nginx/tls:ro

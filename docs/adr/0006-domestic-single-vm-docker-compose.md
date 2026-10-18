@@ -1,6 +1,6 @@
 # ADR-0006: Domestic hosting on a single VM with Docker Compose
 
-**Status:** Accepted (supersedes the Render demo deployment; `render.yaml` removed 2026-10-18, deploys per ADR-0010)
+**Status:** Accepted (supersedes the Render demo deployment; `render.yaml` removed 2026-10-18, deploys per ADR-0011)
 **Date:** 2026-10-07
 **Deciders:** Backend developer; CEO (cost)
 

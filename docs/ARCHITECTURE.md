@@ -132,7 +132,7 @@ app/
   worker.py            jobs loop entry point                                 (B11)
   app.py               composition root: builds adapters, injects services
 scripts/               generate_codes.py, code_batches.py                     (done)
-deploy/                production Compose file, nginx config, backup script
+deploy/                Compose stack (staging + production), nginx, deploy agent, backup script
 alembic/versions/      one migration per schema change, never on startup
 tests/unit/            domain and use cases with in-memory fakes
 tests/integration/     PostgreSQL: constraints, transactions, concurrency, API
@@ -462,7 +462,7 @@ stateDiagram-v2
 | International internet cut | Nothing changes for players in Iran | Everything on the request path is domestic | Check that off-site backups and alerts still work |
 | Traffic spike or bot flood | Some requests get 429 with `Retry-After` | nginx limits per IP (lounge IPs allow-listed) and per account limits in the API | Runbook [overload or attack](OPERATIONS.md#runbook-overload-or-attack) |
 | Printer file leaked | Unknown people redeem codes | Batch can be voided in seconds | Runbook [code leak](OPERATIONS.md#runbook-suspected-code-leak) |
-| Bad deploy | Errors after a release | Previous image tag still on the VM | Roll back (`deploy.sh <previous tag>`); migrations are additive during the campaign |
+| Bad deploy | Errors after a release | `deploy.sh` rolls back automatically when `/ready` fails; the previous image stays on the VM | Re-release the previous tag ([ADR 0011](adr/0011-pull-based-deploys-from-ghcr.md)); migrations are additive during the campaign |
 
 ## What to revisit as it grows
 

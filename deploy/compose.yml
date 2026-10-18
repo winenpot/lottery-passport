@@ -1,0 +1,107 @@
+# The whole stack of one environment (staging or production) on one VM.
+# ADR-0011: CI builds the API image once; servers pull it, they never build.
+#
+# Do not call `docker compose` directly; use the wrapper, which picks the
+# image that is deployed, the environment's override file and the .env:
+#
+#   <base>/repo/deploy/compose.sh ps
+#   <base>/repo/deploy/compose.sh logs api --since 1h
+#   <base>/repo/deploy/compose.sh run --rm api python -m scripts.admins list
+#
+# <base> is /home/data/lottery-passport on atpg (staging) and
+# /opt/lottery-passport on the production server. Layout under <base>:
+#   .env      settings + secrets (mode 600), from deploy/env/<environment>.env.example
+#   repo/     this repository, checked out at the deployed commit by deploy.sh
+#   state/    deployed image digests, lock, deploy log
+#   site/     per-server nginx includes: admin_allow.conf, lounge_ips.conf
+#   web/      frontend releases; web/current -> releases/<id> (relative symlink)
+#   var/      code exports (mode 700), mounted only when generating codes
+#   tls/      production only: fullchain.pem, privkey.pem
+#
+# Only nginx publishes a port. The API is reachable only inside the Compose
+# network, which is why it may trust the X-Forwarded-For header nginx sets.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  nginx:
+    # Pin by digest after the first pull: nginx:1.27-alpine@sha256:<digest>
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    command: ["nginx", "-g", "daemon off;", "-c", "/etc/nginx/lp/nginx-${ENVIRONMENT:?}.conf"]
+    ports:
+      # staging: 0.0.0.0:8098 (ArvanCloud reaches it; firewalled to Arvan ranges)
+      # production: 0.0.0.0:80 (443 is added by compose.production.yml)
+      - "${HTTP_PUBLISH:?set HTTP_PUBLISH in .env}:80"
+    volumes:
+      # Directories, never single files: a file bind mount pins the old inode,
+      # so a config changed by `git checkout` would go unnoticed.
+      - ${LP_BASE:?}/repo/deploy/nginx:/etc/nginx/lp:ro
+      - ${LP_BASE:?}/site:/etc/nginx/site:ro
+      # Parent directory: web/current is switched atomically per release.
+      - ${LP_BASE:?}/web:/srv/web:ro
+    depends_on:
+      - api
+    logging: *logging
+
+  api:
+    image: ${API_IMAGE:?deploy.sh or compose.sh sets API_IMAGE}
+    env_file: ${LP_BASE:?}/.env
+    restart: unless-stopped
+    command:
+      - uvicorn
+      - main:app
+      - --host=0.0.0.0
+      - --port=8000
+      # One worker on staging: the in-process rate limiter is per worker.
+      - --workers=${API_WORKERS:-1}
+      - --proxy-headers
+      - --forwarded-allow-ips=*
+    expose:
+      - "8000"
+    mem_limit: ${API_MEM_LIMIT:-768m}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging: *logging
+
+  postgres:
+    # Pin by digest after the first pull.
+    image: postgres:16-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      TZ: UTC
+    command:
+      - postgres
+      - -c
+      - shared_buffers=${PG_SHARED_BUFFERS:-256MB}
+      - -c
+      - effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-768MB}
+      - -c
+      - max_connections=100
+      - -c
+      - idle_in_transaction_session_timeout=60s
+      - -c
+      - log_min_duration_statement=500ms
+      - -c
+      - timezone=UTC
+    shm_size: 256mb
+    mem_limit: ${PG_MEM_LIMIT:-1g}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    logging: *logging
+
+volumes:
+  pgdata:

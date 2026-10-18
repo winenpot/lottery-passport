@@ -7,6 +7,7 @@ to Docker and servers: every step is a command you can copy. Files referenced he
 ## Contents
 
 - [Environments](#environments)
+- [How a change reaches a server](#how-a-change-reaches-a-server)
 - [Server setup (once per VM)](#server-setup-once-per-vm)
 - [Getting images and packages onto the server](#getting-images-and-packages-onto-the-server)
 - [nginx](#nginx)
@@ -24,50 +25,91 @@ to Docker and servers: every step is a command you can copy. Files referenced he
 
 | | Local | Staging | Production |
 |---|---|---|---|
-| Where | Your laptop | Domestic VM, 2 vCPU / 4 GB / 40 GB | Domestic VM, 4 vCPU / 8 GB / 80 GB SSD |
-| URL | `http://localhost:8000` | `https://staging.play.<domain>` | `https://play.<domain>` |
-| Database | Compose `postgres` (dev data) | Its own PostgreSQL, test data only | Its own PostgreSQL |
+| Where | Your laptop | atpg (shared app server), `<base>=/home/data/lottery-passport` | Own VM, 4 vCPU / 8 GB / 100 GB, `<base>=/opt/lottery-passport` |
+| URL | `http://localhost:8000` | `https://staging.torshx.com` (Arvan -> atpg:8098, http) | `https://play.torshx.com` (Arvan -> VM:443, https) |
+| Deploys | `uv run` | Automatically, every master commit that passes CI | A tagged release after your approval in GitHub |
+| Database | Compose `postgres` (dev data) | Its own PostgreSQL container, test data only | Its own PostgreSQL container |
 | Codes | Generated test batches | Test batches only, **never printed** | Printed batches |
 | Pepper | Dev value | Its own value | Production value (password manager) |
-| SMS | Console sender (prints to logs) | Real provider, limited to team numbers if the provider allows | Real providers |
+| SMS | Console sender (prints to logs) | Real, only to `OTP_ALLOWED_PHONES`; `0969` test numbers | Real, anyone |
 
-On staging and production the app refuses to start if `CORS_ORIGINS` contains `*` or a non-https origin (`http://localhost` is the only exception), or if `PUBLIC_APP_ORIGIN` is not https. `SESSION_COOKIE_SAMESITE` stays `lax` (same-origin proxy); `none` is for a cross-site frontend, needs Secure cookies and works in Chrome only.
+On staging and production the app refuses to start if `CORS_ORIGINS` contains `*` or a non-https origin (`http://localhost` is the only exception), or if `PUBLIC_APP_ORIGIN` is not https. Production also refuses `TERMS_REQUIRED=false`, `OTP_TEST_NUMBERS=true` and a non-empty `OTP_ALLOWED_PHONES`. `SESSION_COOKIE_SAMESITE` stays `lax` (one origin for the app and the API).
 
 Staging and production never share a database, secrets or a pepper. Codes generated on staging can never work in production.
 
+## How a change reaches a server
+
+```text
+git push master --> CI: quality (lint, types, tests) --> image: build ONCE, push
+                    ghcr.io/winenpot/lottery-passport:sha-<commit>, move :staging
+atpg: lp-deploy.timer (every minute) sees :staging moved --> deploy.sh: pull, migrate,
+      switch, /ready, roll back on failure --> CI staging-verify: /health shows the commit
+
+git tag v2026.10.20-1 && git push origin v2026.10.20-1
+     --> Release workflow: waits for your approval (environment "production")
+     --> moves :production to the SAME image --> production deploy agent --> verify
+```
+
+Why pull and not push (ADR-0011): GitHub never holds a key to our servers, nothing has to
+reach the servers from abroad, and a public repository cannot run code on them. The only
+thing a server needs from outside is `ghcr.io` (public image, no login) and `github.com`
+(public repository, for the `deploy/` files of the deployed commit).
+
 ## Server setup (once per VM)
 
-Assumes Ubuntu Server 24.04 LTS. Run as root (or with `sudo`).
+Ubuntu Server 24.04 LTS. `<user>` is the deploy user (`data` on atpg; `deploy` on
+production, created for this); it must be in the `docker` group.
 
 ```bash
-# 1. Updates, firewall, time
+# 1. Production VM only: updates, firewall, time, SSH (atpg is already managed)
 apt-get update && apt-get -y upgrade
-apt-get -y install ufw unattended-upgrades git curl restic
-ufw default deny incoming && ufw default allow outgoing
-ufw allow from <your-office-or-vpn-ip> to any port 22 proto tcp
-ufw allow 80/tcp && ufw allow 443/tcp
-ufw enable
+apt-get -y install ufw unattended-upgrades git curl restic fail2ban
 timedatectl set-timezone UTC            # the server runs in UTC; Tehran time is an app setting
-
-# 2. SSH: keys only (after you have copied your public key and tested a second login)
+# SSH keys only, after a second key login works:
 sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication no/; s/^#\?PermitRootLogin .*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
 systemctl restart ssh
+# Firewall: ufw does NOT filter ports published by Docker (Docker writes its own
+# iptables rules). Use ufw for SSH, and the DOCKER-USER chain for 80/443 (below).
+ufw default deny incoming && ufw default allow outgoing
+ufw allow from <your-office-or-vpn-ip> to any port 22 proto tcp
+ufw enable
 
-# 3. Docker Engine with the Compose plugin: install from your provider's mirror of
-#    Docker's apt repository, or Ubuntu's own packages if the mirror is unavailable.
-#    Then point Docker Hub pulls at a domestic mirror (next section).
+# 2. Docker Engine + Compose plugin (provider mirror of Docker's apt repository, or
+#    Ubuntu's packages), then a Docker Hub mirror and log limits in /etc/docker/daemon.json:
+#    {"registry-mirrors": ["https://docker.arvancloud.ir"],
+#     "log-driver": "json-file", "log-opts": {"max-size": "20m", "max-file": "5"}}
+systemctl restart docker
 
-# 4. Directories
-mkdir -p /opt/lottery-passport /etc/lottery-passport/{tls,nginx} /srv/lottery-passport/{releases,acme}
-chmod 700 /etc/lottery-passport
+# 3. Layout (deploy/compose.yml explains each directory)
+base=/opt/lottery-passport              # staging: /home/data/lottery-passport
+install -d -o <user> -g <user> -m 750 "$base" "$base/state" "$base/site" "$base/web/releases"
+install -d -o <user> -g <user> -m 700 "$base/var"
+sudo -u <user> git clone https://github.com/winenpot/lottery-passport.git "$base/repo"
+sudo -u <user> cp "$base/repo/deploy/site-examples/"*.conf "$base/site/"   # staging: admin_allow.conf = "allow all;"
 
-# 5. Code (read-only deploy key on the GitHub repository)
-git clone git@github.com:winenpot/lottery-passport.git /opt/lottery-passport
+# 4. Settings: start from the example, generate every secret ON the server
+sudo -u <user> install -m 600 "$base/repo/deploy/env/<staging|production>.env.example" "$base/.env"
+#    edit .env; e.g. openssl rand -base64 48 | tr -d '\n/+=' | cut -c1-48 for each <generated>
 
-# 6. Configuration
-cp /opt/lottery-passport/deploy/.env.production.example /opt/lottery-passport/deploy/.env
-chmod 600 /opt/lottery-passport/deploy/.env       # fill in every CHANGE value
-cp /opt/lottery-passport/deploy/site-examples/*.conf /etc/lottery-passport/nginx/
+# 5. The deploy agent
+sed -e "s|@USER@|<user>|g" -e "s|@BASE@|$base|g" "$base/repo/deploy/systemd/lp-deploy.service" \
+  > /etc/systemd/system/lp-deploy.service
+cp "$base/repo/deploy/systemd/lp-deploy.timer" /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now lp-deploy.timer
+journalctl -u lp-deploy -f                                    # watch the first deploy
+```
+
+**Origin port only for ArvanCloud.** Everyone must come through Arvan (TLS, WAF, client IP
+header). Docker-published ports bypass ufw, so filter them in `DOCKER-USER`, using the same
+ranges as `deploy/nginx/snippets/arvan_realip.conf` (example for staging's 8098; production
+uses 80 and 443):
+
+```bash
+for r in $(grep -oP '(?<=set_real_ip_from )[0-9./]+' "$base/repo/deploy/nginx/snippets/arvan_realip.conf"); do
+  iptables -I DOCKER-USER -p tcp -m conntrack --ctorigdstport 8098 -s "$r" -j RETURN
+done
+iptables -A DOCKER-USER -p tcp -m conntrack --ctorigdstport 8098 -j DROP
+# persist (iptables-persistent / netfilter-persistent save) and re-run after Arvan changes its list
 ```
 
 Check that Ubuntu's clock is synchronized (`timedatectl`). If international NTP servers are
@@ -75,86 +117,120 @@ unreachable, configure the domestic NTP servers your provider documents.
 
 ## Getting images and packages onto the server
 
-Docker Hub refuses Iranian IP addresses, and other foreign registries can be blocked or slow.
-
-- **Base images** (`python`, `postgres`, `nginx`): configure a domestic Docker Hub mirror in `/etc/docker/daemon.json` (several Iranian cloud providers run one; take the hostname from your provider's documentation), then `systemctl restart docker`:
-  ```json
-  {"registry-mirrors": ["https://<mirror-hostname-from-your-provider>"]}
-  ```
-  If no mirror works, pull on a machine that can, then `docker save postgres:16-bookworm | gzip > pg.tar.gz`, copy it, and `docker load < pg.tar.gz` on the server.
-- **Pin images by digest** after the first successful pull (`docker images --digests`), so a mirror cannot hand you something else later.
-- **Python packages**: the image installs `requirements.txt`, exported from `uv.lock` **with hashes**. Set `PIP_INDEX_URL` in `deploy/.env` to a PyPI mirror if PyPI is slow; pip rejects any file whose hash differs, so the mirror does not need to be trusted. Regenerate the file whenever dependencies change: `uv export --locked --no-default-groups --no-emit-project --no-header --format requirements-txt -o requirements.txt` (CI fails if you forget).
-- **Frontend**: Arman builds `dist/` on his machine (or in CI) and you copy the files; the server never runs `npm`.
+- **The API image** comes from GHCR, built by CI. The package is public (the repository is
+  public and the image holds no secrets), so servers pull without credentials.
+- **Base images** (`postgres`, `nginx`): Docker Hub refuses Iranian IP addresses; the
+  `registry-mirrors` entry in `daemon.json` (above) serves them. **Pin by digest** after the
+  first pull (`docker images --digests`), so a mirror cannot hand you something else later.
+- **Python packages** are inside the image. A local build from inside Iran still works:
+  `requirements.txt` is exported from `uv.lock` **with hashes**, so any PyPI mirror can be
+  used (`PIP_INDEX_URL` build-arg) without trusting it.
+- **Frontend**: Arman's accepted CI artifact (`dist/`), copied as files; servers never run `npm`.
 
 ## nginx
 
-[`deploy/nginx/nginx.conf`](../deploy/nginx/nginx.conf) does five jobs:
+One configuration for both environments, so staging rehearses production:
+[`deploy/nginx/`](../deploy/nginx/) has `http.conf` (shared), `snippets/app.conf` (every
+location), and a small top-level file per environment (`nginx-staging.conf`: plain HTTP behind
+Arvan, API docs on; `nginx-production.conf`: TLS, docs 404, unknown hosts dropped).
 
-1. **TLS and redirects**: HTTP → HTTPS, TLS 1.2/1.3, HSTS.
-2. **The PWA**: serves `/srv/lottery-passport/pwa` (a symlink to the current release of Arman's `dist/`); `/assets/*` cached for a year, `index.html` never cached, unknown paths fall back to `index.html` (client-side routes like `/b/<code>` and `/q/<venue>/<date>`).
-3. **The API**: `/api/` proxied to the FastAPI container with timeouts; the client IP is **overwritten** into `X-Forwarded-For` so it cannot be spoofed.
-4. **Rate limits**: 10 requests/s per IP for the API, 6/min for OTP requests. **Lounge IPs** (listed in `/etc/lottery-passport/nginx/lounge_ips.conf`) get 300/s and 120/min because a whole lounge shares one public IP. Over the limit: `429` with the standard JSON error.
-5. **Privacy and admin**: `/b/<code>` is logged as `/b/[redacted]` and `/q/<venue>/<date>/<token>` as `/q/[redacted]`; `/admin` only from IPs in `admin_allow.conf`; `/docs` and `/openapi.json` return 404.
+1. **Client IP**: ArvanCloud sends the visitor's address in `ar-real-ip`; nginx trusts it only
+   from Arvan's ranges (`snippets/arvan_realip.conf`; refresh with
+   `deploy/nginx/update_arvan_ips.sh` and commit). The API gets it as an overwritten
+   `X-Forwarded-For`, so it cannot be spoofed.
+2. **The PWA**: serves `<base>/web/current` (a relative symlink to the current release of
+   Arman's `dist/`); `/assets/*` cached for a year, everything else revalidated (no-cache),
+   errors never cached; unknown paths fall back to `index.html` (client routes like `/b/<code>`
+   and `/q/...`). CSP and `Permissions-Policy: camera=(self)` on PWA responses only.
+3. **The API**: `/api/`, `/health`, `/ready` proxied to the API container, `Cache-Control:
+   no-store` on every API answer.
+4. **Rate limits**: 10 requests/s per IP for the API, 6/min for OTP requests. **Lounge IPs**
+   (`<base>/site/lounge_ips.conf`) get 300/s and 120/min because a whole lounge shares one
+   public IP. Over the limit: `429` with the standard JSON error.
+5. **Privacy and admin**: `/b/<code>` is logged as `/b/[redacted]` and `/q/...` as
+   `/q/[redacted]`; `/admin` only from IPs in `<base>/site/admin_allow.conf`.
 
-Gotcha built into the file: an `add_header` inside a `location` **replaces** all server-level
-headers, so every such location includes `snippets/security_headers.conf` again.
-
-After any change: `docker compose -f deploy/compose.prod.yml exec nginx nginx -t && docker compose -f deploy/compose.prod.yml exec nginx nginx -s reload`.
+Config changes ship like code: commit, CI, and `deploy.sh` runs `nginx -t` before reloading
+(an invalid config fails the deploy and is never loaded).
 
 ## TLS certificates
 
-Put `fullchain.pem` and `privkey.pem` in `/etc/lottery-passport/tls/` (mode 600). Two options:
+- **Browser -> ArvanCloud**: Arvan's free edge certificate for `torshx.com` and
+  `*.torshx.com` (Arvan panel, HTTPS settings), with "redirect HTTP to HTTPS".
+- **ArvanCloud -> production server**: a real certificate on the server, because OTP codes
+  and session cookies cross that hop. Let's Encrypt via DNS-01 with an Arvan API token
+  (HTTP-01 is unreliable while the record is proxied):
 
-- **Let's Encrypt** with `certbot certonly --webroot -w /srv/lottery-passport/acme -d play.<domain>`, then copy or symlink the files and reload nginx from a renewal hook. Renewal needs international connectivity; certificates last 90 days and certbot renews 30 days early, so a short disruption is survivable. Monitor expiry anyway.
-- **A certificate from your hosting/CDN provider** if they issue one domestically.
+  ```bash
+  curl https://get.acme.sh | sh -s email=<you>
+  export Arvan_Token="<token from the Arvan panel, DNS scope only>"
+  ~/.acme.sh/acme.sh --issue --dns dns_arvan -d play.torshx.com --server letsencrypt
+  ~/.acme.sh/acme.sh --install-cert -d play.torshx.com \
+    --key-file /opt/lottery-passport/tls/privkey.pem \
+    --fullchain-file /opt/lottery-passport/tls/fullchain.pem \
+    --reloadcmd "/opt/lottery-passport/repo/deploy/compose.sh exec -T nginx nginx -s reload -c /etc/nginx/lp/nginx-production.conf"
+  ```
+
+  acme.sh renews from its own cron 30 days early. Monitor expiry anyway (below).
+- **ArvanCloud -> staging**: plain HTTP to atpg:8098. Staging holds test data only.
 
 ## Deploying a release
 
-Releases are git tags: `v2026.10.12-1` (date + counter).
+**Staging**: nothing to do. Push to master; when CI is green, staging runs the commit within
+about two minutes. `GET https://staging.torshx.com/health` shows `commit`.
+
+**Production**: release tags are `vYYYY.MM.DD-N` on a commit that staging already runs.
 
 ```bash
-# on your machine, after CI is green on main
-git tag v2026.10.12-1 && git push origin v2026.10.12-1
-
-# on the server
-sudo /opt/lottery-passport/deploy/deploy.sh v2026.10.12-1
+git tag v2026.10.20-1 <commit> && git push origin v2026.10.20-1
+# GitHub -> Actions -> Release -> "Review deployments" -> approve
 ```
 
-[`deploy.sh`](../deploy/deploy.sh) checks out the tag, builds the image, starts PostgreSQL,
-runs `alembic upgrade head`, restarts the stack and waits for `/ready`.
-
-**Rollback**: `sudo deploy/deploy.sh <previous tag>`. This is safe only because of one rule:
-**during the campaign, migrations are additive** (new tables, new nullable columns, new indexes
-created `CONCURRENTLY`). Renames and drops use expand → migrate → contract across two releases.
-
-**Frontend release** (each release in its own directory; `pwa` is a symlink switched atomically):
+On the server, [`deploy.sh`](../deploy/deploy.sh) (run by `lp-deploy.timer`) pulls the image,
+checks out its commit for the `deploy/` files, runs `alembic upgrade head` with the new image
+while the old one still serves, switches the API, reloads nginx after `nginx -t`, and waits for
+`/ready`. If `/ready` does not answer within 90 seconds it switches back to the previous image
+and remembers the bad one, so it is not retried every minute.
 
 ```bash
-# from Arman's machine or CI, after `npm ci && npm run build`
-rsync -a --delete dist/ deploy@server:/srv/lottery-passport/releases/2026-10-12-1/
+<base>/repo/deploy/deploy.sh --status          # what runs, what failed, last log lines
+journalctl -u lp-deploy --since today          # full deploy output
+<base>/repo/deploy/deploy.sh ghcr.io/winenpot/lottery-passport:sha-<commit>   # manual (rollback)
+```
+
+**Rollback** to an earlier commit: run `deploy.sh` with that commit's image (above), then
+move the channel tag back too, or the agent redeploys the newer image on the next push. On
+production, simply release the previous tag again. This is safe only because of one rule:
+**during the campaign, migrations are additive** (new tables, new nullable columns, new indexes
+created `CONCURRENTLY`). Renames and drops use expand -> migrate -> contract across two releases.
+
+**Frontend release** (each release in its own directory; `current` is a relative symlink
+switched atomically):
+
+```bash
+# copy Arman's accepted artifact (check its sha256 first) into a new release directory
+rsync -a --delete dist/ <user>@server:<base>/web/releases/2026-10-20-1/
 
 # on the server: renaming a symlink is atomic, so no request sees a half-copied site
-cd /srv/lottery-passport
-ln -sfn releases/2026-10-12-1 pwa.next && mv -T pwa.next pwa
+cd <base>/web
+ln -sfn releases/2026-10-20-1 current.next && mv -T current.next current
 # rollback: the same two commands with the previous release directory
 ```
 
-No nginx restart is needed: the Compose file mounts the parent directory
-`/srv/lottery-passport`, so nginx resolves `pwa` on every request. (Mounting `pwa` itself would
-pin the old directory until nginx restarts.) The first time, make sure `pwa` does not exist as
-a plain directory, or `mv -T` cannot replace it.
+No nginx restart is needed: Compose mounts the parent directory `<base>/web`, so nginx
+resolves `current` on every request. The first time, make sure `current` does not exist as a
+plain directory, or `mv -T` cannot replace it.
 
 ## Code batches in production
 
 Generate print batches **on the production server**, so the pepper never leaves it:
 
 ```bash
-cd /opt/lottery-passport/deploy
-install -d -m 700 /root/batches
-docker compose -f compose.prod.yml run --rm --user 0 -v /root/batches:/out api \
+cd /opt/lottery-passport          # var/ is mode 700, owned by the deploy user
+repo/deploy/compose.sh run --rm --user 0 -v "$PWD/var:/out" api \
   python -m scripts.generate_codes --city tokyo --quantity 50000 --coins-per-code 10 \
-  --label "Tokyo can run 1" --base-url https://play.<domain> --output /out/tokyo-run1.csv
-docker compose -f compose.prod.yml run --rm api python -m scripts.code_batches list
+  --label "Tokyo can run 1" --base-url https://torshx.com --output /out/tokyo-run1.csv
+repo/deploy/compose.sh run --rm api python -m scripts.code_batches list
 ```
 
 Then follow [CODES.md](CODES.md#handing-codes-to-the-printer): encrypt, send, confirm the
@@ -167,14 +243,14 @@ There is no "first admin" API route by design (a player can never promote themse
 Sign up normally (so the account exists), then promote it directly on the database:
 
 ```bash
-docker compose -f compose.prod.yml run --rm api python -m scripts.admins promote <identifier>
-docker compose -f compose.prod.yml run --rm api python -m scripts.admins list
-docker compose -f compose.prod.yml run --rm api python -m scripts.admins demote <identifier>
+<base>/repo/deploy/compose.sh run --rm api python -m scripts.admins promote <identifier>
+<base>/repo/deploy/compose.sh run --rm api python -m scripts.admins list
+<base>/repo/deploy/compose.sh run --rm api python -m scripts.admins demote <identifier>
 ```
 
 `<identifier>` is whatever the account signed up with (an E.164 phone number, e.g.
 `+989123456789`). The admin then signs in at `/admin` with that number (SMS code;
-on the demo a 0969 test number shows the code on the page). `app/api/deps.require_admin`
+on staging a 0969 test number shows the code on the page). `app/api/deps.require_admin`
 guards admin-only API routes.
 
 ## SMS provider
@@ -233,10 +309,10 @@ it took. Write the time in the table below after each drill.
 |---|---|---|---|---|
 | | | | | |
 
-**Full restore onto a new VM**: server setup → copy `deploy/.env` and `backup.env` from the
-password manager → `docker compose up -d --wait postgres` → `restic dump --tag db latest <DUMP_DIR>/lottery_passport.dump > db.dump`
-→ `docker compose exec -T postgres pg_restore -U <user> -d <db> --clean --if-exists --no-owner < db.dump`
-→ `deploy.sh <current tag>` → point DNS at the new IP.
+**Full restore onto a new VM**: server setup → copy `.env` and `backup.env` from the
+password manager → `repo/deploy/compose.sh up -d --wait postgres` → `restic dump --tag db latest <DUMP_DIR>/lottery_passport.dump > db.dump`
+→ `repo/deploy/compose.sh exec -T postgres pg_restore -U <user> -d <db> --clean --if-exists --no-owner < db.dump`
+→ enable `lp-deploy.timer` (it deploys `:production`) → point the Arvan record at the new IP.
 
 ## Monitoring and alerts
 
@@ -331,13 +407,13 @@ redeem, or data integrity is in doubt; **SEV2** = degraded; **SEV3** = cosmetic.
 ### Runbook: database down or disk full
 
 - **Symptoms**: `/ready` fails; API returns 503; logs show connection errors or `No space left on device`.
-- **Steps**: `df -h` and `docker system df`; free space safely (`docker image prune` for old images; rotate logs; never delete PostgreSQL data files); `docker compose -f deploy/compose.prod.yml logs --tail=200 postgres`; restart PostgreSQL only after space is free. If the volume is corrupted: restore (above).
+- **Steps**: `df -h` and `docker system df`; free space safely (`docker image prune` for old images; rotate logs; never delete PostgreSQL data files); `deploy/compose.sh logs --tail=200 postgres`; restart PostgreSQL only after space is free. If the volume is corrupted: restore (above).
 - **Tell**: CEO and Mehdi if SEV1 over 15 minutes.
 
 ### Runbook: overload or attack
 
 - **Symptoms**: latency high, many 429/5xx, CPU or connections saturated.
-- **Steps**: find the source (`docker compose logs nginx | awk '{print $1}' | sort | uniq -c | sort -rn | head`); block abusive IPs in nginx or the firewall; tighten the `limit_req` rates; ask the provider/CDN for DDoS filtering if it is volumetric.
+- **Steps**: find the source (`deploy/compose.sh logs nginx | awk '{print $1}' | sort | uniq -c | sort -rn | head`); block abusive IPs in nginx or the firewall; tighten the `limit_req` rates; ask the provider/CDN for DDoS filtering if it is volumetric.
 - **If the system stays down after the attack stops** (a retry storm keeps it saturated): **drop load first** (temporarily return 503 at nginx for `/api/` except `/health`), let the API and database recover, then reopen gradually. Restarting alone does not fix this; the backlog hits the fresh process immediately.
 
 ### Runbook: suspected code leak
@@ -349,7 +425,7 @@ redeem, or data integrity is in doubt; **SEV2** = degraded; **SEV3** = cosmetic.
 ### Runbook: bad deploy
 
 - **Symptoms**: errors right after a release.
-- **Steps**: `sudo deploy/deploy.sh <previous tag>`; confirm `/ready`; then investigate on staging. Never "fix forward" on production during lounge peak hours.
+- **Steps**: re-release the previous tag (or `deploy.sh ghcr.io/winenpot/lottery-passport:<previous tag>` on the server); confirm `/ready`; then investigate on staging. A release whose `/ready` fails is rolled back automatically. Never "fix forward" on production during lounge peak hours.
 
 ### Runbook: lost admin access
 
@@ -368,14 +444,14 @@ redeem, or data integrity is in doubt; **SEV2** = degraded; **SEV3** = cosmetic.
 - [ ] Load test done at 5x expected peak ([TESTING.md](TESTING.md#load-test))
 - [ ] SMS: both providers tested from production on Android and iPhone; credit for at least 2 weeks
 - [ ] Batches for launch generated, printed, QC-checked; still `generated` (not active)
-- [ ] Lounge IPs in `lounge_ips.conf`; admin IPs in `admin_allow.conf`
+- [ ] Lounge IPs in `<base>/site/lounge_ips.conf`; admin IPs in `<base>/site/admin_allow.conf`
 - [ ] Alerts tested end to end (each one reached a phone)
 - [ ] Mehdi and lounge staff trained; support channel staffed
 - [ ] Rollback plan: previous tag noted here: `________`
 
 ### Deploy
 
-- [ ] `deploy.sh <tag>`; `/ready` OK
+- [ ] Release `<tag>` approved; Release workflow's production-verify green; `/ready` OK
 - [ ] Smoke test on a real phone: sign in, redeem a code from a **test batch**, see passport and wallet, claim a challenge, leaderboard loads
 - [ ] Activate the launch batches (`code_batches activate`)
 - [ ] One real printed code redeemed by a team member, then that redemption noted

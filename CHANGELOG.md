@@ -5,6 +5,19 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ## [Unreleased]
 
+### Changed
+
+- Deploys (ADR 0011): CI builds one image per master commit and pushes it to GHCR; staging
+  (atpg, `staging.torshx.com`) deploys it automatically through a pull-based agent
+  (`deploy/deploy.sh` + `lp-deploy.timer`) with migrations, `/ready` gate and automatic
+  rollback; production follows an approved `v*` release (no rebuild). One nginx config for
+  both environments (`deploy/nginx/`), Arvan client IP, `/b/` and `/q/` redacted in logs.
+  Replaces `compose.prod.yml` and the build-on-server `deploy.sh`.
+
+### Removed
+
+- Render: `render.yaml`, the `RENDER_GIT_COMMIT` alias (`GIT_COMMIT` is baked into the image).
+
 ### Added
 
 - Staging SMS gates: `OTP_TEST_NUMBERS` (explicit switch for the `0969` test numbers,
