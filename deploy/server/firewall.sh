@@ -12,7 +12,8 @@
 # deploy/nginx/snippets/arvan_realip.conf (the same list nginx trusts).
 set -euo pipefail
 
-base="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# This file is <base>/repo/deploy/server/firewall.sh.
+base="${LP_BASE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
 env_file="$base/.env"
 ranges_file="$base/repo/deploy/nginx/snippets/arvan_realip.conf"
 
