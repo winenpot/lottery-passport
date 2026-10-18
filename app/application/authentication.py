@@ -33,6 +33,14 @@ class DailyLimitError(AuthenticationError):
     """Too many codes requested for this number in the last 24 hours."""
 
 
+class PhoneNotAllowedError(AuthenticationError):
+    """This environment sends real SMS only to an allow-list (staging).
+
+    A public test server that texts any number is an SMS relay that burns
+    credit; production never sets the list (config validator).
+    """
+
+
 class SmsError(Exception):
     """Raised by an SmsSender when delivery fails for any reason."""
 
@@ -108,6 +116,8 @@ class AuthenticationSettings:
     daily_limit: int
     # TODO: remove this on production (see app/application/otp_test_numbers.py).
     test_numbers_enabled: bool = False
+    # Non-empty: real SMS only to these E.164 numbers (staging). Empty: anyone.
+    allowed_phones: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,6 +163,21 @@ class AuthenticationService:
         except PhoneNumberError as error:
             raise PhoneInvalidError(str(error)) from error
         now = self._clock.now()
+        # TODO: remove this on production (test numbers, otp_test_numbers.py).
+        test_number = self._settings.test_numbers_enabled and is_test_phone_number(
+            phone
+        )
+        if (
+            self._settings.allowed_phones
+            and not test_number
+            and phone not in self._settings.allowed_phones
+        ):
+            # Before any lookup or write: no account, no challenge, no SMS.
+            logger.warning(
+                "otp_request_blocked",
+                extra={"phone": mask_phone(phone), "reason": "not_allowed"},
+            )
+            raise PhoneNotAllowedError("this number is not on the allow-list")
         result = RequestChallengeResult(
             resend_after_seconds=int(self._settings.resend_cooldown.total_seconds()),
             expires_in_seconds=int(self._settings.challenge_ttl.total_seconds()),
@@ -208,7 +233,7 @@ class AuthenticationService:
         purpose = "signup" if is_new_user else "login"
         # TODO: remove this on production. Test numbers: same random code and
         # limits, but no SMS; the code goes back in the response instead.
-        if self._settings.test_numbers_enabled and is_test_phone_number(phone):
+        if test_number:
             await self._challenges.create(challenge)
             logger.info(
                 "otp_issued",

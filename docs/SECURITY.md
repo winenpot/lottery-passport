@@ -169,7 +169,10 @@ Run on D12 (B25) and before every major release.
 - [ ] Concurrency tests pass on the production database version
 - [ ] OTP test numbers removed: delete `app/application/otp_test_numbers.py` and the
       `# TODO: remove this on production` blocks (`app/application/authentication.py`,
-      `app/app.py`). They are already off when `ENVIRONMENT` is staging/production;
+      `app/app.py`, `app/core/config.py`). Production refuses `OTP_TEST_NUMBERS=true`;
+      staging may switch them on explicitly;
       `grep -rn "TODO: remove this on production" app` must print nothing
+- [ ] `OTP_ALLOWED_PHONES` empty in production (the app refuses a list there); global SMS
+      budget/alarm set with the provider
 - [ ] `TERMS_REQUIRED` unset or `true` in production (the app refuses `false` there), and the
       real terms/privacy text is published at the URLs the frontend shows

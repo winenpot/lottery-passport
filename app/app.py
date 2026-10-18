@@ -164,8 +164,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             resend_cooldown=timedelta(seconds=resolved_settings.otp_resend_seconds),
             daily_limit=resolved_settings.otp_daily_limit_per_phone,
             # TODO: remove this on production (otp_test_numbers.py).
-            test_numbers_enabled=resolved_settings.environment.lower()
-            in {"development", "demo"},
+            test_numbers_enabled=resolved_settings.test_numbers_enabled,
+            allowed_phones=resolved_settings.allowed_otp_phones,
         ),
     )
     admin_user_service = AdminUserService(
@@ -328,8 +328,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         max_age_seconds=resolved_settings.admin_session_max_age_seconds,
         secure=resolved_settings.secure_session_cookies,
         # TODO: remove this on production (otp_test_numbers.py).
-        show_test_codes=resolved_settings.environment.lower()
-        in {"development", "demo"},
+        show_test_codes=resolved_settings.test_numbers_enabled,
         session_factory=database.session_factory,
         coin_adjustment_service=coin_adjustment_service,
     )

@@ -7,6 +7,11 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ### Added
 
+- Staging SMS gates: `OTP_TEST_NUMBERS` (explicit switch for the `0969` test numbers,
+  default unchanged: development/demo only; production refuses `true`) and
+  `OTP_ALLOWED_PHONES` (real SMS only to listed numbers, others `403 PHONE_NOT_ALLOWED`
+  before anything is stored; production refuses a list).
+
 - `TERMS_REQUIRED` setting (default `true`; production refuses `false`). With `false`,
   `profile_complete` needs only a nickname and redemption skips `TERMS_NOT_ACCEPTED`, so
   test environments work while the legal text does not exist yet; `terms_accepted` stays

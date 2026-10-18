@@ -17,6 +17,12 @@ Parked features (not in the MVP contract): the city passport. See
 Newest first. **Breaking** means a call that worked before needs a change on your side.
 Check `GET /health` → `commit` to see which backend commit is deployed on the demo.
 
+**2026-10-18 (staging SMS gates)**
+
+- Added: `403 PHONE_NOT_ALLOWED` on `POST /auth/request`: on the staging server real SMS go
+  only to the team's numbers; any other real number is refused before anything is
+  stored. Use a `0969` test number there (staging has them on, production never).
+
 **2026-10-18 (optional terms outside production)**
 
 - Added: `GET /config` returns `terms_required` (bool). When `false` (test environments
@@ -236,6 +242,7 @@ and the id in our logs: put it in bug reports.
 | `PHONE_INVALID` | 422 | Not an Iranian mobile number | Highlight the field |
 | `OTP_COOLDOWN` | 429 | A code was sent less than a minute ago | Countdown from `Retry-After` |
 | `OTP_DAILY_LIMIT` | 429 | Too many codes for this number today | "Try again tomorrow" |
+| `PHONE_NOT_ALLOWED` | 403 | Test server: real SMS only to team numbers | Use a `0969` test number |
 | `OTP_INVALID` | 401 | Wrong, expired or already used code, or too many attempts | "Wrong code"; offer resend |
 | `TERMS_NOT_ACCEPTED` | 403 | The action needs accepted T&Cs | Show the T&C screen |
 | `PROFILE_INCOMPLETE` | 403 | Nickname not set yet | Go to profile setup |
@@ -324,9 +331,11 @@ field is named `identifier` (kept for one release so an older client sending a
 ```
 
 The response is the same for new and known numbers. Errors: `PHONE_INVALID`,
-`OTP_COOLDOWN`, `OTP_DAILY_LIMIT`.
+`OTP_COOLDOWN`, `OTP_DAILY_LIMIT`, `PHONE_NOT_ALLOWED` (staging only: a real number that is
+not on the team allow-list).
 
-Test numbers (demo only, never in production): any number starting `0969` (`0969 xxx xxxx`).
+Test numbers (demo and staging, never in production): any number starting `0969`
+(`0969 xxx xxxx`).
 No SMS is sent; the response carries the code, then verify as usual. Cooldown and
 daily limit still apply per number.
 

@@ -185,6 +185,7 @@ def build_service(
     daily_limit: int = 5,
     resend_cooldown: timedelta = timedelta(seconds=60),
     test_numbers_enabled: bool = False,
+    allowed_phones: frozenset[str] = frozenset(),
 ) -> tuple[AuthenticationService, FakeClock, FakeSms, FakeUsers]:
     clock = FakeClock(datetime(2026, 1, 1, tzinfo=UTC))
     sms = FakeSms()
@@ -203,6 +204,7 @@ def build_service(
             resend_cooldown=resend_cooldown,
             daily_limit=daily_limit,
             test_numbers_enabled=test_numbers_enabled,
+            allowed_phones=allowed_phones,
         ),
     )
     return service, clock, sms, users

@@ -19,6 +19,7 @@ from app.application.authentication import (
     AuthenticationService,
     DailyLimitError,
     PhoneInvalidError,
+    PhoneNotAllowedError,
     ResendCooldownError,
 )
 from app.core.config import Settings, get_settings
@@ -37,6 +38,12 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
         "The response is the same shape for a new and a known number."
     ),
     responses={
+        403: {
+            "model": ErrorResponse,
+            "description": (
+                "PHONE_NOT_ALLOWED (test servers: real SMS only to listed numbers)"
+            ),
+        },
         422: {"model": ErrorResponse, "description": "PHONE_INVALID"},
         429: {
             "model": ErrorResponse,
@@ -69,6 +76,12 @@ async def request_authentication(
             status.HTTP_429_TOO_MANY_REQUESTS,
             "OTP_DAILY_LIMIT",
             "too many codes requested for this number today",
+        ) from error
+    except PhoneNotAllowedError as error:
+        raise ApiError(
+            status.HTTP_403_FORBIDDEN,
+            "PHONE_NOT_ALLOWED",
+            "this test server sends codes only to team numbers; use a test number",
         ) from error
     except AuthenticationError as error:
         raise ApiError(

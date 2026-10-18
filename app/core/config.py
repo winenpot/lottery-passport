@@ -7,6 +7,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.domain.phone import PhoneNumberError, normalize_iranian_mobile
+
 
 class Settings(BaseSettings):
     app_name: str = "Lottery Passport API"
@@ -48,6 +50,14 @@ class Settings(BaseSettings):
     otp_max_attempts: int = Field(default=5, ge=1, le=20)
     otp_resend_seconds: int = Field(default=60, ge=10, le=600)
     otp_daily_limit_per_phone: int = Field(default=5, ge=1, le=50)
+    # 0969 test numbers (code in the response, no SMS). Unset: on in
+    # development/demo only. true is allowed on staging; production refuses it.
+    # TODO: remove this on production (app/application/otp_test_numbers.py).
+    otp_test_numbers: bool | None = None
+    # Comma-separated mobile numbers that may receive a real SMS (staging, so a
+    # public test server is not an SMS relay). Empty: anyone. Production refuses
+    # a non-empty list.
+    otp_allowed_phones: str = ""
     auth_session_ttl_seconds: int = Field(default=2_592_000, ge=300, le=31_536_000)
     session_cookie_name: str = "lottery_passport_session"
     log_level: str = "INFO"
@@ -156,6 +166,13 @@ class Settings(BaseSettings):
             raise ValueError("SESSION_COOKIE_SAMESITE=none requires Secure cookies")
         if self.environment.lower() == "production" and not self.terms_required:
             raise ValueError("TERMS_REQUIRED=false is not allowed in production")
+        allowed_phones = self.allowed_otp_phones  # raises on a malformed number
+        if self.environment.lower() == "production" and (
+            self.test_numbers_enabled or allowed_phones
+        ):
+            raise ValueError(
+                "OTP_TEST_NUMBERS and OTP_ALLOWED_PHONES are not allowed in production"
+            )
         # demo is the throwaway test deployment (test API, test DB, test
         # frontend, possibly plain http): only staging/production are strict.
         if self.environment.lower() in {"staging", "production"}:
@@ -204,6 +221,25 @@ class Settings(BaseSettings):
     @property
     def campaign_zone(self) -> ZoneInfo:
         return ZoneInfo(self.campaign_timezone)
+
+    @property
+    def test_numbers_enabled(self) -> bool:
+        if self.otp_test_numbers is not None:
+            return self.otp_test_numbers
+        return self.environment.lower() in {"development", "demo"}
+
+    @property
+    def allowed_otp_phones(self) -> frozenset[str]:
+        numbers = set()
+        for raw in self.otp_allowed_phones.replace(";", ",").split(","):
+            if not raw.strip():
+                continue
+            try:
+                numbers.add(normalize_iranian_mobile(raw))
+            except PhoneNumberError as error:
+                # The message never repeats the value (it is a phone number).
+                raise ValueError("OTP_ALLOWED_PHONES has an invalid number") from error
+        return frozenset(numbers)
 
     @property
     def secure_session_cookies(self) -> bool:
