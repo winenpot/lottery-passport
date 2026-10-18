@@ -23,8 +23,12 @@ DESKTOP_SERVICES=(
 KEEP_PACKAGES=(
     network-manager openssh-server systemd-resolved chrony cron rsyslog
     unattended-upgrades open-vm-tools ufw iptables nftables sudo
-    ca-certificates curl git restic docker.io docker-compose-v2
+    ca-certificates curl git restic
 )
+# Only when no Docker is installed. An existing Docker (e.g. docker-ce from
+# Docker's own repository) is kept: installing docker.io next to it makes apt
+# REMOVE docker-ce (they conflict), which happened once.
+DOCKER_PACKAGES=(docker.io docker-compose-v2)
 DESKTOP_PACKAGES=(
     'ubuntu-desktop*' 'gnome-*' 'gdm3' 'evolution*' 'ibus*' 'update-notifier*'
     'apport*' 'cups*' 'avahi-*' 'colord*' 'modemmanager' 'fwupd*'
@@ -63,6 +67,13 @@ main() {
     "${apt[@]}" -y -o Dpkg::Options::=--force-confold upgrade
     "${apt[@]}" -y install --no-install-recommends "${KEEP_PACKAGES[@]}"
     apt-mark manual "${KEEP_PACKAGES[@]}" >/dev/null
+    if command -v docker >/dev/null; then
+        echo "  Docker already installed ($(docker --version)); not touched"
+    else
+        "${apt[@]}" -y install --no-install-recommends "${DOCKER_PACKAGES[@]}"
+        apt-mark manual "${DOCKER_PACKAGES[@]}" >/dev/null
+    fi
+    docker compose version >/dev/null || die "docker compose plugin missing"
 
     if [[ $purge -eq 1 ]]; then
         step "purge desktop packages"
@@ -103,9 +114,11 @@ JSON
     step "host firewall (SSH only; Docker-published ports: lp-firewall.service)"
     local ssh_port
     ssh_port="$(sshd -T 2>/dev/null | awk '$1 == "port" {print $2; exit}')"
+    # Never guess: a wrong port here locks everyone out.
+    [[ "$ssh_port" =~ ^[0-9]+$ ]] || die "cannot read the SSH port from sshd -T"
     ufw default deny incoming >/dev/null
     ufw default allow outgoing >/dev/null
-    ufw allow "${ssh_port:-22}/tcp" >/dev/null
+    ufw allow "$ssh_port/tcp" >/dev/null
     ufw --force enable >/dev/null
 
     if [[ $harden -eq 1 ]]; then
