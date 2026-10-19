@@ -17,9 +17,11 @@ even if this code had a bug).
 
 import hashlib
 import hmac
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from enum import StrEnum
+from typing import Protocol
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -76,6 +78,110 @@ def hash_redemption_code(code: str, pepper: str) -> str:
     return hmac.new(
         pepper.encode("utf-8"), code.encode("utf-8"), hashlib.sha256
     ).hexdigest()
+
+
+_PEPPER_FINGERPRINT_LABEL = b"pepper-fingerprint:v1"
+
+
+def pepper_fingerprint(pepper: str) -> str:
+    """One-way fingerprint of ``pepper``, safe to store on a batch row.
+
+    Same construction as :func:`hash_redemption_code` (HMAC-SHA256) but
+    keyed the other way around -- the pepper is the HMAC *key*, a fixed
+    label the message -- so this value cannot be confused with, or help
+    attack, a code hash. It identifies WHICH pepper signed a batch without
+    revealing it, which is what lets :func:`find_pepper_mismatches` catch a
+    misconfigured pepper (wrong value, stale secret, staging's pepper
+    copied by mistake) before it silently rejects every redemption under
+    that batch as plain ``CODE_INVALID``.
+    """
+    return hmac.new(
+        pepper.encode("utf-8"), _PEPPER_FINGERPRINT_LABEL, hashlib.sha256
+    ).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class PepperMismatch:
+    batch_id: UUID
+    city: str
+
+
+class PepperMismatchError(RuntimeError):
+    """An ACTIVE batch's stored pepper fingerprint does not match the pepper
+    the app is running with now. Every redemption under it would fail as
+    plain ``CODE_INVALID`` -- loud and fast here beats quiet and slow there.
+    """
+
+    def __init__(self, mismatches: Sequence[PepperMismatch]) -> None:
+        batches = ", ".join(f"{m.city}:{m.batch_id}" for m in mismatches)
+        super().__init__(
+            "REDEMPTION_CODE_PEPPER does not match the pepper these ACTIVE "
+            f"batches were generated under: {batches}. Every redemption "
+            "under them would fail as CODE_INVALID. Fix the pepper (most "
+            "likely cause), or void and reprint if it really changed."
+        )
+        self.mismatches = tuple(mismatches)
+
+
+def find_pepper_mismatches(
+    active_batches: Sequence[tuple[UUID, str, str | None]],
+    expected_fingerprint: str,
+) -> list[PepperMismatch]:
+    """ACTIVE batches whose stored fingerprint differs from the one running now.
+
+    ``active_batches`` is ``(batch_id, city, pepper_fingerprint)`` for every
+    batch with ``status == 'active'``. ``None`` means the batch was
+    generated before this guard existed (legacy) and is never flagged --
+    there is nothing to compare it against.
+    """
+    return [
+        PepperMismatch(batch_id, city)
+        for batch_id, city, fingerprint in active_batches
+        if fingerprint is not None and fingerprint != expected_fingerprint
+    ]
+
+
+def verify_active_batch_peppers(
+    active_batches: Sequence[tuple[UUID, str, str | None]],
+    expected_fingerprint: str,
+) -> None:
+    """Raise :class:`PepperMismatchError` if any ACTIVE batch fails the check.
+
+    Called at startup (see ``app.app.create_app``) so a misconfigured
+    pepper fails the deploy instead of quietly breaking redemptions.
+    """
+    mismatches = find_pepper_mismatches(active_batches, expected_fingerprint)
+    if mismatches:
+        raise PepperMismatchError(mismatches)
+
+
+class ActiveBatchPeppersPort(Protocol):
+    async def active_batch_peppers(self) -> list[tuple[UUID, str, str | None]]:
+        """``(batch_id, city, pepper_fingerprint)`` for every ACTIVE batch."""
+        ...
+
+
+class PepperGuard:
+    """``/ready``-time version of :func:`verify_active_batch_peppers`.
+
+    Unlike the startup check (which crashes the boot), this is polled
+    continuously by the deploy gate and uptime probes, so a pepper edited
+    into drift AFTER boot (a rolling restart that silently picks up a
+    different secret) is caught too, not just the one moment the process
+    started.
+    """
+
+    def __init__(
+        self, dependency: ActiveBatchPeppersPort, expected_fingerprint: str | None
+    ) -> None:
+        self._dependency = dependency
+        self._expected_fingerprint = expected_fingerprint
+
+    async def check(self) -> bool:
+        if self._expected_fingerprint is None:  # no pepper configured (development)
+            return True
+        active = await self._dependency.active_batch_peppers()
+        return not find_pepper_mismatches(active, self._expected_fingerprint)
 
 
 def redemption_idempotency_key(code_id: UUID) -> str:

@@ -2319,7 +2319,7 @@
     },
     "/ready": {
       "get": {
-        "description": "503 if the database is unreachable. Used by deploy checks and uptime probes.",
+        "description": "503 if the database is unreachable, or if an ACTIVE code batch's pepper fingerprint does not match the pepper this process is running with. Used by deploy checks and uptime probes.",
         "operationId": "ready",
         "responses": {
           "200": {
@@ -2340,10 +2340,10 @@
                 }
               }
             },
-            "description": "Database unreachable"
+            "description": "Database unreachable, or a pepper mismatch"
           }
         },
-        "summary": "Database readiness",
+        "summary": "Database and pepper-guard readiness",
         "tags": [
           "health"
         ]

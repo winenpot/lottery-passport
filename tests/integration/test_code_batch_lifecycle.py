@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 
 from app.app import create_app
+from app.application.redemption_codes import PepperMismatchError, pepper_fingerprint
 from app.core.config import Settings
 from app.domain.code_batches import BatchEventType, BatchStatus
 from app.domain.codes import (
@@ -222,3 +223,106 @@ async def test_app_startup_fails_loudly_when_a_frozen_format_has_drifted(
                 .where(CodeBatchModel.id == batch_id)
                 .values(format_fingerprint=correct_fingerprint)
             )
+
+
+async def test_active_batch_peppers_reports_only_active_rows(
+    database: PostgreSQLAdapter, tmp_path: Path
+) -> None:
+    generated_id = await make_batch(database, tmp_path, "pepper-generated")
+    active_id = await make_batch(database, tmp_path, "pepper-active")
+    try:
+        assert await set_status(database.session_factory, active_id, BatchStatus.ACTIVE)
+
+        rows = await database.active_batch_peppers()
+
+        assert (active_id, CityCode.PARIS.value, pepper_fingerprint(PEPPER)) in rows
+        assert generated_id not in {row[0] for row in rows}
+    finally:
+        # Shared, real database state (see the format-drift test above): an
+        # ACTIVE batch's fingerprint is only ever correct for THIS file's
+        # own PEPPER, so it would fail another test file's startup check
+        # (a different pepper string) against this same database.
+        await set_status(database.session_factory, active_id, BatchStatus.VOID)
+
+
+async def test_app_startup_fails_loudly_when_an_active_batch_pepper_has_drifted(
+    database: PostgreSQLAdapter, tmp_path: Path, test_database_url: str
+) -> None:
+    """A batch printed under a different pepper must block startup, not fail
+
+    one redemption at a time as CODE_INVALID.
+    """
+    batch_id = await make_batch(database, tmp_path, "pepper-drifted")
+    assert await set_status(database.session_factory, batch_id, BatchStatus.ACTIVE)
+
+    try:
+        settings = Settings(
+            database_url=test_database_url,
+            redemption_code_pepper="a-completely-different-pepper",
+            _env_file=None,
+        )
+        with (
+            pytest.raises(PepperMismatchError, match=str(batch_id)),
+            TestClient(create_app(settings)),
+        ):
+            pass
+    finally:
+        # Shared, real database state (see the format-drift test above): an
+        # ACTIVE batch's fingerprint is only ever correct for THIS file's
+        # own PEPPER, so it would fail another test file's startup check
+        # (a different pepper string) against this same database.
+        await set_status(database.session_factory, batch_id, BatchStatus.VOID)
+
+
+async def test_app_startup_passes_when_the_pepper_matches(
+    database: PostgreSQLAdapter, tmp_path: Path, test_database_url: str
+) -> None:
+    batch_id = await make_batch(database, tmp_path, "pepper-matching")
+    assert await set_status(database.session_factory, batch_id, BatchStatus.ACTIVE)
+
+    try:
+        settings = Settings(
+            database_url=test_database_url,
+            redemption_code_pepper=PEPPER,
+            _env_file=None,
+        )
+        with TestClient(create_app(settings)) as client:
+            assert client.get("/health").status_code == 200
+    finally:
+        await set_status(database.session_factory, batch_id, BatchStatus.VOID)
+
+
+async def test_ready_rejects_a_pepper_mismatch_distinctly_from_a_down_database(
+    database: PostgreSQLAdapter, tmp_path: Path, test_database_url: str
+) -> None:
+    """Startup only runs once; /ready must keep catching drift on every poll."""
+    batch_id = await make_batch(database, tmp_path, "pepper-ready")
+    assert await set_status(database.session_factory, batch_id, BatchStatus.ACTIVE)
+
+    try:
+        # A pepper that passes at boot (so startup does not already refuse
+        # to serve), then drifted in storage afterwards -- the only way to
+        # reach /ready's own check instead of startup's.
+        settings = Settings(
+            database_url=test_database_url,
+            redemption_code_pepper=PEPPER,
+            _env_file=None,
+        )
+        with TestClient(create_app(settings)) as client:
+            async with database.session_factory() as session, session.begin():
+                await session.execute(
+                    update(CodeBatchModel)
+                    .where(CodeBatchModel.id == batch_id)
+                    .values(pepper_fingerprint=pepper_fingerprint("a-rotated-pepper"))
+                )
+            response = client.get("/ready")
+
+        assert response.status_code == 503
+        assert response.json()["error"]["message"] == (
+            "an active code batch's pepper does not match the configured pepper"
+        )
+    finally:
+        # Shared, real database state (see the format-drift test above): a
+        # batch left ACTIVE with a fingerprint that matches no real pepper
+        # would fail every other test's startup check against this database.
+        await set_status(database.session_factory, batch_id, BatchStatus.VOID)

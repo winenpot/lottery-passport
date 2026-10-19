@@ -137,6 +137,15 @@ python -m scripts.code_batches void <batch-id>        # leak, misprint, recall
 `coins_per_code` is set per batch (0 = entries only). Keep `generated` until the product is
 actually on sale: codes found early (factory staff, warehouse) are worthless until then.
 
+**Pepper guard**: every batch generated from here on records the fingerprint of the pepper it
+was generated with (`code_batches.pepper_fingerprint`, HMAC of a fixed label keyed by the pepper
+— never the pepper itself). At startup, and on every `GET /ready` poll, the app refuses to serve
+if an ACTIVE batch's fingerprint does not match the pepper it is running with now. Without this,
+a misconfigured `REDEMPTION_CODE_PEPPER` (wrong value, stale secret, another environment's
+pepper copied by mistake) would silently turn every redemption into `CODE_INVALID` — indistinguishable
+from a bad scan — until support tickets added up. A `NULL` fingerprint (batches generated before
+this guard existed) is never flagged. See [ADR-0002](adr/0002-random-codes-hmac-storage-batches.md).
+
 ## Printing QR sheets for a test run
 
 Needs the `codes-print` dependency group (`uv sync` includes it; the production image

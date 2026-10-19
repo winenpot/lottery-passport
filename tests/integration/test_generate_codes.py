@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import func, select
 
-from app.application.redemption_codes import hash_redemption_code
+from app.application.redemption_codes import hash_redemption_code, pepper_fingerprint
 from app.core.config import Settings
 from app.domain.code_batches import BatchStatus
 from app.domain.codes import generate_code, parse_code
@@ -82,6 +82,27 @@ async def test_batch_spanning_chunks_stores_hashes_and_writes_private_csv(
     assert stored == quantity
     assert batch is not None and batch.status == BatchStatus.GENERATED.value
     assert found is not None
+
+
+async def test_a_generated_batch_records_the_fingerprint_of_its_pepper(
+    database: PostgreSQLAdapter, tmp_path: Path
+) -> None:
+    batch_id = await generate_batch(
+        database.session_factory,
+        city=CityCode.BERLIN,
+        quantity=1,
+        coins_per_code=0,
+        label="pepper fingerprint",
+        base_url="https://play.example.ir",
+        output=tmp_path / "berlin.csv",
+        pepper=PEPPER,
+    )
+
+    async with database.session_factory() as session:
+        batch = await session.get(CodeBatchModel, batch_id)
+
+    assert batch is not None
+    assert batch.pepper_fingerprint == pepper_fingerprint(PEPPER)
 
 
 async def test_codes_that_already_exist_are_replaced_not_duplicated(

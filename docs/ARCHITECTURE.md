@@ -190,6 +190,7 @@ erDiagram
         timestamptz exported_at
         string export_sha256
         timestamptz frozen_at
+        string pepper_fingerprint "set at generation; guards against a wrong/rotated pepper"
     }
     redemption_codes {
         uuid id PK
@@ -462,6 +463,7 @@ stateDiagram-v2
 | International internet cut | Nothing changes for players in Iran | Everything on the request path is domestic | Check that off-site backups and alerts still work |
 | Traffic spike or bot flood | Some requests get 429 with `Retry-After` | nginx limits per IP (lounge IPs allow-listed) and per account limits in the API | Runbook [overload or attack](OPERATIONS.md#runbook-overload-or-attack) |
 | Printer file leaked | Unknown people redeem codes | Batch can be voided in seconds | Runbook [code leak](OPERATIONS.md#runbook-suspected-code-leak) |
+| Wrong/rotated `REDEMPTION_CODE_PEPPER` | Would silently turn every redemption into `CODE_INVALID` | Caught at startup (crashes the deploy) and on every `/ready` poll: an ACTIVE batch's stored pepper fingerprint is checked against the running pepper ([ADR 0002](adr/0002-random-codes-hmac-storage-batches.md)) | Fix the pepper and redeploy; a batch really printed under a different pepper must be voided and reprinted |
 | Bad deploy | Errors after a release | `deploy.sh` rolls back automatically when `/ready` fails; the previous image stays on the VM | Re-release the previous tag ([ADR 0011](adr/0011-pull-based-deploys-from-ghcr.md)); migrations are additive during the campaign |
 
 ## What to revisit as it grows

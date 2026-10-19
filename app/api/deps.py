@@ -15,7 +15,7 @@ from app.application.mini_games import MiniGameService
 from app.application.passports import PassportService
 from app.application.ports import ReadinessChecker
 from app.application.profile import ProfileService
-from app.application.redemption_codes import RedemptionService
+from app.application.redemption_codes import PepperGuard, RedemptionService
 from app.application.teams import TeamService
 from app.application.wallets import WalletService
 from app.domain.users import User, UserRole
@@ -44,6 +44,10 @@ def session_cookie(
 
 def get_readiness_checker(request: Request) -> ReadinessChecker:
     return cast(ReadinessChecker, request.app.state.readiness_checker)
+
+
+def get_pepper_guard(request: Request) -> PepperGuard:
+    return cast(PepperGuard, request.app.state.pepper_guard)
 
 
 def get_profile_service(request: Request) -> ProfileService:

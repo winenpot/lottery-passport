@@ -59,3 +59,5 @@ typo into a friendly "check this character" message instead of a support ticket.
 1. [x] Implement format, generator, batch CLI, tests.
 2. [ ] Confirm printable format and placement with the factory (P01, P02).
 3. [ ] Store the production pepper with a backup holder (B06).
+4. [x] Guard against a wrong/rotated pepper at startup and `/ready`, not just at redemption
+   time (`code_batches.pepper_fingerprint`; see [CODES.md](../CODES.md#5-batches)).

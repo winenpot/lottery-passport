@@ -54,6 +54,7 @@ class CodeBatch:
     exported_at: datetime | None = None
     export_sha256: str | None = None
     frozen_at: datetime | None = None
+    pepper_fingerprint: str | None = None
 
     @property
     def is_frozen(self) -> bool:

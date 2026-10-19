@@ -38,7 +38,12 @@ from app.application.mini_games import MiniGameService
 from app.application.passports import PassportService
 from app.application.ports import ReadinessChecker
 from app.application.profile import ProfileService
-from app.application.redemption_codes import RedemptionService
+from app.application.redemption_codes import (
+    PepperGuard,
+    RedemptionService,
+    pepper_fingerprint,
+    verify_active_batch_peppers,
+)
 from app.application.teams import TeamService
 from app.application.unit_of_work import UnitOfWork
 from app.application.wallets import WalletService
@@ -140,6 +145,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     configure_logging(resolved_settings)
     database = PostgreSQLAdapter(resolved_settings)
     readiness_checker = ReadinessChecker(database)
+    expected_pepper_fingerprint = (
+        pepper_fingerprint(resolved_settings.redemption_code_pepper.get_secret_value())
+        if resolved_settings.redemption_code_pepper is not None
+        else None
+    )
+    pepper_guard = PepperGuard(database, expected_pepper_fingerprint)
     sms_sender = (
         KavenegarSmsSender(
             api_key=resolved_settings.kavenegar_otp_api_key.get_secret_value(),
@@ -262,10 +273,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         try:
             frozen_formats = await database.frozen_batch_formats()
+            active_batch_peppers = await database.active_batch_peppers()
         except Exception as error:  # noqa: BLE001 - DB down is /ready's job, not a crash
-            logger.warning("startup code-format check skipped: %s", error)
+            logger.warning("startup code-format/pepper check skipped: %s", error)
         else:
             verify_frozen_formats(frozen_formats)
+            if expected_pepper_fingerprint is not None:
+                verify_active_batch_peppers(
+                    active_batch_peppers, expected_pepper_fingerprint
+                )
         yield
         await database.dispose()
 
@@ -349,6 +365,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         coin_adjustment_service=coin_adjustment_service,
     )
     application.state.readiness_checker = readiness_checker
+    application.state.pepper_guard = pepper_guard
     application.state.authentication_service = authentication_service
     application.state.passport_service = passport_service
     application.state.redemption_service = redemption_service

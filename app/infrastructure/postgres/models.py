@@ -247,6 +247,9 @@ class CodeBatchModel(Base):
     frozen_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Pepper guard (app.application.redemption_codes): which pepper signed
+    # this batch. NULL = generated before the guard existed (never flagged).
+    pepper_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (
         CheckConstraint("quantity > 0", name="ck_code_batches_quantity_positive"),

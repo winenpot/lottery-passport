@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel, Field
 
-from app.api.deps import get_readiness_checker
+from app.api.deps import get_pepper_guard, get_readiness_checker
 from app.api.errors import ApiError, ErrorResponse
 from app.api.v1.achievements import router as achievements_router
 from app.api.v1.admin import router as admin_router
@@ -14,6 +14,7 @@ from app.api.v1.redemptions import router as redemptions_router
 from app.api.v1.teams import router as teams_router
 from app.api.v1.users import router as users_router
 from app.application.ports import ReadinessChecker
+from app.application.redemption_codes import PepperGuard
 from app.core.config import Settings
 
 router = APIRouter()
@@ -68,19 +69,33 @@ async def health(request: Request) -> LivenessResponse:
     "/ready",
     response_model=HealthResponse,
     tags=["health"],
-    summary="Database readiness",
+    summary="Database and pepper-guard readiness",
     description=(
-        "503 if the database is unreachable. Used by deploy checks and uptime probes."
+        "503 if the database is unreachable, or if an ACTIVE code batch's pepper "
+        "fingerprint does not match the pepper this process is running with. Used "
+        "by deploy checks and uptime probes."
     ),
-    responses={503: {"model": ErrorResponse, "description": "Database unreachable"}},
+    responses={
+        503: {
+            "model": ErrorResponse,
+            "description": "Database unreachable, or a pepper mismatch",
+        }
+    },
 )
 async def ready(
     readiness_checker: ReadinessChecker = Depends(get_readiness_checker),
+    pepper_guard: PepperGuard = Depends(get_pepper_guard),
 ) -> HealthResponse:
     if not await readiness_checker.check():
         raise ApiError(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "SERVICE_UNAVAILABLE",
             "database unreachable",
+        )
+    if not await pepper_guard.check():
+        raise ApiError(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "SERVICE_UNAVAILABLE",
+            "an active code batch's pepper does not match the configured pepper",
         )
     return HealthResponse(status="ready")

@@ -1230,8 +1230,11 @@ never shift or repeat rows. Errors: `CURSOR_INVALID`, `ADMIN_REQUIRED`, `AUTH_RE
 `GET /health` → `{"status": "ok", "version": "0.1.0", "commit": "579f8f1", "environment": "demo"}`
 (process is up; `commit` is the deployed git commit, so you can tell whether a backend change is
 live yet; null when unknown). `GET /ready` → `{"status": "ready"}`, or `503 SERVICE_UNAVAILABLE`
-if the database is unreachable. Not under `/api/v1`; used by the deploy agent, CI and uptime
-checks.
+if the database is unreachable, or if an ACTIVE code batch's pepper fingerprint does not match
+the pepper this process is running with (a misconfigured `REDEMPTION_CODE_PEPPER` — wrong value,
+stale secret, a different environment's pepper copied by mistake — would otherwise silently turn
+every redemption into `CODE_INVALID`; see [CODES.md](CODES.md#5-batches)). Not under `/api/v1`;
+used by the deploy agent, CI and uptime checks.
 
 ## OpenAPI
 

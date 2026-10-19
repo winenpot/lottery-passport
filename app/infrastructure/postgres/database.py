@@ -1,5 +1,6 @@
 from typing import Self
 from urllib.parse import urlparse
+from uuid import UUID
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import (
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import (
 
 from app.application.ports import ReadinessPort
 from app.core.config import Settings
+from app.domain.code_batches import BatchStatus
 from app.infrastructure.postgres.models import CodeBatchModel
 
 
@@ -68,6 +70,20 @@ class PostgreSQLAdapter(ReadinessPort):
         return [
             (format_id, fingerprint) for format_id, fingerprint in rows if fingerprint
         ]
+
+    async def active_batch_peppers(self) -> list[tuple[UUID, str, str | None]]:
+        """``(batch_id, city, pepper_fingerprint)`` for every ACTIVE batch.
+
+        Used by the pepper guard (``app.application.redemption_codes``) at
+        startup and on every ``/ready`` poll, so a misconfigured pepper is
+        caught before it silently rejects real redemptions as CODE_INVALID.
+        """
+        statement = select(
+            CodeBatchModel.id, CodeBatchModel.city, CodeBatchModel.pepper_fingerprint
+        ).where(CodeBatchModel.status == BatchStatus.ACTIVE.value)
+        async with self.session_factory() as session:
+            rows = (await session.execute(statement)).all()
+        return [(batch_id, city, fingerprint) for batch_id, city, fingerprint in rows]
 
     async def dispose(self) -> None:
         await self.engine.dispose()

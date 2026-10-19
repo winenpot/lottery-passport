@@ -32,6 +32,13 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ### Added
 
+- Pepper guard (ADR 0002 action item 4): `code_batches.pepper_fingerprint` (migration 0018),
+  written by `scripts.generate_codes` for every batch from here on. At startup, and on every
+  `GET /ready` poll, the app refuses to serve if an ACTIVE batch's fingerprint does not match
+  the pepper it is running with now — a misconfigured `REDEMPTION_CODE_PEPPER` would otherwise
+  silently turn every redemption into `CODE_INVALID`. A `NULL` fingerprint (pre-existing
+  batches) is never flagged.
+
 - Staging SMS gates: `OTP_TEST_NUMBERS` (explicit switch for the `0969` test numbers,
   default unchanged: development/demo only; production refuses `true`) and
   `OTP_ALLOWED_PHONES` (real SMS only to listed numbers, others `403 PHONE_NOT_ALLOWED`

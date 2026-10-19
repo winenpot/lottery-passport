@@ -32,7 +32,7 @@ from uuid import UUID, uuid4
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.application.redemption_codes import hash_redemption_code
+from app.application.redemption_codes import hash_redemption_code, pepper_fingerprint
 from app.core.config import get_settings
 from app.domain.code_batches import BatchEventType, BatchStatus
 from app.domain.codes import CodeFormat, format_printed, generate_code, get_format
@@ -164,6 +164,7 @@ async def generate_batch(
                 status=BatchStatus.GENERATED.value,
                 format_id=code_format.format_id,
                 created_at=now,
+                pepper_fingerprint=pepper_fingerprint(pepper),
             )
         )
         await session.flush()  # insert the batch row before its event row (FK)
