@@ -256,6 +256,69 @@ Findings:
 
 ---
 
+## Launch week, Mon 19 Oct 2026
+
+### OTP SMS never left production (incident, fixed 16:24)
+
+- Symptom: production issued codes (`otp_issued` in the logs) but no SMS arrived.
+- Mechanism: `deploy/server/firewall.sh` puts the LP-ORIGIN chain in DOCKER-USER and
+  matched only `--ctorigdstport 443`. DOCKER-USER also sees the containers' OUTBOUND
+  forwarded traffic, so the API's HTTPS call to api.kavenegar.com was dropped like an
+  unwanted inbound hit (the DROP rule had counted 46,099 packets / 2.7 MB). Proof: curl from
+  the host worked, `urlopen` from the API container timed out, DNS resolved, and 1.1.1.1
+  timed out too = all container egress on 443, not a Kavenegar problem.
+- Fix 6769254: every LP-ORIGIN rule scoped to the external interface (`-i ens33`, detected
+  from the default route, `LP_EXT_IFACE` override). Verified: container -> Kavenegar in
+  0.3 s, inbound still Arvan-only.
+- Probably broken since the firewall first went live on production; nothing alerted
+  because monitoring (L16) does not exist yet.
+- Follow-up cost: the fixed script was also copied by hand into both servers' checked-out
+  repos. The pull-based deploy's `git checkout` refuses local changes, so staging deploys
+  failed for ~20 min (cb8da59) and the first production attempt of `v2026.10.19-1` (18:59)
+  rolled back. Restored the file and re-ran the deploy by hand at 19:07. Rule: never edit a
+  tracked file inside a server checkout.
+
+### Unusual phone prefixes reached Kavenegar
+
+- `normalize_iranian_mobile` checked the shape only, so any 09xx-shaped number caused a
+  paid SMS attempt.
+- a570468: `422 PHONE_UNUSUAL` before any SMS when the prefix is outside the known list
+  (900-905, 910-919, 920-923, 930-939, 941, 955, 971, 990-994, 998, 999); 0969 test numbers
+  pass only where test numbers are enabled. Soft check (the CRA can allocate new ranges):
+  if a real player is refused, add the prefix to `KNOWN_MOBILE_PREFIXES`. Live on production
+  since 19:07 (a 0940 number answers 422).
+- Side effect: test helpers that drew a blind random +989 number now fail ~60% of runs;
+  all of them use +98912 now (dabe3fb).
+
+### Terms deadlock on production (plan N1)
+
+- Production requires terms (the config validator refuses `TERMS_REQUIRED=false` there),
+  the frontend hides them (`TERMS_REQUIREMENTS_ENABLED=false`) and never sends
+  `accept_terms_version`: the nickname PATCH succeeds, `profile_complete` stays false and
+  the app shows «تکمیل ثبت‌نام هنوز از طرف سرویس فعال نشده است». Every new production
+  player is blocked at setup.
+- Path: first draft `docs/legal/terms-2026-10-20.fa.md` (6578756, 6cc50c6), then plan LG1
+  (serve it) and LG3 (Arman's switch). Fallback R11, Wed 12:00.
+
+### Frontend release fa97809 (19 Oct)
+
+- The right artifact was PR #3's own CI run (head fa97809, tree identical to merge commit
+  01c4a916c); the run on the `main` head built nothing (build reuse). Artifact 12171858467,
+  zip sha256 5608e187...a9; on both servers as release `fa97809-20261019`.
+- The build calls 8 endpoints only (auth request/verify/logout, config, me, me/passports,
+  me/wallet, redemptions): no mini-game runs, and the terms/privacy URLs are empty constants
+  rather than `/config` values. Sent to Arman.
+
+### Production release v2026.10.19-1 (949c282), live 19:07
+
+- Migration 0018 applied. Read-only smoke: /health and /ready 200, anonymous /me 401,
+  /admin 403, non-Iranian number 422 PHONE_INVALID, 0940 number 422 PHONE_UNUSUAL, own-origin
+  preflight 200, foreign origin 400; API container -> Kavenegar 200 in 0.27 s;
+  `SESSION_COOKIE_NAME=__Host-lp_session` active.
+- The L0' compose change recreated postgres and nginx: ~10-20 s of downtime.
+- torshx disk (`pg_test_fsync` in the postgres container, L0'): fdatasync 4,695 ops/s,
+  213 us per 8 kB sync, SSD-class, no action.
+
 ## Placeholders (fill in as investigations happen)
 
 ### [ ] SMS gateway selection and pricing
