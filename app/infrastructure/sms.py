@@ -60,11 +60,7 @@ class KavenegarSmsSender(SmsSender):
         template = self._template_by_purpose.get(purpose)
         if template is None:
             raise SmsError(f"no Kavenegar template configured for purpose {purpose!r}")
-        receptor = phone.removeprefix("+")
-        query = urllib.parse.urlencode(
-            {"receptor": receptor, "token": code, "template": template}
-        )
-        url = f"https://api.kavenegar.com/v1/{self._api_key}/verify/lookup.json?{query}"
+        url = self._lookup_url(phone, code, template)
         try:
             await asyncio.to_thread(self._call, url)
         except urllib.error.HTTPError as error:
@@ -85,6 +81,22 @@ class KavenegarSmsSender(SmsSender):
                 error,
             )
             raise SmsError("kavenegar delivery failed") from error
+
+    def _lookup_url(self, phone: str, code: str, template: str) -> str:
+        receptor = phone.removeprefix("+")
+        # token2 repeats the same code as token. Our template text uses
+        # %token twice in one message (the human-readable line, then the
+        # WebOTP "@domain #code" line); if Kavenegar's validator ever
+        # rejects a repeated %token and the approved template is
+        # registered as %token + %token2 instead, this already covers it
+        # with no further deploy. Harmless either way: Kavenegar ignores a
+        # query parameter a template doesn't reference.
+        query = urllib.parse.urlencode(
+            {"receptor": receptor, "token": code, "token2": code, "template": template}
+        )
+        return (
+            f"https://api.kavenegar.com/v1/{self._api_key}/verify/lookup.json?{query}"
+        )
 
     @staticmethod
     def _call(url: str) -> None:

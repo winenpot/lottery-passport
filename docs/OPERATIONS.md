@@ -249,15 +249,52 @@ Live: `app/infrastructure/sms.py` -- `KavenegarSmsSender` calls Kavenegar's
   a rejected template for one purpose does not block the other; point the env var at
   an already-approved template and swap it back with no deploy once the real one is
   approved.
-- Template text (ask the provider to approve exactly this shape; the last line is what enables autofill):
+- Template text (ask the provider to approve exactly this shape; the last line is what enables autofill). Two separate templates, same shape, worded for what the player actually sees on first use:
 
   ```text
-  کد ورود شما: %token
+  login:   کد ورود شما: %token
 
-  @play.<domain> #%token
+           @play.<domain> #%token
+
+  signup:  کد ثبت‌نام شما: %token
+
+           @play.<domain> #%token
   ```
 
-  If the provider does not allow the same token twice, send the code in two parameters. After approval, **send a real one to an Android phone and an iPhone**: if the provider appends anything after the last line (an opt-out text, a signature), autofill silently stops working.
+  If the provider does not allow the same token twice, send the code in two parameters —
+  `KavenegarSmsSender` already sends `token` and `token2` as the same value on every
+  request regardless (`app/infrastructure/sms.py`), so register the template with
+  `%token` on the first line and `%token2` on the second and nothing else changes.
+  After approval, **send a real one to an Android phone and an iPhone**: if the provider
+  appends anything after the last line (an opt-out text, a signature), autofill silently
+  stops working.
+- Submitting the templates (either path registers them `PendingReview`; Kavenegar's human
+  review is the slow part either way):
+  - **API** (faster, no panel login needed — `verify/addtemplate`, one GET per template;
+    https://kavenegar.com/rest.html#sms-Lookup-AddTemplate). `name` must be plain English,
+    no space or `_` (`login` / `signup`, already the config defaults).
+    `sourceType=0` (website — play.torshx.com is a browser PWA, not an app-store app;
+    change to `1` if you'd rather it reviewed as a mobile app). `sendMethod=1` (SMS only,
+    no voice fallback). Never pipe the key through a command that echoes it:
+    ```bash
+    source .env  # or wherever KAVENEGAR_OTP_API_KEY actually lives
+    for name in login signup; do
+      text=$([ "$name" = login ] && echo 'کد ورود شما: %token
+
+    @play.torshx.com #%token' || echo 'کد ثبت‌نام شما: %token
+
+    @play.torshx.com #%token')
+      curl -s -G "https://api.kavenegar.com/v1/${KAVENEGAR_OTP_API_KEY}/verify/addtemplate.json" \
+        --data-urlencode "name=${name}" --data-urlencode "sourceType=0" \
+        --data-urlencode "sendMethod=1" --data-urlencode "sourceUrl=https://play.torshx.com" \
+        --data-urlencode "sourceName=TorshX" --data-urlencode "textMessage=${text}"
+      echo
+    done
+    ```
+    Each response's `return.message` confirms it queued for review (`entries.templateid`
+    is the new template's id); `verify/templatelist` shows `approvalStatus` later.
+  - **Panel**: kavenegar.com → login → پیامک → الگوهای اعتبارسنجی (Verification
+    Templates) → add a new one, same field values as above.
 - `KAVENEGAR_OTP_API_KEY` goes in `.env`. It sits in the request URL (Kavenegar's own
   API shape); `KavenegarSmsSender` never logs the URL, only the masked phone and the
   HTTP status/response body on failure.
