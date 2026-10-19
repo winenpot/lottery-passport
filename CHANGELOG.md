@@ -29,7 +29,28 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
   the owner out), `install-app.sh` (layout, generated secrets, systemd units) and
   `firewall.sh` + `lp-firewall.service` (origin ports only for ArvanCloud, in DOCKER-USER).
 
+### Changed
+
+- Staging's Postgres/API/nginx containers are right-sized for sharing atpg with 30+ other
+  containers (L0'): `deploy/compose.staging.yml` adds CPU caps (postgres 0.5, api 1.0,
+  nginx 0.25); `compose.yml`'s `max_connections`, `work_mem` and nginx `mem_limit` are now
+  configurable (defaults keep production's current behavior unchanged, plus an explicit
+  `NGINX_MEM_LIMIT=128m`). `deploy/env/staging.env.example` tightens to a ~0.7 GB / 1.75-core
+  ceiling (was ~1.8 GB with no CPU cap).
+
 ### Fixed
+
+- `tests/integration/test_redemption_flow.py::test_redemption_api_end_to_end` generated its
+  sign-in identifier as a fully random `+989` + 9 digits, which lands outside
+  `KNOWN_MOBILE_PREFIXES` (and now gets `PhoneUnusualError`, `app/domain/phone.py`) roughly
+  60% of the time — a flaky ~60% failure rate, not a hard one, easy to miss in a single gate
+  run. Switched to the same known-prefix helper already used by three sibling test files.
+
+- `deploy/.env.production.example` was a stale, pre-ADR-0011 template (a non-existent
+  `API_KEY` setting, `AUTH_CHALLENGE_TTL_SECONDS`/`AUTH_MAX_VERIFICATION_ATTEMPTS` instead of
+  the real `OTP_TTL_SECONDS`/`OTP_MAX_ATTEMPTS`, no `ADMIN_SESSION_SECRET` — the app would
+  refuse to start). Removed; README now points at the real, actively-used
+  `deploy/env/staging.env.example` / `deploy/env/production.env.example`.
 
 - `deploy/deploy.sh`: tagging the previous image as `:deployed-previous` is now best-effort.
   A deploy that otherwise fully succeeded (new image live, migrated, `/ready` green) could

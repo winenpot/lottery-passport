@@ -65,7 +65,9 @@ with one of the codes from the CSV.
 
 All settings are environment variables (or `.env`), validated at startup by
 `app/core/config.py`. Templates: [.env.example](.env.example) (local) and
-[deploy/.env.production.example](deploy/.env.production.example) (servers).
+[deploy/env/staging.env.example](deploy/env/staging.env.example) /
+[deploy/env/production.env.example](deploy/env/production.env.example) (servers;
+written to each server's `.env` by `deploy/server/install-app.sh`).
 
 | Variable | Purpose |
 |---|---|

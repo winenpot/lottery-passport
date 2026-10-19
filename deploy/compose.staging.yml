@@ -1,0 +1,14 @@
+# Staging additions to compose.yml (compose.sh adds this file when
+# ENVIRONMENT=staging): CPU caps. Staging rehearses production's behavior,
+# not its scale, and shares atpg with 30+ other containers (see
+# docs/vault/Findings.md "Production sizing"); these caps keep one runaway
+# staging process from starving everything else on the host. Production
+# carries no CPU cap (compose.production.yml adds TLS only) because it has
+# the VM to itself (see section 1 of the launch plan).
+services:
+  postgres:
+    cpus: 0.5
+  api:
+    cpus: 1.0
+  nginx:
+    cpus: 0.25

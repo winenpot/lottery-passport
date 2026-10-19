@@ -44,6 +44,7 @@ services:
       - ${LP_BASE:?}/site:/etc/nginx/site:ro
       # Parent directory: web/current is switched atomically per release.
       - ${LP_BASE:?}/web:/srv/web:ro
+    mem_limit: ${NGINX_MEM_LIMIT:-128m}
     depends_on:
       - api
     logging: *logging
@@ -85,7 +86,9 @@ services:
       - -c
       - effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE:-768MB}
       - -c
-      - max_connections=100
+      - max_connections=${PG_MAX_CONNECTIONS:-100}
+      - -c
+      - work_mem=${PG_WORK_MEM:-4MB}
       - -c
       - idle_in_transaction_session_timeout=60s
       - -c

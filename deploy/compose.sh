@@ -25,9 +25,10 @@ case "$environment" in
 esac
 
 files=(-f "$base/repo/deploy/compose.yml")
-if [[ "$environment" == production ]]; then
-    files+=(-f "$base/repo/deploy/compose.production.yml")
-fi
+case "$environment" in
+    production) files+=(-f "$base/repo/deploy/compose.production.yml") ;;
+    staging) files+=(-f "$base/repo/deploy/compose.staging.yml") ;;
+esac
 
 export LP_BASE="$base"
 if [[ -z "${API_IMAGE:-}" ]]; then
