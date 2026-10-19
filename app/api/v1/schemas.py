@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.application.app_config import AppConfig, FeatureFlags
+from app.application.app_config import AppConfig, FeatureFlags, Flavor
 from app.application.challenges import (
     AchievementUnlock,
     ChallengeClaimResult,
@@ -164,6 +164,17 @@ class VenueResponse(BaseModel):
     )
 
 
+class FlavorResponse(BaseModel):
+    id: str = Field(
+        examples=["tokyo"], description="Campaign slug: use it with POST /me/team."
+    )
+    code: str = Field(examples=["TO"], description="2-letter prefix on printed codes.")
+
+    @classmethod
+    def from_domain(cls, flavor: Flavor) -> "FlavorResponse":
+        return cls(id=flavor.id, code=flavor.code)
+
+
 class FeaturesResponse(BaseModel):
     mini_games: bool = Field(description="Whole mini-games section (G1, live).")
     leaderboard: bool = Field(description="Weekly coins leaderboard (L1, not built).")
@@ -206,6 +217,9 @@ class ConfigResponse(BaseModel):
         description="Real cities with lounges. Not passport cities (flavors)."
     )
     venues: list[VenueResponse]
+    flavors: list[FlavorResponse] = Field(
+        description="The 7 passport-city SKUs; use an id with POST /me/team."
+    )
     features: FeaturesResponse = Field(
         description=(
             "Read side only (F1): a section the frontend should hide "
@@ -244,6 +258,7 @@ class ConfigResponse(BaseModel):
                 )
                 for venue in config.venues
             ],
+            flavors=[FlavorResponse.from_domain(f) for f in config.flavors],
             features=FeaturesResponse.from_domain(config.features),
         )
 
@@ -265,7 +280,7 @@ class PassportProgressResponse(BaseModel):
 class RedeemCodeRequest(BaseModel):
     """Raw user input or the code from the QR URL; the server normalizes it."""
 
-    code: str = Field(min_length=1, max_length=64, examples=["TO-7KQ2-M9XH-4R6"])
+    code: str = Field(min_length=1, max_length=64, examples=["TO-HA1-NQC-C32"])
 
 
 class RedemptionResponse(BaseModel):

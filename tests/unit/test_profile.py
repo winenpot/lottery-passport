@@ -375,6 +375,15 @@ def test_config_is_public_and_matches_the_contract() -> None:
                 "address": "تهران، پونک",
             }
         ],
+        "flavors": [
+            {"id": "paris", "code": "PR"},
+            {"id": "berlin", "code": "BE"},
+            {"id": "pattaya", "code": "PA"},
+            {"id": "mexico", "code": "ME"},
+            {"id": "madrid", "code": "MA"},
+            {"id": "tokyo", "code": "TO"},
+            {"id": "moscow", "code": "MO"},
+        ],
         "features": {
             "mini_games": True,
             "leaderboard": False,

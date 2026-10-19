@@ -17,6 +17,24 @@ Parked features (not in the MVP contract): the city passport. See
 Newest first. **Breaking** means a call that worked before needs a change on your side.
 Check `GET /health` → `commit` to see which backend commit is deployed on the demo.
 
+**2026-10-19 (FX1-FX3, FX7: browser-readable errors, config truth pass, feature flags)**
+
+- Errors: `429`/`500` responses now carry `Access-Control-Allow-Origin` and
+  `Access-Control-Expose-Headers: Retry-After, X-Request-ID` like every other
+  error (FX1); `Idempotency-Key` is in `allow_headers` (a preflight sending it
+  used to fail); a CORS preflight no longer counts toward the rate limit.
+  `REDEMPTION_DAILY_LIMIT` now carries `Retry-After` (seconds to Tehran
+  midnight). Fixed a stale doc name: `SCAN_DAILY_LIMIT` never existed in code.
+- Added: `GET /config` gains `terms_url`, `privacy_url` (null until legal
+  supplies real text), `flavors` (`[{id, code}]`, the 7 passport-city SKUs —
+  `TeamChangeRequest.flavor`'s description finally points at a real field)
+  and `features` (read side of feature flags: `mini_games` on, `leaderboard`
+  / `venue_checkin` / `diamonds` off until each ships or gets legal sign-off;
+  no route enforces these yet).
+- Doc fixes, no code change: auth examples use `identifier`, not a `phone`
+  field that was never accepted; code examples use a check-digit-valid code
+  (`TO-HA1-NQC-C32`); `docs/TEAM.md`'s QR example used a dead `/r/` path.
+
 **2026-10-18 (staging moves home)**
 
 - The Render test API (`lottery-passport.onrender.com`) is retired. Staging is
@@ -176,7 +194,7 @@ Check `GET /health` → `commit` to see which backend commit is deployed on the 
 | Authentication | Session cookie set by `POST /auth/verify` (HttpOnly, Secure). Always call `fetch(..., {credentials: "include"})`. JavaScript never sees or stores a token. |
 | Time | ISO 8601 in UTC, for example `2026-10-10T08:30:00Z`. "Today" and "this week" come from `GET /config` (Tehran day, Saturday–Friday week), never from the phone clock. Convert to Tehran time / Jalali for display. |
 | IDs | UUID strings, except catalogue ids (games, avatars, rewards, favourite games, venues), which are short stable slugs such as `tap` or `pad`. |
-| Idempotency | Every `POST` that pays or spends coins takes an `Idempotency-Key` header: a UUID the client generates once per user action and reuses on retries. A repeat returns the first result with `"replayed": true`. Listed per endpoint. |
+| Idempotency | Most state changes are idempotent by construction (resubmitting a redemption returns the original result with `"replayed": true`; a claim is a real `UNIQUE` constraint). `Idempotency-Key` is accepted on every `POST`/`PATCH`/`DELETE` (listed in CORS `allow_headers`) for a future write that needs it, but nothing checks it today — don't rely on it until an endpoint's own section says so. |
 | Rate limits | `429` with a `Retry-After` header (seconds). Show a countdown; never retry before it. |
 | Versioning | Additive changes stay in `/api/v1`; ignore unknown fields. Breaking changes go to `/api/v2`. |
 | Server decides | The server decides spin results, streak rewards, which scores count, stock and prices. The client only shows what the server returns. |
@@ -267,7 +285,7 @@ and the id in our logs: put it in bug reports.
 | `CODE_MISTYPED` | 400 | Right shape, one character wrong | "Check the characters, especially 0/O and 1/I" |
 | `CODE_INVALID` | 404 | Unknown code, or not released yet | "Code not valid" |
 | `CODE_ALREADY_REDEEMED` | 409 | Another account already used it | "Already used"; link to support |
-| `SCAN_DAILY_LIMIT` | 429 | 5 scans already today | "Come back tomorrow" (`Retry-After` = seconds to Tehran midnight) |
+| `REDEMPTION_DAILY_LIMIT` | 429 | More than `limits.scans_per_day` redemptions today (default 20; see `/config`); the code the app actually emits — `SCAN_DAILY_LIMIT` never existed in code, only in an earlier draft of this doc | "Come back tomorrow" (`Retry-After` = seconds to Tehran midnight) |
 | `CODE_ATTEMPTS_LIMITED` | 429 | Too many invalid codes recently | Countdown from `Retry-After` |
 | `STREAK_ALREADY_CLAIMED` | 409 | Today's streak reward already taken | Show tomorrow's reward |
 | `SPIN_ALREADY_USED` | 409 | Today's spin already used | Show the next spin time |
@@ -322,16 +340,16 @@ and the id in our logs: put it in bug reports.
 
 ## Authentication
 
-### `POST /api/v1/auth/request` (live with phone)
+### `POST /api/v1/auth/request` (live)
 
 ```http
 POST /api/v1/auth/request
-{"phone": "۰۹۱۲ ۳۴۵ ۶۷۸۹"}
+{"identifier": "۰۹۱۲ ۳۴۵ ۶۷۸۹"}
 ```
 
 Accepts Persian or Latin digits, spaces, `+98`, `0098`, `98` or a leading `0`. The
-field is named `identifier` (kept for one release so an older client sending a
-`phone`-shaped value here still works).
+field name is `identifier`, not `phone` — the API has no `phone` alias, so a client
+sending `{"phone": ...}` gets `422 VALIDATION_FAILED` (missing `identifier`).
 
 ```http
 202 Accepted
@@ -356,7 +374,7 @@ daily limit still apply per number.
 
 ```http
 POST /api/v1/auth/verify
-{"phone": "09123456789", "code": "483920"}
+{"identifier": "09123456789", "code": "483920"}
 ```
 
 ```http
@@ -377,11 +395,19 @@ profile setup before anything else. Errors: `OTP_INVALID`.
 ### `GET /api/v1/config` (live, partial; no authentication)
 
 Live today: `server_time`, `timezone`, `day_key`, `week_key`, `day_ends_at`, `week_ends_at`,
-`terms_version`, `terms_required`, `limits.scans_per_day`, `nickname` limits, `location_cities` (the four real
-cities with lounges; not passport cities, which are flavors, `[{id, name}]` with Persian names: `tehran`, `ahvaz`, `mashhad`, `isfahan`) and `venues` (active lounges,
-ordered by name, each `{"id", "name", "location_city", "address"}`; empty until the lounges are entered). The rest
-of the example below (other limits, `avatars`, `favorite_games`, social and support fields) is
-planned with the catalogue work.
+`terms_version`, `terms_required`, `terms_url`, `privacy_url` (null until legal supplies
+real text), `limits.scans_per_day`, `nickname` limits, `location_cities` (the four real
+cities with lounges; not passport cities, which are flavors, `[{id, name}]` with Persian
+names: `tehran`, `ahvaz`, `mashhad`, `isfahan`), `venues` (active lounges, ordered by name,
+each `{"id", "name", "location_city", "address"}`; empty until the lounges are entered),
+`flavors` (the 7 passport-city SKUs, `[{id, code}]`; `id` is the campaign slug for
+`POST /me/team`, `code` is the 2-letter prefix on printed codes) and `features` (read side
+of feature flags, F1; `{mini_games: true, leaderboard: false, venue_checkin: false,
+diamonds: false}` today — a false flag means hide that whole section, no route enforces
+it yet). The rest of the example below (`limits.coins_per_scan`/`spins_per_day`/etc.,
+`avatars`, `favorite_games`, social and support fields) is **planned**, not live: `avatars`
+is actually its own endpoint (`GET /avatars`, see below), and `favorite_games` does not
+exist in code at all yet (G0a).
 
 ```json
 {
@@ -393,8 +419,10 @@ planned with the catalogue work.
   "week_ends_at": "2026-10-16T20:30:00Z",
   "terms_version": "2026-10-01",
   "terms_required": true,
+  "terms_url": null,
+  "privacy_url": null,
   "limits": {
-    "scans_per_day": 5,
+    "scans_per_day": 20,
     "coins_per_scan": 50,
     "spins_per_day": 1,
     "game_coins_per_day": 50,
@@ -402,10 +430,10 @@ planned with the catalogue work.
     "ticket_cost": 500
   },
   "nickname": {"min_length": 3, "max_length": 16},
-  "avatars": [{"id": "avatar-1"}, {"id": "avatar-2"}],
-  "favorite_games": [{"id": "cs", "name": "CS", "short": "CS"}, {"id": "val", "name": "Valorant", "short": "VAL"}],
   "location_cities": [{"id": "tehran", "name": "تهران"}, {"id": "ahvaz", "name": "اهواز"}, {"id": "mashhad", "name": "مشهد"}, {"id": "isfahan", "name": "اصفهان"}],
   "venues": [{"id": "parsa", "name": "گیم‌سنتر پارسا", "location_city": "tehran", "address": "تهران، پونک، ..."}],
+  "flavors": [{"id": "tokyo", "code": "TO"}, {"id": "paris", "code": "PR"}],
+  "features": {"mini_games": true, "leaderboard": false, "venue_checkin": false, "diamonds": false},
   "social_platforms": ["instagram", "x"],
   "brand_accounts": {"instagram": "torshx", "x": "torshx"},
   "support": {"email": "support@torshx.com", "phone": null, "telegram": null}
@@ -554,7 +582,7 @@ idempotent per account.
 
 ```http
 POST /api/v1/redemptions
-{"code": "TO-7KQ-2M9-XH4"}
+{"code": "TO-HA1-NQC-C32"}
 ```
 
 Send whatever the camera read or the user typed: the full QR URL or the bare code, with or
@@ -583,11 +611,11 @@ separately. `flavor_unlocked` is the campaign slug of this code's flavor exactly
 redemption that brings it to 5 lifetime codes (see [Teams](#teams)); null otherwise,
 including on a replay. Errors:
 `CODE_MALFORMED`, `CODE_MISTYPED`, `CODE_INVALID`, `CODE_ALREADY_REDEEMED`,
-`SCAN_DAILY_LIMIT`, `CODE_ATTEMPTS_LIMITED`.
+`REDEMPTION_DAILY_LIMIT`, `CODE_ATTEMPTS_LIMITED`.
 
 Code format (decided 2026-10-10): a 2-letter city code plus 9 characters, written
-`<CITY>-XXX-XXX-XXX`, for example `TO-7KQ-2M9-XH4`. The QR encodes
-`https://torshx.com/b/TO-7KQ-2M9-XH4` (path form `/b/<code>`, decision 2026-10-14; the
+`<CITY>-XXX-XXX-XXX`, for example `TO-HA1-NQC-C32`. The QR encodes
+`https://torshx.com/b/TO-HA1-NQC-C32` (path form `/b/<code>`, decision 2026-10-14; the
 fragment form `/r#<code>` is still accepted by the API). The code is in the path, so the
 proxy does not log `/b/*` and the app sends `Referrer-Policy: no-referrer`. The format is registered and frozen in
 the backend ([CODES.md](CODES.md)); validate with the generated `docs/frontend/codes.js`

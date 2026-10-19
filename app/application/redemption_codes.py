@@ -92,6 +92,16 @@ def start_of_local_day(moment: datetime, zone: ZoneInfo) -> datetime:
     return datetime.combine(local.date(), time.min, tzinfo=zone)
 
 
+def seconds_until_next_local_midnight(moment: datetime, zone: ZoneInfo) -> int:
+    """Whole seconds from ``moment`` to the next local midnight in ``zone``.
+
+    ``Retry-After`` for ``REDEMPTION_DAILY_LIMIT``: the cap resets at the
+    next local midnight, not 24h after the first scan of the day.
+    """
+    next_midnight = start_of_local_day(moment, zone) + timedelta(days=1)
+    return max(0, round((next_midnight - moment).total_seconds()))
+
+
 class RedemptionService:
     def __init__(
         self,
@@ -170,7 +180,10 @@ class RedemptionService:
         since = start_of_local_day(now, self._campaign_zone)
         if await uow.codes.count_redeemed_since(user_id, since) > self._daily_limit:
             # Raising before commit rolls the claim back: the code stays usable.
-            raise RedemptionError(RedemptionErrorCode.DAILY_LIMIT)
+            raise RedemptionError(
+                RedemptionErrorCode.DAILY_LIMIT,
+                retry_after=seconds_until_next_local_midnight(now, self._campaign_zone),
+            )
 
         progress = await uow.passports.add_entries(
             user_id, CAMPAIGN_BY_CITY[claimed.city], ENTRIES_PER_CODE, now

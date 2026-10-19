@@ -55,8 +55,8 @@ The goal: Arman never waits for you and never guesses.
 7. **What you need from him**: a `dist/` build you can deploy, no external CDNs or fonts, no tokens in `localStorage`, and early warning if anything in the contract is awkward.
 
 About the QR question in your message to him: a "QR with a variable" is just a URL that contains
-the code (`https://play.<domain>/r/TO7KQ2M9XH4R6`). You generate those URLs; his job is the
-`/r/:code` page. The SMS autofill question was the right one to ask him: it is frontend work
+the code (`https://torshx.com/b/TO-HA1-NQC-C32`). You generate those URLs; his job is the
+`/b/:code` page. The SMS autofill question was the right one to ask him: it is frontend work
 (`autocomplete="one-time-code"` + the WebOTP API), plus the SMS template you get approved.
 
 ## Working with Mehdi

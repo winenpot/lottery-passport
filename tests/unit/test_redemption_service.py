@@ -23,6 +23,7 @@ from app.application.redemption_codes import (
     RedemptionService,
     first_code_bonus_idempotency_key,
     hash_redemption_code,
+    seconds_until_next_local_midnight,
     start_of_local_day,
 )
 from app.application.unit_of_work import ClaimedCode, CodeLookup
@@ -350,9 +351,16 @@ async def test_daily_limit_rolls_back_the_claim_so_the_code_stays_usable() -> No
         await service.redeem(user, third)
 
     assert raised.value.code is RedemptionErrorCode.DAILY_LIMIT
+    assert raised.value.retry_after is not None and raised.value.retry_after > 0
     assert store.codes[hash_redemption_code(third, PEPPER)].redeemed_by is None
     assert store.wallets[user] == 20
     assert len(store.ledger) == 2
+
+
+def test_seconds_until_next_local_midnight_counts_to_tehran_not_utc() -> None:
+    moment = datetime(2026, 10, 10, 20, 29, tzinfo=UTC)  # 23:59 in Tehran
+
+    assert seconds_until_next_local_midnight(moment, TEHRAN) == 60
 
 
 async def test_daily_limit_resets_at_tehran_midnight_not_utc_midnight() -> None:

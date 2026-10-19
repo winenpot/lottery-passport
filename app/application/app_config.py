@@ -6,7 +6,22 @@ from app.application.authentication import Clock
 from app.application.venues import VenueCatalogue
 from app.domain.calendar import CampaignPeriod, campaign_period
 from app.domain.nickname import NICKNAME_MAX_LENGTH, NICKNAME_MIN_LENGTH
+from app.domain.passports import CAMPAIGN_BY_CITY
 from app.domain.venues import SUPPORTED_CITIES, City, Venue
+
+
+@dataclass(frozen=True, slots=True)
+class Flavor:
+    """One of the 7 passport-city SKUs, as `/config.flavors` serves it."""
+
+    id: str
+    code: str
+
+
+FLAVORS: tuple[Flavor, ...] = tuple(
+    Flavor(id=campaign.value, code=city.value)
+    for city, campaign in CAMPAIGN_BY_CITY.items()
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +52,7 @@ class AppConfig:
     nickname_max_length: int
     location_cities: tuple[City, ...]
     venues: list[Venue]
+    flavors: tuple[Flavor, ...]
     features: FeatureFlags
 
 
@@ -81,5 +97,6 @@ class AppConfigService:
             nickname_max_length=NICKNAME_MAX_LENGTH,
             location_cities=SUPPORTED_CITIES,
             venues=await self._venues.list_active(),
+            flavors=FLAVORS,
             features=self._features,
         )

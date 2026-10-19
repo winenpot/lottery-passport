@@ -254,6 +254,14 @@
             "$ref": "#/components/schemas/FeaturesResponse",
             "description": "Read side only (F1): a section the frontend should hide entirely while its flag is false. No route enforces these yet."
           },
+          "flavors": {
+            "description": "The 7 passport-city SKUs; use an id with POST /me/team.",
+            "items": {
+              "$ref": "#/components/schemas/FlavorResponse"
+            },
+            "title": "Flavors",
+            "type": "array"
+          },
           "limits": {
             "$ref": "#/components/schemas/ConfigLimits"
           },
@@ -340,6 +348,7 @@
           "nickname",
           "location_cities",
           "venues",
+          "flavors",
           "features"
         ],
         "title": "ConfigResponse",
@@ -507,6 +516,32 @@
           "unlocked"
         ],
         "title": "FlavorProgressResponse",
+        "type": "object"
+      },
+      "FlavorResponse": {
+        "properties": {
+          "code": {
+            "description": "2-letter prefix on printed codes.",
+            "examples": [
+              "TO"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "id": {
+            "description": "Campaign slug: use it with POST /me/team.",
+            "examples": [
+              "tokyo"
+            ],
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "code"
+        ],
+        "title": "FlavorResponse",
         "type": "object"
       },
       "HealthResponse": {
@@ -765,7 +800,7 @@
         "properties": {
           "code": {
             "examples": [
-              "TO-7KQ2-M9XH-4R6"
+              "TO-HA1-NQC-C32"
             ],
             "maxLength": 64,
             "minLength": 1,
