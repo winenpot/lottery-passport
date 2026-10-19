@@ -24,6 +24,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -98,7 +99,7 @@ class Client:
         seconds = time.monotonic() - started
         return Reply(
             status,
-            {key.lower(): value for key, value in received.items()},
+            first_header_values(received.items()),
             raw.decode("utf-8", "replace"),
             seconds,
         )
@@ -113,6 +114,22 @@ class Client:
 def random_test_phone(rng: random.Random) -> str:
     """A 0969 test number; random so reruns never hit the resend cooldown."""
     return "0969" + "".join(str(rng.randrange(10)) for _ in range(7))
+
+
+def first_header_values(items: Iterable[tuple[str, str]]) -> dict[str, str]:
+    """Lower-cased header dict, keeping the FIRST value of a repeated name.
+
+    ArvanCloud (in front of staging and production) appends its own
+    ``X-Request-Id`` after ours, so the response carries the header twice.
+    A plain ``{k: v for k, v in headers.items()}`` keeps whichever occurrence
+    comes LAST, which silently became Arvan's edge-generated id instead of
+    the origin's -- comparing it against the error body's own ``request_id``
+    then always disagreed, for every request routed through Arvan.
+    """
+    result: dict[str, str] = {}
+    for key, value in items:
+        result.setdefault(key.lower(), value)
+    return result
 
 
 class Report:
@@ -274,8 +291,13 @@ def run(client: Client, report: Report, code: str | None, rng: random.Random) ->
     too_early = client.call(
         "POST", "/api/v1/redemptions", {"code": code or "hello"}, csrf=True
     )
+    # TERMS_NOT_ACCEPTED on staging/production (TERMS_REQUIRED=true); on a
+    # demo with TERMS_REQUIRED=false (deploy/env/staging.env.example, until
+    # legal text exists) the terms step is skipped and nickname is the only
+    # gate left, so PROFILE_INCOMPLETE is the correct response there instead.
     add(
-        too_early.status == 403 and too_early.error_code() == "TERMS_NOT_ACCEPTED",
+        too_early.status == 403
+        and too_early.error_code() in {"TERMS_NOT_ACCEPTED", "PROFILE_INCOMPLETE"},
         "POST /redemptions before the profile is done -> 403",
         f"HTTP {too_early.status} {too_early.error_code()}",
     )
