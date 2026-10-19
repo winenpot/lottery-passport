@@ -184,23 +184,33 @@ production, simply release the previous tag again. This is safe only because of 
 **during the campaign, migrations are additive** (new tables, new nullable columns, new indexes
 created `CONCURRENTLY`). Renames and drops use expand -> migrate -> contract across two releases.
 
-**Frontend release** (each release in its own directory; `current` is a relative symlink
-switched atomically):
+**Frontend release** (manual, both servers the same way; each release in its own directory,
+`current` is a relative symlink switched atomically):
+
+1. Pick the artifact: Arman's `frontend-normal` CI artifact from `Arman13m99/TorshX_2`.
+   Production takes only what is on `main` (a PR's own build is fine when its commit tree
+   equals the merge commit's tree: `gh api repos/Arman13m99/TorshX_2/commits/<sha> --jq
+   .commit.tree.sha`). His CI can skip the build on `main` when the tree is unchanged, so the
+   run on the `main` head may carry no frontend artifact at all.
+2. Verify: the zip's sha256 equals GitHub's `digest` for that artifact id
+   (`gh api repos/Arman13m99/TorshX_2/actions/artifacts/<id> --jq .digest`), and
+   `metadata.json` says `"mode": "api"`.
+3. Publish with [`deploy/publish_web.sh`](../deploy/publish_web.sh), on the server:
 
 ```bash
-# copy Arman's accepted artifact (check its sha256 first) into a new release directory
-rsync -a --delete --chmod=Da+rx,Fa+r dist/ <user>@server:<base>/web/releases/2026-10-20-1/
-# nginx runs as uid 101 inside its container: release files must be world-readable
-
-# on the server: renaming a symlink is atomic, so no request sees a half-copied site
-cd <base>/web
-ln -sfn releases/2026-10-20-1 current.next && mv -T current.next current
-# rollback: the same two commands with the previous release directory
+deploy/publish_web.sh frontend-normal.zip <short-commit>-<yyyymmdd>    # staging (data user)
+sudo env LP_BASE=/opt/lottery-passport deploy/publish_web.sh frontend-normal.zip <id>   # production
+# rollback: cd <base>/web && ln -sfn releases/<previous id> current.next && mv -T current.next current
 ```
 
-No nginx restart is needed: Compose mounts the parent directory `<base>/web`, so nginx
-resolves `current` on every request. The first time, make sure `current` does not exist as a
-plain directory, or `mv -T` cannot replace it.
+The script refuses a non-`api` build or an existing release id, copies only `index.html` and
+`assets/` (never `metadata.json` or the artifact's tooling files), makes them world-readable
+(nginx runs as uid 101), switches `current` atomically and reloads nginx. A reload is not
+strictly needed: Compose mounts the parent directory `<base>/web`, so nginx resolves
+`current` on every request. Check afterwards: `index.html` sha256 equals the artifact's, an
+unknown `/assets/x.js` answers 404 (not HTML), `/scan` answers the app, `/health` is the API.
+Release in use (19 Oct): `fa97809-20261019` on both servers. There is no automatic frontend
+CD yet.
 
 ## Code batches in production
 

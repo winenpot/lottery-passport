@@ -753,9 +753,11 @@ Errors: `SPIN_ALREADY_USED`.
 ## Mini-games
 
 Our own in-app reaction mini-game (G1), not the physical arcade machines at the
-OxinGame lounges — see `docs/GLOSSARY.md` "Mini-game". Only `tap_reflex` ships; the
-sheet's other three (`aim`, `cps`, `seq`) are an earlier frontend-mock draft with no
-agreed mechanic from Mehdi and are NOT built — don't assume them. Rewards pay only
+OxinGame lounges — see `docs/GLOSSARY.md` "Mini-game". `tap_reflex` is live; `aim_rush`
+(Aim Rush) is next, through the same two endpoints with `mini_game_id = aim_rush`
+(launch-week task G2; its run and finish payload get their own section when it ships).
+The sheet's other mocks (`cps`, `seq`) have no agreed mechanic from Mehdi and are NOT
+built — don't assume them. Rewards pay only
 through [Challenges and submissions](#challenges-and-submissions) (`first_game`,
 `tap_reflex_fast` once those challenge kinds ship); this section's endpoints never
 move coins directly. Leaderboards, `game_of_the_day` and a direct per-game coin cap
