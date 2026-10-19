@@ -20,6 +20,7 @@ from app.api.errors import (
 from app.api.middleware import (
     CSRF_HEADER,
     CsrfMiddleware,
+    ErrorEnvelopeMiddleware,
     RateLimitMiddleware,
     RequestLoggingMiddleware,
 )
@@ -283,24 +284,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ),
         lifespan=lifespan,
     )
-    # Added before CORS so it runs inside it: a 403 still gets CORS headers
-    # and the frontend can read the error code.
+    # Registration order here is innermost-first (Starlette wraps each new
+    # middleware around the ones already added), so outer-to-inner at
+    # request time is the reverse of the calls below:
+    #   RequestLogging -> CORS -> RateLimit -> Csrf -> ErrorEnvelope -> app
+    # CORS must wrap RateLimit and ErrorEnvelope so a 429 or an unhandled
+    # exception still carries Access-Control-* headers the browser can read
+    # (FX1); Csrf stays inside CORS so a 403 also gets them.
+    application.add_middleware(ErrorEnvelopeMiddleware)
     application.add_middleware(
         CsrfMiddleware,
         cookie_name=resolved_settings.session_cookie_name,
         allowed_origins=resolved_settings.allowed_cors_origins,
     )
     application.add_middleware(
+        RateLimitMiddleware,
+        requests=resolved_settings.rate_limit_requests,
+        window_seconds=resolved_settings.rate_limit_window_seconds,
+    )
+    application.add_middleware(
         CORSMiddleware,
         allow_origins=resolved_settings.allowed_cors_origins,
         allow_credentials=resolved_settings.allowed_cors_origins != ["*"],
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "Authorization", CSRF_HEADER],
-    )
-    application.add_middleware(
-        RateLimitMiddleware,
-        requests=resolved_settings.rate_limit_requests,
-        window_seconds=resolved_settings.rate_limit_window_seconds,
+        allow_headers=["Content-Type", "Authorization", CSRF_HEADER, "Idempotency-Key"],
+        expose_headers=["Retry-After", "X-Request-ID"],
     )
     application.add_middleware(RequestLoggingMiddleware)
     application.add_exception_handler(ApiError, api_error_handler)

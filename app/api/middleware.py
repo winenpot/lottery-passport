@@ -74,6 +74,49 @@ def _is_exempt_from_rate_limit(path: str) -> bool:
     return path in {"/health", "/ready"} or path.startswith(f"{ADMIN_PATH}/statics/")
 
 
+class ErrorEnvelopeMiddleware:
+    """Catch any exception the route layer did not turn into a response.
+
+    Registered innermost among our own middleware (added before
+    :class:`CsrfMiddleware`), so :class:`~fastapi.middleware.cors.CORSMiddleware`
+    and :class:`RequestLoggingMiddleware`, both registered later and so
+    wrapping this one, still see a normal ``send`` call and add their
+    headers to it. Without this, an exception that escapes every FastAPI
+    exception handler reaches Starlette's ``ServerErrorMiddleware``, which
+    sits OUTSIDE every user middleware unconditionally: the browser then
+    gets a bare response with no ``Access-Control-Allow-Origin`` (reads as a
+    network error, not a 500) and no ``X-Request-ID``. The plain
+    ``Exception`` handler (``unhandled_error_handler``) stays registered as
+    the true last resort, for scopes this middleware does not cover.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        try:
+            await self.app(scope, receive, send)
+        except Exception:
+            request_id = request_id_from_scope(scope)
+            note_error_code(scope, "INTERNAL_ERROR")
+            request_logger.exception(
+                "unhandled_exception",
+                extra={"request_id": request_id, "path": scope.get("path")},
+            )
+            body = error_bytes("INTERNAL_ERROR", "internal error", request_id)
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 500,
+                    "headers": [(b"content-type", b"application/json")],
+                }
+            )
+            await send({"type": "http.response.body", "body": body})
+
+
 ADMIN_PATH = "/admin"
 CSRF_HEADER = "X-Requested-With"
 _UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
