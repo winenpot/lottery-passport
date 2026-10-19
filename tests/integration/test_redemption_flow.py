@@ -6,6 +6,7 @@ negative, and the daily cap holds when requests arrive at the same time.
 """
 
 import asyncio
+import random
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Any
@@ -46,6 +47,14 @@ from scripts.generate_codes import insert_codes
 
 PEPPER = "integration-test-pepper"
 TEHRAN = ZoneInfo("Asia/Tehran")
+
+
+def random_known_prefix_phone() -> str:
+    """A fresh number on a known allocated range (app/domain/phone.py), so it
+    never trips AuthenticationService's unusual-prefix guard -- unlike a
+    fully random `+989` + 9 digits, whose 2-digit sub-prefix lands outside
+    the known ranges roughly 60% of the time."""
+    return "+98912" + "".join(str(random.randint(0, 9)) for _ in range(7))
 
 
 class SystemClock:
@@ -386,7 +395,7 @@ async def test_redemption_api_end_to_end(test_database_url: str) -> None:
     finally:
         await database.dispose()
     application = create_app(settings)
-    identifier = f"+989{uuid4().int % 10**9:09d}"
+    identifier = random_known_prefix_phone()
 
     with TestClient(application, headers={"X-Requested-With": "test"}) as client:
         client.post("/api/v1/auth/request", json={"identifier": identifier})
