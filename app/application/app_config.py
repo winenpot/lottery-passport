@@ -10,17 +10,34 @@ from app.domain.venues import SUPPORTED_CITIES, City, Venue
 
 
 @dataclass(frozen=True, slots=True)
+class FeatureFlags:
+    """Read side of `/config.features` (F1). No route enforces these yet;
+    that is F1's write side. mini_games is on because it already shipped
+    (G1); the rest stay off until their feature ships or gets legal sign-off
+    (leaderboard/L1, venue_checkin/V1, diamonds/DI1).
+    """
+
+    mini_games: bool = True
+    leaderboard: bool = False
+    venue_checkin: bool = False
+    diamonds: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class AppConfig:
     server_time: datetime
     timezone: str
     period: CampaignPeriod
     terms_version: str
     terms_required: bool
+    terms_url: str | None
+    privacy_url: str | None
     scans_per_day: int
     nickname_min_length: int
     nickname_max_length: int
     location_cities: tuple[City, ...]
     venues: list[Venue]
+    features: FeatureFlags
 
 
 class AppConfigService:
@@ -35,13 +52,19 @@ class AppConfigService:
         venues: VenueCatalogue,
         *,
         terms_required: bool = True,
+        terms_url: str | None = None,
+        privacy_url: str | None = None,
+        features: FeatureFlags | None = None,
     ) -> None:
         self._venues = venues
         self._clock = clock
         self._zone = zone
         self._terms_version = terms_version
         self._terms_required = terms_required
+        self._terms_url = terms_url
+        self._privacy_url = privacy_url
         self._scans_per_day = scans_per_day
+        self._features = features or FeatureFlags()
 
     async def current(self) -> AppConfig:
         now = self._clock.now()
@@ -51,9 +74,12 @@ class AppConfigService:
             period=campaign_period(now, self._zone),
             terms_version=self._terms_version,
             terms_required=self._terms_required,
+            terms_url=self._terms_url,
+            privacy_url=self._privacy_url,
             scans_per_day=self._scans_per_day,
             nickname_min_length=NICKNAME_MIN_LENGTH,
             nickname_max_length=NICKNAME_MAX_LENGTH,
             location_cities=SUPPORTED_CITIES,
             venues=await self._venues.list_active(),
+            features=self._features,
         )

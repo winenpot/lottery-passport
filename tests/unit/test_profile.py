@@ -357,6 +357,8 @@ def test_config_is_public_and_matches_the_contract() -> None:
         "week_ends_at": "2026-10-16T20:30:00Z",
         "terms_version": "2026-10-01",
         "terms_required": True,
+        "terms_url": None,
+        "privacy_url": None,
         "limits": {"scans_per_day": 20},
         "nickname": {"min_length": 3, "max_length": 16},
         "location_cities": [
@@ -373,6 +375,12 @@ def test_config_is_public_and_matches_the_contract() -> None:
                 "address": "تهران، پونک",
             }
         ],
+        "features": {
+            "mini_games": True,
+            "leaderboard": False,
+            "venue_checkin": False,
+            "diamonds": False,
+        },
     }
 
 

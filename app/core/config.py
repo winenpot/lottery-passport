@@ -75,6 +75,19 @@ class Settings(BaseSettings):
     # Public origin of the app (scheme + host, no path); builds the QR URLs.
     # Printed QR codes freeze it, so it is never hard-coded.
     public_app_origin: str | None = None
+    # Terms of service / privacy policy pages the frontend can link to
+    # instead of baking a build-time URL (FX3). null until legal supplies
+    # real text; https enforced on staging/production like other origins.
+    terms_url: str | None = None
+    privacy_url: str | None = None
+    # Feature flags, read side only (FX7/F1): switches a whole unbuilt or
+    # legal-gated section off in `GET /config.features` so the frontend can
+    # hide it instead of calling a 404/501 endpoint. Admin-editable,
+    # per-request overrides are F1's write side, not built yet.
+    feature_mini_games: bool = True
+    feature_leaderboard: bool = False
+    feature_venue_checkin: bool = False
+    feature_diamonds: bool = False
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -127,6 +140,13 @@ class Settings(BaseSettings):
                 "PUBLIC_APP_ORIGIN must be scheme + host only, e.g. https://torshx.com"
             )
         return origin
+
+    @field_validator("terms_url", "privacy_url", mode="before")
+    @classmethod
+    def treat_blank_urls_as_unset(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @field_validator("campaign_timezone")
     @classmethod
@@ -201,6 +221,16 @@ class Settings(BaseSettings):
                     f"origin {origin!r} must use https outside development "
                     "(CORS_ORIGINS / PUBLIC_APP_ORIGIN)"
                 )
+        for field_name, value in (
+            ("TERMS_URL", self.terms_url),
+            ("PRIVACY_URL", self.privacy_url),
+        ):
+            if value is None:
+                continue
+            parsed = urlparse(value)
+            loopback = parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+            if parsed.scheme != "https" and not (parsed.scheme == "http" and loopback):
+                raise ValueError(f"{field_name} must use https outside development")
 
     @property
     def allowed_cors_origins(self) -> list[str]:

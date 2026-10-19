@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.application.app_config import AppConfig
+from app.application.app_config import AppConfig, FeatureFlags
 from app.application.challenges import (
     AchievementUnlock,
     ChallengeClaimResult,
@@ -164,6 +164,22 @@ class VenueResponse(BaseModel):
     )
 
 
+class FeaturesResponse(BaseModel):
+    mini_games: bool = Field(description="Whole mini-games section (G1, live).")
+    leaderboard: bool = Field(description="Weekly coins leaderboard (L1, not built).")
+    venue_checkin: bool = Field(description="Daily venue QR check-in (V1, not built).")
+    diamonds: bool = Field(description="Diamonds conversion (DI1, not built).")
+
+    @classmethod
+    def from_domain(cls, flags: FeatureFlags) -> "FeaturesResponse":
+        return cls(
+            mini_games=flags.mini_games,
+            leaderboard=flags.leaderboard,
+            venue_checkin=flags.venue_checkin,
+            diamonds=flags.diamonds,
+        )
+
+
 class ConfigResponse(BaseModel):
     server_time: datetime
     timezone: str
@@ -178,12 +194,24 @@ class ConfigResponse(BaseModel):
             "environments until the legal text exists). Always true in production."
         )
     )
+    terms_url: str | None = Field(
+        default=None, description="null until legal text exists."
+    )
+    privacy_url: str | None = Field(
+        default=None, description="null until legal text exists."
+    )
     limits: ConfigLimits
     nickname: NicknameLimits
     location_cities: list[LocationCityResponse] = Field(
         description="Real cities with lounges. Not passport cities (flavors)."
     )
     venues: list[VenueResponse]
+    features: FeaturesResponse = Field(
+        description=(
+            "Read side only (F1): a section the frontend should hide "
+            "entirely while its flag is false. No route enforces these yet."
+        )
+    )
 
     @classmethod
     def from_domain(cls, config: AppConfig) -> "ConfigResponse":
@@ -196,6 +224,8 @@ class ConfigResponse(BaseModel):
             week_ends_at=config.period.week_ends_at,
             terms_version=config.terms_version,
             terms_required=config.terms_required,
+            terms_url=config.terms_url,
+            privacy_url=config.privacy_url,
             limits=ConfigLimits(scans_per_day=config.scans_per_day),
             nickname=NicknameLimits(
                 min_length=config.nickname_min_length,
@@ -214,6 +244,7 @@ class ConfigResponse(BaseModel):
                 )
                 for venue in config.venues
             ],
+            features=FeaturesResponse.from_domain(config.features),
         )
 
 

@@ -250,6 +250,10 @@
             "title": "Day Key",
             "type": "string"
           },
+          "features": {
+            "$ref": "#/components/schemas/FeaturesResponse",
+            "description": "Read side only (F1): a section the frontend should hide entirely while its flag is false. No route enforces these yet."
+          },
           "limits": {
             "$ref": "#/components/schemas/ConfigLimits"
           },
@@ -264,6 +268,18 @@
           "nickname": {
             "$ref": "#/components/schemas/NicknameLimits"
           },
+          "privacy_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null until legal text exists.",
+            "title": "Privacy Url"
+          },
           "server_time": {
             "format": "date-time",
             "title": "Server Time",
@@ -273,6 +289,18 @@
             "description": "false: signing up and scanning do not need accepted terms (test environments until the legal text exists). Always true in production.",
             "title": "Terms Required",
             "type": "boolean"
+          },
+          "terms_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null until legal text exists.",
+            "title": "Terms Url"
           },
           "terms_version": {
             "title": "Terms Version",
@@ -311,7 +339,8 @@
           "limits",
           "nickname",
           "location_cities",
-          "venues"
+          "venues",
+          "features"
         ],
         "title": "ConfigResponse",
         "type": "object"
@@ -391,6 +420,38 @@
           "error"
         ],
         "title": "ErrorResponse",
+        "type": "object"
+      },
+      "FeaturesResponse": {
+        "properties": {
+          "diamonds": {
+            "description": "Diamonds conversion (DI1, not built).",
+            "title": "Diamonds",
+            "type": "boolean"
+          },
+          "leaderboard": {
+            "description": "Weekly coins leaderboard (L1, not built).",
+            "title": "Leaderboard",
+            "type": "boolean"
+          },
+          "mini_games": {
+            "description": "Whole mini-games section (G1, live).",
+            "title": "Mini Games",
+            "type": "boolean"
+          },
+          "venue_checkin": {
+            "description": "Daily venue QR check-in (V1, not built).",
+            "title": "Venue Checkin",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mini_games",
+          "leaderboard",
+          "venue_checkin",
+          "diamonds"
+        ],
+        "title": "FeaturesResponse",
         "type": "object"
       },
       "FieldError": {

@@ -27,7 +27,7 @@ from app.api.middleware import (
 from app.api.routes import router
 from app.application.achievements import AchievementService
 from app.application.admin_users import AdminUserService
-from app.application.app_config import AppConfigService
+from app.application.app_config import AppConfigService, FeatureFlags
 from app.application.authentication import AuthenticationService, AuthenticationSettings
 from app.application.avatars import AvatarService
 from app.application.challenges import ChallengeService
@@ -189,6 +189,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         scans_per_day=resolved_settings.redemption_daily_limit_per_user,
         venues=PostgreSQLVenueRepository(database.session_factory),
         terms_required=resolved_settings.terms_required,
+        terms_url=resolved_settings.terms_url,
+        privacy_url=resolved_settings.privacy_url,
+        features=FeatureFlags(
+            mini_games=resolved_settings.feature_mini_games,
+            leaderboard=resolved_settings.feature_leaderboard,
+            venue_checkin=resolved_settings.feature_venue_checkin,
+            diamonds=resolved_settings.feature_diamonds,
+        ),
     )
     passport_service = PassportService(
         passports=PostgreSQLPassportRepository(database.session_factory)
