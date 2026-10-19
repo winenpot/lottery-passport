@@ -31,6 +31,11 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ### Fixed
 
+- `deploy/deploy.sh`: tagging the previous image as `:deployed-previous` is now best-effort.
+  A deploy that otherwise fully succeeded (new image live, migrated, `/ready` green) could
+  still exit non-zero and report as a failed systemd unit if that one bookkeeping image had
+  been evicted from the local Docker cache between deploys.
+
 - The session cookie is read through `SESSION_COOKIE_NAME` (it was hard-coded, so a renamed
   cookie made every session look logged out). Staging and production use
   `__Host-lp_session`; the settings refuse a `__Host-` name without Secure cookies.

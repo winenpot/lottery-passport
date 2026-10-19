@@ -85,7 +85,16 @@ main() {
     # Keep the deployed and the previous image; untagged older ones may go.
     docker tag "$new" "$image_repo:deployed-current"
     if [[ -s "$state/previous" ]]; then
-        docker tag "$(cat "$state/previous")" "$image_repo:deployed-previous"
+        # Best-effort only: something else on a shared host (a general
+        # docker-prune cron, disk pressure) can evict the previous digest
+        # from the local cache between deploys. That is cosmetic -- the
+        # real rollback path is `release` against state/previous's digest,
+        # which still fails loudly on its own if that image is truly gone
+        # -- so it must never crash a deploy that otherwise just succeeded
+        # (found 2026-10-19: this line's failure left a healthy deploy
+        # reporting as a failed systemd unit).
+        docker tag "$(cat "$state/previous")" "$image_repo:deployed-previous" ||
+            log "could not tag $image_repo:deployed-previous (image no longer cached locally; harmless)"
     fi
     docker image prune --force --filter "until=72h" >/dev/null || true
     log "deployed $commit: ready"
