@@ -24,6 +24,39 @@ class PhoneNumberError(ValueError):
     """Not an Iranian mobile number, after every normalization attempted."""
 
 
+# Publicly known allocated Iranian mobile ranges (subscriber prefix, i.e. the
+# 3 digits right after the leading 0/+98: "0912..." -> 912). Sourced from
+# public prefix lists, not an official CRA list (no list is official; the
+# CRA can allocate a new one at any time). This is a SOFT warning signal for
+# "does this look like a real carrier number", never a hard validity gate:
+# a legitimate new range would otherwise get permanently misclassified.
+# 0969 (the test-number range, app/application/otp_test_numbers.py) is
+# deliberately NOT in this set.
+KNOWN_MOBILE_PREFIXES: frozenset[int] = frozenset(
+    [
+        *range(900, 906),
+        *range(910, 920),
+        *range(920, 924),
+        *range(930, 940),
+        941,
+        955,
+        971,
+        *range(990, 995),
+        998,
+        999,
+    ]
+)
+
+
+def has_known_mobile_prefix(phone: str) -> bool:
+    """Best-effort check that ``phone`` (already ``+989XXXXXXXXX``) is on a
+    publicly known allocated range. False does not mean the number is
+    invalid, only unusual: callers decide what to do with that (e.g. warn
+    without sending SMS, rather than reject outright)."""
+    prefix = phone.removeprefix("+98")[:3]
+    return prefix.isdigit() and int(prefix) in KNOWN_MOBILE_PREFIXES
+
+
 def normalize_iranian_mobile(raw: str) -> str:
     """Return ``+989XXXXXXXXX``, or raise :class:`PhoneNumberError`."""
     ascii_digits_and_plus = raw.translate(_DIGIT_TRANSLATION)

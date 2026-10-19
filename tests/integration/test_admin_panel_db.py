@@ -16,6 +16,13 @@ from app.infrastructure.postgres.database import is_pgbouncer_url
 from app.infrastructure.postgres.models import AuditLogModel, VenueModel
 from app.infrastructure.sms import ConsoleSmsSender
 
+
+def _random_known_prefix_phone() -> str:
+    """A fresh number on a known allocated range (app/domain/phone.py), so
+    it never trips the unusual-prefix guard in AuthenticationService."""
+    return "+98912" + "".join(str(random.randint(0, 9)) for _ in range(7))
+
+
 VIEW_PATHS = (
     "/admin/user-model/list",
     "/admin/venue-model/list",
@@ -47,10 +54,8 @@ async def test_an_admin_signs_in_by_sms_and_sees_every_view(
     application = create_app(settings)
     # Outside the 0969 test-number range (app/application/otp_test_numbers.py):
     # those never reach ConsoleSmsSender, since the dev/demo OTP response
-    # carries the code back directly instead (~1% of random numbers collide).
-    phone = "+989" + "".join(str(random.randint(0, 9)) for _ in range(9))
-    while phone.startswith("+98969"):
-        phone = "+989" + "".join(str(random.randint(0, 9)) for _ in range(9))
+    # carries the code back directly instead.
+    phone = _random_known_prefix_phone()
     sender = application.state.sms_sender
     assert isinstance(sender, ConsoleSmsSender)
 
@@ -109,9 +114,7 @@ async def test_editing_a_lounge_writes_an_audit_row(test_database_url: str) -> N
     """B20 step 2: SQLAdmin's own audit backend, wired to our audit_log."""
     settings = Settings(database_url=test_database_url, _env_file=None)  # type: ignore[call-arg]
     application = create_app(settings)
-    phone = "+989" + "".join(str(random.randint(0, 9)) for _ in range(9))
-    while phone.startswith("+98969"):
-        phone = "+989" + "".join(str(random.randint(0, 9)) for _ in range(9))
+    phone = _random_known_prefix_phone()
     sender = application.state.sms_sender
     assert isinstance(sender, ConsoleSmsSender)
     engine = _pgbouncer_safe_engine(settings.database_url)

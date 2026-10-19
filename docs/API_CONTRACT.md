@@ -266,6 +266,7 @@ and the id in our logs: put it in bug reports.
 | `TERMS_VERSION_INVALID` | 422 | `accept_terms_version` is not the current one | Reload `/config`, show the new terms |
 | `VALIDATION_FAILED` | 422 | Body or query failed validation; `error.fields` lists the fields | Highlight the fields |
 | `PHONE_INVALID` | 422 | Not an Iranian mobile number | Highlight the field |
+| `PHONE_UNUSUAL` | 422 | Shape-valid, but the prefix is not a known Iranian mobile range; no SMS sent | Warn "double-check this number" |
 | `OTP_COOLDOWN` | 429 | A code was sent less than a minute ago | Countdown from `Retry-After` |
 | `OTP_DAILY_LIMIT` | 429 | Too many codes for this number today | "Try again tomorrow" |
 | `PHONE_NOT_ALLOWED` | 403 | Test server: real SMS only to team numbers | Use a `0969` test number |
@@ -357,6 +358,7 @@ sending `{"phone": ...}` gets `422 VALIDATION_FAILED` (missing `identifier`).
 ```
 
 The response is the same for new and known numbers. Errors: `PHONE_INVALID`,
+`PHONE_UNUSUAL` (shape-valid but an unrecognized prefix; no SMS sent),
 `OTP_COOLDOWN`, `OTP_DAILY_LIMIT`, `PHONE_NOT_ALLOWED` (staging only: a real number that is
 not on the team allow-list).
 

@@ -5,6 +5,15 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ## [Unreleased]
 
+### Added
+
+- `POST /auth/request` now rejects an unusual phone number (shape-valid, but
+  the prefix is not on any publicly known allocated Iranian mobile range)
+  with `422 PHONE_UNUSUAL` before any Kavenegar call — Kavenegar is never
+  billed/attempted for it. Soft check: `0969` test numbers are unaffected
+  (checked separately), and the list is a warning signal, not a hard
+  validity gate, since the CRA can allocate new ranges at any time.
+
 ### Changed
 
 - Deploys (ADR 0011): CI builds one image per master commit and pushes it to GHCR; staging

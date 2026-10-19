@@ -10,6 +10,7 @@ from app.application.authentication import (
     AuthenticationSettings,
     DailyLimitError,
     PhoneInvalidError,
+    PhoneUnusualError,
     ResendCooldownError,
 )
 from app.domain.authentication import AuthenticatedSession, AuthenticationChallenge
@@ -273,6 +274,31 @@ async def test_request_challenge_rejects_a_non_iranian_number() -> None:
 
 
 @pytest.mark.asyncio
+async def test_request_challenge_rejects_an_unusual_prefix_without_sending_sms() -> (
+    None
+):
+    service, _, sms, _ = build_service()
+
+    # 940 is shape-valid (9 followed by 9 digits) but not a known range.
+    with pytest.raises(PhoneUnusualError):
+        await service.request_challenge("0940 123 4567")
+
+    assert sms.send_count == 0
+
+
+@pytest.mark.asyncio
+async def test_a_test_number_bypasses_the_unusual_prefix_check() -> None:
+    service, _, sms, _ = build_service(test_numbers_enabled=True)
+
+    # 969 is deliberately not a known carrier range, but test numbers must
+    # still work when enabled: they never reach the SMS sender anyway.
+    result = await service.request_challenge("0969 123 4567")
+
+    assert result.test_code is not None
+    assert sms.send_count == 0
+
+
+@pytest.mark.asyncio
 async def test_request_challenge_returns_the_contract_shape() -> None:
     service, _, _, _ = build_service(resend_cooldown=timedelta(seconds=60))
 
@@ -364,15 +390,29 @@ async def test_a_test_number_gets_its_code_in_the_response_without_sms() -> None
 
 
 @pytest.mark.asyncio
-async def test_real_numbers_and_disabled_test_numbers_use_sms_only() -> None:
+async def test_real_numbers_use_sms_regardless_of_test_mode() -> None:
     enabled, _, enabled_sms, _ = build_service(test_numbers_enabled=True)
     disabled, _, disabled_sms, _ = build_service(test_numbers_enabled=False)
 
     real = await enabled.request_challenge("0912 345 6789")
-    off = await disabled.request_challenge("0969 000 0007")
+    also_real = await disabled.request_challenge("0913 345 6789")
 
     assert real.test_code is None and enabled_sms.send_count == 1
-    assert off.test_code is None and disabled_sms.send_count == 1
+    assert also_real.test_code is None and disabled_sms.send_count == 1
+
+
+@pytest.mark.asyncio
+async def test_a_969_number_is_unusual_when_test_mode_is_disabled() -> None:
+    # 969 is not an allocated carrier range: with the test-number shortcut
+    # off, it must be rejected as unusual, never silently treated as a real
+    # number and sent to Kavenegar (the previous behavior, before the
+    # unusual-prefix guard existed).
+    disabled, _, disabled_sms, _ = build_service(test_numbers_enabled=False)
+
+    with pytest.raises(PhoneUnusualError):
+        await disabled.request_challenge("0969 000 0007")
+
+    assert disabled_sms.send_count == 0
 
 
 @pytest.mark.asyncio

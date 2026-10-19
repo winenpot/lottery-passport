@@ -20,6 +20,7 @@ from app.application.authentication import (
     DailyLimitError,
     PhoneInvalidError,
     PhoneNotAllowedError,
+    PhoneUnusualError,
     ResendCooldownError,
 )
 from app.core.config import Settings, get_settings
@@ -44,7 +45,7 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
                 "PHONE_NOT_ALLOWED (test servers: real SMS only to listed numbers)"
             ),
         },
-        422: {"model": ErrorResponse, "description": "PHONE_INVALID"},
+        422: {"model": ErrorResponse, "description": "PHONE_INVALID or PHONE_UNUSUAL"},
         429: {
             "model": ErrorResponse,
             "description": "OTP_COOLDOWN or OTP_DAILY_LIMIT",
@@ -82,6 +83,13 @@ async def request_authentication(
             status.HTTP_403_FORBIDDEN,
             "PHONE_NOT_ALLOWED",
             "this test server sends codes only to team numbers; use a test number",
+        ) from error
+    except PhoneUnusualError as error:
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "PHONE_UNUSUAL",
+            "this number's prefix is not a known Iranian mobile range; "
+            "double-check it before trying again",
         ) from error
     except AuthenticationError as error:
         raise ApiError(

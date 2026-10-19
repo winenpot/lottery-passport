@@ -9,7 +9,12 @@ from uuid import UUID, uuid4
 
 from app.application.otp_test_numbers import is_test_phone_number
 from app.domain.authentication import AuthenticatedSession, AuthenticationChallenge
-from app.domain.phone import PhoneNumberError, mask_phone, normalize_iranian_mobile
+from app.domain.phone import (
+    PhoneNumberError,
+    has_known_mobile_prefix,
+    mask_phone,
+    normalize_iranian_mobile,
+)
 from app.domain.users import AccountStatus, User, UserRole, VerificationStatus
 
 
@@ -38,6 +43,17 @@ class PhoneNotAllowedError(AuthenticationError):
 
     A public test server that texts any number is an SMS relay that burns
     credit; production never sets the list (config validator).
+    """
+
+
+class PhoneUnusualError(AuthenticationError):
+    """The number's prefix is not on any publicly known allocated range.
+
+    A soft warning, not a hard "invalid number" verdict (ranges change), but
+    the vendor (Kavenegar) is never called for it: an unusual number is the
+    exact shape of a typo or a throwaway/fraud number, and every call costs
+    SMS credit whether or not it is deliverable. The caller must tell the
+    player to double-check the number, not silently drop the request.
     """
 
 
@@ -178,6 +194,17 @@ class AuthenticationService:
                 extra={"phone": mask_phone(phone), "reason": "not_allowed"},
             )
             raise PhoneNotAllowedError("this number is not on the allow-list")
+        if not test_number and not has_known_mobile_prefix(phone):
+            # Same principle: never call Kavenegar for a number that doesn't
+            # look like a real carrier number. Warn instead of silently
+            # failing or silently burning SMS credit on a typo.
+            logger.warning(
+                "otp_request_blocked",
+                extra={"phone": mask_phone(phone), "reason": "unusual_prefix"},
+            )
+            raise PhoneUnusualError(
+                "this number's prefix is not a known Iranian mobile range"
+            )
         result = RequestChallengeResult(
             resend_after_seconds=int(self._settings.resend_cooldown.total_seconds()),
             expires_in_seconds=int(self._settings.challenge_ttl.total_seconds()),

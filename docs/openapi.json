@@ -1466,7 +1466,7 @@
                 }
               }
             },
-            "description": "PHONE_INVALID"
+            "description": "PHONE_INVALID or PHONE_UNUSUAL"
           },
           "429": {
             "content": {

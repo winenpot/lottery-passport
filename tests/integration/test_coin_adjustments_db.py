@@ -28,14 +28,12 @@ from app.infrastructure.sms import ConsoleSmsSender
 
 
 def random_phone() -> str:
-    """A fresh Iranian-shaped mobile number, outside the 0969 test-number
-    range (``app/application/otp_test_numbers.py``): those never go through
+    """A fresh Iranian-shaped mobile number, on a known allocated range
+    (``app/domain/phone.py``) and outside the 0969 test-number range
+    (``app/application/otp_test_numbers.py``): those never go through
     ``ConsoleSmsSender``, since the dev/demo OTP response carries the code
     back directly instead."""
-    while True:
-        phone = "+989" + "".join(str(random.randint(0, 9)) for _ in range(9))
-        if not phone.startswith("+98969"):
-            return phone
+    return "+98912" + "".join(str(random.randint(0, 9)) for _ in range(7))
 
 
 @pytest.fixture

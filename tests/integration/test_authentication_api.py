@@ -87,6 +87,27 @@ async def test_a_non_iranian_number_is_rejected(test_database_url: str) -> None:
 
 
 @pytest.mark.asyncio
+async def test_an_unusual_prefix_is_rejected_without_an_sms_attempt(
+    test_database_url: str,
+) -> None:
+    settings = Settings(
+        database_url=test_database_url, cors_origins="*", _env_file=None
+    )
+    application = create_app(settings)
+    # 940 is shape-valid (9 + 9 digits) but not on any known allocated range.
+    identifier = "+989401234567"
+
+    with TestClient(application) as client:
+        response = client.post("/api/v1/auth/request", json={"identifier": identifier})
+        sender = application.state.sms_sender
+        assert isinstance(sender, ConsoleSmsSender)
+        assert sender.last_code is None, "an unusual number must never reach the sender"
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "PHONE_UNUSUAL"
+
+
+@pytest.mark.asyncio
 async def test_resending_too_soon_is_rejected(test_database_url: str) -> None:
     settings = Settings(
         database_url=test_database_url, cors_origins="*", _env_file=None
