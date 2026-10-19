@@ -14,6 +14,14 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
   (checked separately), and the list is a warning signal, not a hard
   validity gate, since the CRA can allocate new ranges at any time.
 
+- `scripts.check_code` (B28): looks up a printed code or scanned QR URL and
+  reports its batch, status and redemption state — without ever redeeming
+  it. Printer QC checks a sample this way before and during each run
+  (`docs/CODES.md` section 6). Also flags a batch whose stored pepper
+  fingerprint column disagrees with the very pepper that matched the
+  code's hash — only possible if that column was corrupted or hand-edited
+  after generation, since a wrong pepper fails the lookup outright.
+
 ### Changed
 
 - Deploys (ADR 0011): CI builds one image per master commit and pushes it to GHCR; staging

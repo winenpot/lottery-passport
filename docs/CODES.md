@@ -187,7 +187,7 @@ leaked: void it, and follow the [code leak runbook](OPERATIONS.md#runbook-suspec
 ## 6. Quality control
 
 - **Before the run**: the test print (20 units) is scanned with an Android phone and an iPhone and typed by hand on staging.
-- **Each run**: the printer sends photos of 10 random units; you check them with the admin "check a code" tool (B28), which says whether a code exists, its batch and status, **without redeeming it**.
+- **Each run**: the printer sends photos of 10 random units; you check them with `uv run python -m scripts.check_code "<code or scanned URL>"` (B28; a CLI today, not yet an admin UI panel), which says whether a code exists, its batch and status, and flags a corrupted pepper-fingerprint column on that batch — **without redeeming it**.
 - **At launch**: one real unit is redeemed by a team member in production; note which.
 
 ## 7. Adding a code format

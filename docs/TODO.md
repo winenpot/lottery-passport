@@ -69,7 +69,7 @@ the item is closed; reopening it later goes through the swap rule.
 | B25 | D12 | Security pass per [SECURITY.md](SECURITY.md#pre-launch-security-checklist): nginx limits (lounge IPs allow-listed), headers, `/docs` off, code paths redacted from logs, gitleaks, pip-audit | Checklist ticked, findings fixed or written down |
 | B26 | D11 | Monitoring: external uptime checks, error tracking, disk/CPU, SMS credit and failure rate; alerts by SMS/email (not Telegram: unreachable from a domestic server) | A test alert reaches your phone |
 | B27 | D12 | Load test with k6 (arrival-rate executor) at 5x the expected peak ([TESTING.md](TESTING.md#load-test)) | p99 and error rate recorded at a stated load |
-| B28 | D12 | Admin "check a code" for factory quality control: shows batch and status without redeeming | Factory sample of 10 caps checked |
+| B28 | D12 | ~~Admin~~ `scripts.check_code` CLI for factory quality control: shows batch and status without redeeming | Factory sample of 10 caps checked |
 | B29 | D12 | Feature freeze; release candidate to production; migrations; seed lounges and challenges | Production smoke test passes |
 | B30 | D13 | Dry run with 10 internal testers; train Mehdi and staff on the admin panel | Every tester completed the loop |
 | B31 | D14 | Pilot at lounge #1: watch logs and metrics live; hotfixes only | Pilot report written |
