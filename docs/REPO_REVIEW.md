@@ -33,7 +33,7 @@ crediting it.
 | 10 | `app/core/config.py` | 18 | OTP lifetime 600 s is long for SMS | Security | 🔲 B10 (150 s) |
 | 11 | `app/infrastructure/authentication.py` | 14–15 | OTP hash is `SHA-256(salt:code)` with the salt in the same row: a leaked row is brute-forced in a million tries | Security (low: short lifetime) | 🔲 B10 keyed hash |
 | 12 | `app/application/authentication.py` | 107–108 | Users are created at request time, before the number is proven: junk rows from attackers | Data hygiene | 🔲 B10 (create on verify or purge unverified after 7 days) |
-| 13 | `app/api/deps.py` | 12–16 | Cookie name hard-coded while `SESSION_COOKIE_NAME` is configurable: changing the setting silently breaks sign-in | Correctness | 🔲 keep the setting at its default until fixed |
+| 13 | `app/api/deps.py` | 12–16 | Cookie name hard-coded while `SESSION_COOKIE_NAME` is configurable: changing the setting silently breaks sign-in | Correctness | ✅ read through the setting; staging/production use `__Host-lp_session` |
 | 14 | `app/application/authentication.py` | 176 | Every authenticated request writes `last_used_at` | Performance (minor) | 🔲 throttle to once per few minutes when traffic grows |
 | 15 | `app/infrastructure/postgres/repositories.py` | 354–376 | `get_unredeemed_by_hash` then `mark_redeemed`: two round trips where one `UPDATE ... RETURNING` suffices | Performance | ✅ single claim statement |
 | 16 | `scripts/generate_redemption_codes.py` | 12–14 | Documented as `python scripts/...`, which fails with `No module named 'app'` | Correctness | ✅ `python -m scripts.<name>` |

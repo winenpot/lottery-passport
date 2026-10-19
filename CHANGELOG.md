@@ -20,6 +20,12 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
   the owner out), `install-app.sh` (layout, generated secrets, systemd units) and
   `firewall.sh` + `lp-firewall.service` (origin ports only for ArvanCloud, in DOCKER-USER).
 
+### Fixed
+
+- The session cookie is read through `SESSION_COOKIE_NAME` (it was hard-coded, so a renamed
+  cookie made every session look logged out). Staging and production use
+  `__Host-lp_session`; the settings refuse a `__Host-` name without Secure cookies.
+
 ### Removed
 
 - Render: `render.yaml`, the `RENDER_GIT_COMMIT` alias (`GIT_COMMIT` is baked into the image).

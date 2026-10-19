@@ -124,6 +124,15 @@ def test_samesite_none_needs_secure_cookies() -> None:
     assert _deployed(session_cookie_samesite="none").session_cookie_samesite == "none"
 
 
+def test_host_prefixed_cookie_name_needs_secure_cookies() -> None:
+    with pytest.raises(ValueError, match="requires Secure"):
+        Settings(session_cookie_name="__Host-lp_session", _env_file=None)
+    assert (
+        _deployed(session_cookie_name="__Host-lp_session").session_cookie_name
+        == "__Host-lp_session"
+    )
+
+
 def test_public_app_origin_is_normalized_and_validated() -> None:
     assert (
         Settings(

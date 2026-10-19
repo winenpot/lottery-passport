@@ -20,11 +20,26 @@ from app.application.teams import TeamService
 from app.application.wallets import WalletService
 from app.domain.users import User, UserRole
 
-session_cookie = APIKeyCookie(
+session_cookie_scheme = APIKeyCookie(
     name="lottery_passport_session",
     scheme_name="Session Cookie",
     auto_error=False,
 )
+
+
+def session_cookie(
+    request: Request,
+    _documented: Annotated[str | None, Security(session_cookie_scheme)] = None,
+) -> str | None:
+    """The session token from the cookie named by ``SESSION_COOKIE_NAME``.
+
+    ``session_cookie_scheme`` only documents the cookie in OpenAPI (default
+    name); it is built at import time and cannot know the served app's
+    setting, so reading through it ignored a renamed cookie (e.g.
+    ``__Host-lp_session``) and every session looked logged out.
+    """
+    name: str = request.app.state.settings.session_cookie_name
+    return request.cookies.get(name)
 
 
 def get_readiness_checker(request: Request) -> ReadinessChecker:

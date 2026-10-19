@@ -182,6 +182,13 @@ class Settings(BaseSettings):
             )
         if self.session_cookie_samesite == "none" and not self.secure_session_cookies:
             raise ValueError("SESSION_COOKIE_SAMESITE=none requires Secure cookies")
+        # Browsers drop a __Host- cookie that is not Secure: sign-in would
+        # silently stop working on plain-http development.
+        if (
+            self.session_cookie_name.startswith("__Host-")
+            and not self.secure_session_cookies
+        ):
+            raise ValueError("SESSION_COOKIE_NAME=__Host-... requires Secure cookies")
         if self.environment.lower() == "production" and not self.terms_required:
             raise ValueError("TERMS_REQUIRED=false is not allowed in production")
         allowed_phones = self.allowed_otp_phones  # raises on a malformed number

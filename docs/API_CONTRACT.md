@@ -379,9 +379,15 @@ POST /api/v1/auth/verify
 
 ```http
 200 OK
-Set-Cookie: lottery_passport_session=...; HttpOnly; Secure; SameSite=Lax; Path=/
+Set-Cookie: __Host-lp_session=...; HttpOnly; Secure; SameSite=Lax; Path=/
 <the Me object, see GET /me>
 ```
+
+The cookie name is `SESSION_COOKIE_NAME`: `__Host-lp_session` on staging and production
+(the `__Host-` prefix stops a sibling subdomain such as www or staging from setting it),
+`lottery_passport_session` in local development (a `__Host-` cookie needs Secure, which
+plain-http development lacks; the settings refuse that combination). The frontend never
+reads it (HttpOnly).
 
 The first successful verify creates the account. If `profile_complete` is false, show
 profile setup before anything else. Errors: `OTP_INVALID`.
