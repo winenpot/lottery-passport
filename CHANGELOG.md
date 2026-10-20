@@ -68,6 +68,13 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ### Fixed
 
+- Admin panel: no catalogue row could be created from /admin. SQLAdmin leaves primary-key
+  columns out of forms unless a view sets `form_include_pk`, so the avatar, challenge,
+  achievement and reward-rule create forms had no `id`/`key` field; and their NOT NULL
+  `created_at` (`updated_at` for reward rules) had no default, which the forms never fill.
+  Both fixed (ORM-side UTC defaults, no migration); a test now creates one row of each
+  through the panel.
+
 - Mini-games (N17): an abandoned run (reload, closed tab, phone call) stayed `open` forever,
   because nothing ever marked a run expired and starting checked only `status = 'open'`;
   from then on every `POST /mini-games/tap_reflex/runs` for that player answered

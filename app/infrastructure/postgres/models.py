@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import (
@@ -25,6 +25,12 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 class Base(DeclarativeBase):
     pass
+
+
+def _utcnow() -> datetime:
+    # ORM-side default for rows an admin creates in /admin, whose forms do not
+    # show timestamps (application code passes its own clock's time).
+    return datetime.now(UTC)
 
 
 class UserModel(Base):
@@ -111,7 +117,7 @@ class AvatarModel(Base):
         Boolean, nullable=False, default=True, server_default="true"
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
+        DateTime(timezone=True), nullable=False, default=_utcnow
     )
 
 
@@ -410,7 +416,7 @@ class RewardRuleModel(Base):
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
+        DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow
     )
 
     __table_args__ = (
@@ -490,7 +496,7 @@ class ChallengeModel(Base):
     reward_coins: Mapped[int] = mapped_column(Integer, nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
+        DateTime(timezone=True), nullable=False, default=_utcnow
     )
 
     __table_args__ = (
@@ -553,7 +559,7 @@ class AchievementModel(Base):
     reward_coins: Mapped[int] = mapped_column(Integer, nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
+        DateTime(timezone=True), nullable=False, default=_utcnow
     )
 
     __table_args__ = (

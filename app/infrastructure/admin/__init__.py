@@ -275,6 +275,8 @@ class AvatarAdmin(ModelView, model=AvatarModel):
     name_plural = "Avatars"
     icon = "fa-solid fa-image"
     can_create = True
+    # The id/key is typed by the admin; SQLAdmin hides primary keys otherwise.
+    form_include_pk = True
     can_edit = True
     can_delete = False
     can_export = False
@@ -313,6 +315,8 @@ class RewardRuleAdmin(ModelView, model=RewardRuleModel):
     name_plural = "Reward rules"
     icon = "fa-solid fa-sliders"
     can_create = True
+    # The id/key is typed by the admin; SQLAdmin hides primary keys otherwise.
+    form_include_pk = True
     can_edit = True
     can_delete = False
     can_export = False
@@ -347,6 +351,8 @@ class ChallengeAdmin(ModelView, model=ChallengeModel):
     name_plural = "Challenges"
     icon = "fa-solid fa-flag-checkered"
     can_create = True
+    # The id/key is typed by the admin; SQLAdmin hides primary keys otherwise.
+    form_include_pk = True
     can_edit = True
     can_delete = False
     can_export = False
@@ -386,6 +392,8 @@ class AchievementAdmin(ModelView, model=AchievementModel):
     name_plural = "Achievements"
     icon = "fa-solid fa-medal"
     can_create = True
+    # The id/key is typed by the admin; SQLAdmin hides primary keys otherwise.
+    form_include_pk = True
     can_edit = True
     can_delete = False
     can_export = False

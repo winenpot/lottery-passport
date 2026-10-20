@@ -192,3 +192,114 @@ async def test_editing_a_lounge_writes_an_audit_row(test_database_url: str) -> N
                     text("DELETE FROM venues WHERE id = :id"), {"id": venue_id}
                 )
             await engine.dispose()
+
+
+# Every view whose rows an admin creates, and the key field the admin types.
+CREATABLE = {
+    "avatar-model": "id",
+    "reward-rule-model": "key",
+    "challenge-model": "id",
+    "achievement-model": "id",
+    "legal-document-model": "version",
+}
+# Tables behind the four catalogue views above, and their key column.
+TABLES = (
+    ("avatars", "id"),
+    ("reward_rules", "key"),
+    ("challenges", "id"),
+    ("achievements", "id"),
+)
+
+
+@pytest.mark.asyncio
+async def test_create_forms_show_the_key_and_every_catalogue_can_be_filled(
+    test_database_url: str,
+) -> None:
+    """SQLAdmin hides primary-key columns from forms unless the view sets
+    ``form_include_pk``, and the forms never show timestamps; every catalogue
+    here has an admin-typed key and a NOT NULL timestamp, so before both
+    fixes nothing could be created from the panel at all."""
+    settings = Settings(database_url=test_database_url, _env_file=None)  # type: ignore[call-arg]
+    application = create_app(settings)
+    phone = _random_known_prefix_phone()
+    sender = application.state.sms_sender
+    assert isinstance(sender, ConsoleSmsSender)
+    engine = _pgbouncer_safe_engine(settings.database_url)
+    row_id = f"t-{uuid4().hex[:12]}"
+
+    with TestClient(application, follow_redirects=False) as client:
+        client.post(
+            "/api/v1/auth/request",
+            json={"identifier": phone},
+            headers={"X-Requested-With": "test"},
+        )
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(
+                    text("UPDATE users SET role = 'admin' WHERE identifier = :phone"),
+                    {"phone": phone},
+                )
+                await connection.execute(
+                    text(
+                        "DELETE FROM authentication_challenges WHERE user_id = "
+                        "(SELECT id FROM users WHERE identifier = :phone)"
+                    ),
+                    {"phone": phone},
+                )
+            client.post("/admin/login", data={"action": "send", "phone": phone})
+            assert sender.last_code is not None
+            done = client.post(
+                "/admin/login", data={"action": "verify", "code": sender.last_code}
+            )
+            assert done.status_code == 302
+
+            for identity, key in CREATABLE.items():
+                form = client.get(f"/admin/{identity}/create")
+                assert form.status_code == 200, identity
+                assert f'name="{key}"' in form.text, identity
+
+            # Inactive (BooleanField omitted = false), so no other test sees them.
+            payloads = {
+                "avatar-model": {
+                    "id": row_id,
+                    "image_url": "https://play.torshx.com/avatars/test.png",
+                    "sort": "0",
+                },
+                "reward-rule-model": {"key": row_id, "amount": "5", "cadence": "once"},
+                "challenge-model": {
+                    "id": row_id,
+                    "kind": "daily_checkin",
+                    "period": "day",
+                    "target": "1",
+                    "reward_coins": "5",
+                },
+                "achievement-model": {
+                    "id": row_id,
+                    "fact": "checkin_streak",
+                    "threshold": "3",
+                    "reward_coins": "5",
+                },
+            }
+            for identity, data in payloads.items():
+                created = client.post(f"/admin/{identity}/create", data=data)
+                assert created.status_code == 302, (identity, created.text[-500:])
+            async with engine.begin() as connection:
+                for table, key in TABLES:
+                    stored = (
+                        await connection.execute(
+                            text(f"SELECT count(*) FROM {table} WHERE {key} = :id"),
+                            {"id": row_id},
+                        )
+                    ).scalar_one()
+                    assert stored == 1, table
+        finally:
+            async with engine.begin() as connection:
+                await connection.execute(
+                    text("UPDATE users SET role = 'player' WHERE identifier = :phone"),
+                    {"phone": phone},
+                )
+                for table, key in TABLES:
+                    await connection.execute(
+                        text(f"DELETE FROM {table} WHERE {key} = :id"), {"id": row_id}
+                    )
+            await engine.dispose()
