@@ -22,6 +22,10 @@ def client(origins: list[str] | None = None) -> TestClient:
     async def read() -> dict[str, bool]:
         return {"ok": True}
 
+    @app.post("/admin/login")
+    async def admin_login() -> dict[str, bool]:
+        return {"ok": True}
+
     app.add_middleware(CsrfMiddleware, cookie_name=COOKIE, allowed_origins=allowed)
     app.add_middleware(
         CORSMiddleware,
@@ -63,6 +67,36 @@ def test_a_foreign_origin_is_rejected_even_with_the_header() -> None:
         "/write",
         headers={"X-Requested-With": "x", "Origin": "https://evil.example"},
     )
+
+    assert response.status_code == 403
+
+
+def test_admin_write_matching_host_passes_even_without_the_csrf_header() -> None:
+    """Admin forms are plain HTML, so they cannot send X-Requested-With; the
+    Origin-vs-Host check is the only guard there."""
+    http = client()
+
+    response = http.post("/admin/login", headers={"Origin": "http://testserver"})
+
+    assert response.status_code == 200
+
+
+def test_admin_write_with_a_literal_null_origin_is_treated_like_no_origin() -> None:
+    """A real case (staging, 2026-10-20): a circumvention VPN/proxy some
+    admins reach us through from Iran rewrites Origin to the literal string
+    "null", not a missing header. There is no session cookie yet on the
+    pre-auth login step, so this has nothing to protect either way."""
+    http = client()
+
+    response = http.post("/admin/login", headers={"Origin": "null"})
+
+    assert response.status_code == 200
+
+
+def test_admin_write_from_a_foreign_origin_is_still_rejected() -> None:
+    http = client()
+
+    response = http.post("/admin/login", headers={"Origin": "https://evil.example"})
 
     assert response.status_code == 403
 

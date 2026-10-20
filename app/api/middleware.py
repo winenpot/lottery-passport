@@ -162,6 +162,17 @@ class CsrfMiddleware:
         headers = Headers(scope=scope)
         if scope["path"] == ADMIN_PATH or scope["path"].startswith(f"{ADMIN_PATH}/"):
             origin = headers.get("origin")
+            # The literal string "null" (not a missing header) shows up from an
+            # opaque browsing context: a cross-scheme redirect chain, a
+            # sandboxed iframe, or -- the real case seen in staging logs,
+            # 2026-10-20 -- a circumvention VPN/proxy rewriting headers for a
+            # client reaching us from Iran. There is no session cookie
+            # on this first login step to forge anyway, and once signed in the
+            # admin cookie is SameSite=Strict (the real CSRF defense), so
+            # treating it exactly like "no Origin sent" costs nothing and
+            # unblocks a real, uncontrollable-by-the-admin client behavior.
+            if origin == "null":
+                origin = None
             if origin and urlsplit(origin).netloc != headers.get("host"):
                 await self._reject(scope, send, "origin not allowed")
                 return
