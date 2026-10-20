@@ -7,13 +7,15 @@ never does: rewards pay only through C1 challenges), but because it keeps
 "is there already an open run" and "is this run still open" checks from
 racing another request from the same player.
 
-Rate limiting (decision, 2026-10-15): no dedicated per-user run-creation
-counter. The existing global ``RateLimitMiddleware`` already bounds
-request volume per client, and the database's own partial unique index
-(``uq_mini_game_runs_user_open``) means a player can have at most one run
-outstanding at a time -- opening a new one requires finishing or
-expiring (2 min) the last, which already caps the creation rate without
-another moving part. Revisit only if real abuse data says otherwise.
+Rate limiting (decision, 2026-10-15; restated 2026-10-20): no dedicated
+per-user run-creation counter. The global rate limits (nginx per IP, then
+``RateLimitMiddleware``) bound request volume per client, and the database's
+own partial unique index (``uq_mini_game_runs_user_open``) keeps at most one
+run OPEN per player. Starting a new run closes the player's open one as
+EXPIRED (N17: refusing instead left a player who reloaded mid-run locked
+out for good, since nothing ever expired the old row). That does not loosen
+the cap: finishing a run instantly with junk numbers always allowed an
+immediate new start too. Revisit only if real abuse data says otherwise.
 """
 
 from collections.abc import Sequence
@@ -32,8 +34,6 @@ from app.domain.mini_games import (
     MiniGameRunRefusal,
     MiniGameRunRejection,
     MiniGameRunStatus,
-    MiniGameStartError,
-    MiniGameStartRefusal,
     assess_plausibility,
     check_can_finish,
     open_run,
@@ -46,8 +46,6 @@ __all__ = [
     "MiniGameRunRefusal",
     "MiniGameRunRejection",
     "MiniGameService",
-    "MiniGameStartError",
-    "MiniGameStartRefusal",
     "RunStarted",
 ]
 
@@ -82,12 +80,17 @@ class MiniGameService:
         self._rejected_review_threshold = rejected_review_threshold
 
     async def start_run(self, user_id: UUID, mini_game_id: MiniGameId) -> RunStarted:
-        """Raises ``MiniGameStartError`` (ALREADY_OPEN)."""
+        """Opens a new run. A run this player still has open (reload, closed
+        tab, lost response) is closed as EXPIRED first: the newest start
+        wins, so a player can never lock themselves out."""
         now = self._clock.now()
         async with self._unit_of_work() as uow:
             await uow.ledger.lock_wallet(user_id, now)
-            if await uow.mini_games.get_open(user_id, mini_game_id) is not None:
-                raise MiniGameStartError(MiniGameStartRefusal.ALREADY_OPEN)
+            previous = await uow.mini_games.get_open(user_id, mini_game_id)
+            if previous is not None:
+                await uow.mini_games.finish(
+                    previous.id, MiniGameRunStatus.EXPIRED, now, None
+                )
             new_run = open_run(user_id, mini_game_id, now, Random())
             await uow.mini_games.open(new_run)
             await uow.commit()
@@ -112,7 +115,20 @@ class MiniGameService:
             run = await uow.mini_games.get(run_id)
             if run is None:
                 raise MiniGameRunError(MiniGameRunRefusal.NOT_FOUND)
-            check_can_finish(run, user_id, reactions_ms, now)
+            try:
+                check_can_finish(run, user_id, reactions_ms, now)
+            except MiniGameRunError as error:
+                if (
+                    error.reason is MiniGameRunRefusal.EXPIRED
+                    and run.status is MiniGameRunStatus.OPEN
+                ):
+                    # Past its TTL: record it now instead of leaving an
+                    # OPEN row behind; the 409 still goes out.
+                    await uow.mini_games.finish(
+                        run.id, MiniGameRunStatus.EXPIRED, now, None
+                    )
+                    await uow.commit()
+                raise
             assessment = assess_plausibility(
                 run.round_delays_ms, reactions_ms, run.issued_at, now
             )

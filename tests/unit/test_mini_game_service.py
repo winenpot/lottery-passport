@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from app.application.mini_games import MiniGameService, MiniGameStartError
+from app.application.mini_games import MiniGameService
 from app.domain.audit import NewAuditEntry
 from app.domain.mini_games import (
     RUN_TTL,
@@ -26,7 +26,6 @@ from app.domain.mini_games import (
     MiniGameRunRefusal,
     MiniGameRunRejection,
     MiniGameRunStatus,
-    MiniGameStartRefusal,
 )
 
 ZONE = ZoneInfo("Asia/Tehran")
@@ -84,7 +83,7 @@ class FakeMiniGames:
         run_id: UUID,
         status: MiniGameRunStatus,
         finished_at: datetime,
-        average_reaction_ms: float,
+        average_reaction_ms: float | None,
     ) -> None:
         run = self.store.runs[run_id]
         self.store.runs[run_id] = MiniGameRun(
@@ -183,14 +182,53 @@ async def test_starting_a_run_locks_the_wallet_and_stores_it_open() -> None:
     assert store.runs[started.run_id].status is MiniGameRunStatus.OPEN
 
 
-async def test_starting_a_second_run_while_one_is_open_is_refused() -> None:
+async def test_starting_again_closes_the_open_run_as_expired() -> None:
     user = uuid4()
-    service, _, _ = build()
+    service, store, _ = build()
+    first = await service.start_run(user, MiniGameId.TAP_REFLEX)
+
+    second = await service.start_run(user, MiniGameId.TAP_REFLEX)
+
+    assert second.run_id != first.run_id
+    assert store.runs[first.run_id].status is MiniGameRunStatus.EXPIRED
+    assert store.runs[second.run_id].status is MiniGameRunStatus.OPEN
+
+
+async def test_an_abandoned_run_never_locks_the_player_out() -> None:
+    # N17: a run left open past its TTL used to answer 409 forever.
+    user = uuid4()
+    service, store, clock = build()
+    abandoned = await service.start_run(user, MiniGameId.TAP_REFLEX)
+    clock.current = abandoned.expires_at + timedelta(minutes=30)
+
+    fresh = await service.start_run(user, MiniGameId.TAP_REFLEX)
+
+    assert store.runs[abandoned.run_id].status is MiniGameRunStatus.EXPIRED
+    assert fresh.expires_at == clock.current + RUN_TTL
+
+
+async def test_finishing_a_replaced_run_is_refused_as_expired() -> None:
+    user = uuid4()
+    service, store, _ = build()
+    replaced = await service.start_run(user, MiniGameId.TAP_REFLEX)
     await service.start_run(user, MiniGameId.TAP_REFLEX)
 
-    with pytest.raises(MiniGameStartError) as caught:
-        await service.start_run(user, MiniGameId.TAP_REFLEX)
-    assert caught.value.reason is MiniGameStartRefusal.ALREADY_OPEN
+    with pytest.raises(MiniGameRunError) as caught:
+        await service.finish_run(user, replaced.run_id, [250, 260, 270, 280, 290])
+    assert caught.value.reason is MiniGameRunRefusal.EXPIRED
+    assert store.runs[replaced.run_id].status is MiniGameRunStatus.EXPIRED
+
+
+async def test_finishing_after_the_ttl_records_the_run_as_expired() -> None:
+    user = uuid4()
+    service, store, clock = build()
+    started = await service.start_run(user, MiniGameId.TAP_REFLEX)
+    clock.current = started.expires_at + timedelta(seconds=1)
+
+    with pytest.raises(MiniGameRunError) as caught:
+        await service.finish_run(user, started.run_id, [250, 260, 270, 280, 290])
+    assert caught.value.reason is MiniGameRunRefusal.EXPIRED
+    assert store.runs[started.run_id].status is MiniGameRunStatus.EXPIRED
 
 
 async def test_finishing_an_unknown_run_is_refused() -> None:

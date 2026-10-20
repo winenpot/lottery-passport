@@ -274,11 +274,11 @@ class MiniGamesInTransaction(Protocol):
         run_id: UUID,
         status: MiniGameRunStatus,
         finished_at: datetime,
-        average_reaction_ms: float,
+        average_reaction_ms: float | None,
     ) -> None:
-        """Move a run from OPEN to ACCEPTED or REJECTED. Never called for
-        EXPIRED -- an expired run is simply read as still OPEN past its
-        ``expires_at`` by any caller that cares; no background sweep."""
+        """Move a run from OPEN to ACCEPTED, REJECTED or EXPIRED.
+        ``average_reaction_ms`` is None for EXPIRED (never played to the
+        end): a run closed by a newer start, or finished after its TTL."""
         ...
 
     async def count_rejected_since(self, user_id: UUID, since: datetime) -> int:

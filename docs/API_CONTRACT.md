@@ -17,6 +17,17 @@ Parked features (not in the MVP contract): the city passport. See
 Newest first. **Breaking** means a call that worked before needs a change on your side.
 Check `GET /health` → `commit` to see which backend commit is deployed on the demo.
 
+**2026-10-20 (N17: an abandoned mini-game run no longer locks the player out)**
+
+- Changed: `POST /mini-games/{mini_game_id}/runs` never answers `409` any more. If the
+  player still has an open run (reload, closed tab, lost response), starting a new one
+  closes the old one as expired and returns the new run. Before, an abandoned run stayed
+  open forever and every later start answered `409 MINI_GAME_RUN_ALREADY_OPEN`, even
+  after its 2 minutes. The error code `MINI_GAME_RUN_ALREADY_OPEN` is gone.
+- Changed: finishing a run that a newer start replaced answers
+  `409 MINI_GAME_RUN_EXPIRED` (same as finishing after the 2 minutes), not
+  `MINI_GAME_RUN_ALREADY_FINISHED`. Use the newest `run_id` only.
+
 **2026-10-19 (FX1-FX3, FX7: browser-readable errors, config truth pass, feature flags)**
 
 - Errors: `429`/`500` responses now carry `Access-Control-Allow-Origin` and
@@ -780,10 +791,11 @@ POST /api/v1/mini-games/tap_reflex/runs
 ```
 
 The server chooses `round_delays_ms` (one per round) so the client cannot know in
-advance when each round's "react now" signal comes. One OPEN run per player per
-mini-game at a time (enforced by a database constraint, not just an application
-check); `409 MINI_GAME_RUN_ALREADY_OPEN` if the previous run has not been finished
-or expired yet (2 minutes from issue).
+advance when each round's "react now" signal comes. At most one OPEN run per player
+(enforced by a database constraint, not just an application check). Starting a run while
+one is open closes the old one as expired and returns the new one, so a reload never
+locks the player out; the old `run_id` then answers `409 MINI_GAME_RUN_EXPIRED`. A run
+expires 2 minutes after issue.
 
 ### `POST /api/v1/mini-games/runs/{run_id}/finish` (live, G1)
 

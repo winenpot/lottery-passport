@@ -15,8 +15,6 @@ from app.application.mini_games import (
     MiniGameFinishResult,
     MiniGameRunError,
     MiniGameRunRefusal,
-    MiniGameStartError,
-    MiniGameStartRefusal,
     RunStarted,
 )
 from app.core.config import Settings
@@ -43,13 +41,10 @@ def make_user() -> User:
 class FakeMiniGameService:
     def __init__(self) -> None:
         self.start_result: RunStarted | None = None
-        self.start_error: MiniGameStartError | None = None
         self.finish_result: MiniGameFinishResult | None = None
         self.finish_error: MiniGameRunError | None = None
 
     async def start_run(self, user_id: UUID, mini_game_id: MiniGameId) -> RunStarted:
-        if self.start_error is not None:
-            raise self.start_error
         assert self.start_result is not None
         return self.start_result
 
@@ -88,18 +83,6 @@ def test_starting_a_run_returns_the_round_delays() -> None:
     assert body["run_id"] == str(run_id)
     assert body["mini_game_id"] == "tap_reflex"
     assert body["round_delays_ms"] == [1000, 1500, 2000]
-
-
-def test_starting_a_run_while_one_is_open_is_409() -> None:
-    service = FakeMiniGameService()
-    service.start_error = MiniGameStartError(MiniGameStartRefusal.ALREADY_OPEN)
-
-    response = client(service).post("/api/v1/mini-games/tap_reflex/runs")
-
-    assert (response.status_code, response.json()["error"]["code"]) == (
-        409,
-        "MINI_GAME_RUN_ALREADY_OPEN",
-    )
 
 
 def test_an_unknown_mini_game_id_is_422() -> None:

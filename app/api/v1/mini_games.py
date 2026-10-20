@@ -21,8 +21,6 @@ from app.application.mini_games import (
     MiniGameRunError,
     MiniGameRunRefusal,
     MiniGameService,
-    MiniGameStartError,
-    MiniGameStartRefusal,
 )
 from app.domain.mini_games import MiniGameId
 from app.domain.users import User
@@ -39,26 +37,19 @@ _AUTH_REQUIRED: dict[int | str, dict[str, Any]] = {
     response_model=MiniGameRunStartResponse,
     summary="Start a server-verified mini-game run",
     description=(
-        "One open run per mini-game per player at a time; it expires 2 "
-        "minutes after issue."
+        "At most one open run per player; it expires 2 minutes after issue. "
+        "Starting a new run closes the player's open one (it can no longer "
+        "be finished: 409 MINI_GAME_RUN_EXPIRED), so a reload or a lost "
+        "response never locks the player out."
     ),
-    responses={
-        **_AUTH_REQUIRED,
-        409: {
-            "model": ErrorResponse,
-            "description": "MINI_GAME_RUN_ALREADY_OPEN",
-        },
-    },
+    responses=_AUTH_REQUIRED,
 )
 async def start_mini_game_run(
     mini_game_id: MiniGameId,
     current_user: Annotated[User, Depends(get_current_user)],
     service: Annotated[MiniGameService, Depends(get_mini_game_service)],
 ) -> MiniGameRunStartResponse:
-    try:
-        result = await service.start_run(current_user.id, mini_game_id)
-    except MiniGameStartError as error:
-        raise _start_api_error(error) from error
+    result = await service.start_run(current_user.id, mini_game_id)
     return MiniGameRunStartResponse.from_result(result)
 
 
@@ -95,13 +86,6 @@ async def finish_mini_game_run(
     except MiniGameRunError as error:
         raise _finish_api_error(error) from error
     return MiniGameRunFinishResponse.from_result(result)
-
-
-def _start_api_error(error: MiniGameStartError) -> ApiError:
-    assert error.reason is MiniGameStartRefusal.ALREADY_OPEN
-    return ApiError(
-        409, "MINI_GAME_RUN_ALREADY_OPEN", "finish or wait out the open run first"
-    )
 
 
 def _finish_api_error(error: MiniGameRunError) -> ApiError:

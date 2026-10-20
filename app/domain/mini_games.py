@@ -48,7 +48,9 @@ class MiniGameRunStatus(StrEnum):
     OPEN = "open"
     ACCEPTED = "accepted"  # finished, plausible
     REJECTED = "rejected"  # finished, implausible -- no reward
-    EXPIRED = "expired"  # never finished within RUN_TTL
+    # Never finished: finish arrived after RUN_TTL, or the player started a
+    # new run while this one was open (reload, closed tab, lost response).
+    EXPIRED = "expired"
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,19 +102,6 @@ def open_run(
     )
 
 
-class MiniGameStartRefusal(StrEnum):
-    """Why a new run could not be opened. Separate from
-    ``MiniGameRunRefusal`` (which is about FINISHING an existing run)."""
-
-    ALREADY_OPEN = "already_open"
-
-
-class MiniGameStartError(Exception):
-    def __init__(self, reason: MiniGameStartRefusal) -> None:
-        super().__init__(reason.value)
-        self.reason = reason
-
-
 class MiniGameRunRefusal(StrEnum):
     """Structural problems with a finish request -- real API errors, as
     opposed to ``MiniGameRunRejection`` below (a plausibility verdict, not
@@ -139,6 +128,9 @@ def check_can_finish(
     ``assess_plausibility`` next once this passes."""
     if run.user_id != user_id:
         raise MiniGameRunError(MiniGameRunRefusal.NOT_OWNER)
+    if run.status is MiniGameRunStatus.EXPIRED:
+        # Includes a run the player replaced by starting a new one.
+        raise MiniGameRunError(MiniGameRunRefusal.EXPIRED)
     if run.status is not MiniGameRunStatus.OPEN:
         raise MiniGameRunError(MiniGameRunRefusal.ALREADY_FINISHED)
     if now > run.expires_at:

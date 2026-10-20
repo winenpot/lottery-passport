@@ -74,6 +74,14 @@ def test_check_can_finish_rejects_a_run_that_is_not_open() -> None:
     assert caught.value.reason is MiniGameRunRefusal.ALREADY_FINISHED
 
 
+def test_check_can_finish_reports_a_replaced_run_as_expired() -> None:
+    # Closed by a newer start (N17), still well inside its TTL.
+    run = replace(_open_mini_game_run(), status=MiniGameRunStatus.EXPIRED)
+    with pytest.raises(MiniGameRunError) as caught:
+        check_can_finish(run, run.user_id, [200, 200, 200], NOW)
+    assert caught.value.reason is MiniGameRunRefusal.EXPIRED
+
+
 def test_check_can_finish_rejects_after_expiry() -> None:
     run = _open_mini_game_run()
     with pytest.raises(MiniGameRunError) as caught:

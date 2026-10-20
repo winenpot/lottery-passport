@@ -435,7 +435,7 @@ class SqlMiniGames:
         run_id: UUID,
         status: MiniGameRunStatus,
         finished_at: datetime,
-        average_reaction_ms: float,
+        average_reaction_ms: float | None,
     ) -> None:
         await self._session.execute(
             update(MiniGameRunModel)

@@ -67,6 +67,13 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ### Fixed
 
+- Mini-games (N17): an abandoned run (reload, closed tab, phone call) stayed `open` forever,
+  because nothing ever marked a run expired and starting checked only `status = 'open'`;
+  from then on every `POST /mini-games/tap_reflex/runs` for that player answered
+  `409 MINI_GAME_RUN_ALREADY_OPEN`, even hours later. Starting a run now closes the
+  player's open one as `expired` (the error code is gone), and a finish after the 2-minute
+  TTL records the run as `expired` before answering `409 MINI_GAME_RUN_EXPIRED`.
+
 - `tests/integration/test_redemption_flow.py::test_redemption_api_end_to_end` generated its
   sign-in identifier as a fully random `+989` + 9 digits, which lands outside
   `KNOWN_MOBILE_PREFIXES` (and now gets `PhoneUnusualError`, `app/domain/phone.py`) roughly

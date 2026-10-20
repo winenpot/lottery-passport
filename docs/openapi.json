@@ -2222,7 +2222,7 @@
     },
     "/api/v1/mini-games/{mini_game_id}/runs": {
       "post": {
-        "description": "One open run per mini-game per player at a time; it expires 2 minutes after issue.",
+        "description": "At most one open run per player; it expires 2 minutes after issue. Starting a new run closes the player's open one (it can no longer be finished: 409 MINI_GAME_RUN_EXPIRED), so a reload or a lost response never locks the player out.",
         "operationId": "start_mini_game_run",
         "parameters": [
           {
@@ -2254,16 +2254,6 @@
               }
             },
             "description": "Not signed in"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "MINI_GAME_RUN_ALREADY_OPEN"
           },
           "422": {
             "content": {
