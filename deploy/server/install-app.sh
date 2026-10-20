@@ -78,6 +78,17 @@ main() {
     systemctl enable --now lp-firewall.service >/dev/null
     systemctl enable --now lp-deploy.timer >/dev/null
     echo "  first deploy within a minute: journalctl -u lp-deploy -f"
+
+    if [[ "$environment" == staging ]]; then
+        step "systemd: lp-frontend-deploy.timer (staging only, ADR-0012)"
+        sed -e "s|@USER@|$user|g" -e "s|@BASE@|$base|g" \
+            "$base/repo/deploy/systemd/lp-frontend-deploy.service" \
+            >/etc/systemd/system/lp-frontend-deploy.service
+        cp "$base/repo/deploy/systemd/lp-frontend-deploy.timer" /etc/systemd/system/
+        systemctl daemon-reload
+        systemctl enable --now lp-frontend-deploy.timer >/dev/null
+        echo "  does nothing until FRONTEND_GH_TOKEN is set in .env (see the example)"
+    fi
 }
 
 # Copy the example; replace <generated> secrets; make DATABASE_URL use the

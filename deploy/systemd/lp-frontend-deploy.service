@@ -1,0 +1,12 @@
+# Installed by docs/OPERATIONS.md "Server setup" with @USER@ and @BASE@
+# replaced. Staging only (ADR-0012); never installed on torshx.
+[Unit]
+Description=lottery-passport: publish Arman's frontend if main's CI went green (ADR-0012)
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=@USER@
+ExecStart=@BASE@/repo/deploy/deploy_frontend.sh
+TimeoutStartSec=5min
+SuccessExitStatus=0

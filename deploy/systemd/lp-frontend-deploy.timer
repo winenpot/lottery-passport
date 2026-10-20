@@ -1,0 +1,11 @@
+[Unit]
+Description=lottery-passport: check Arman's frontend CI every minute (staging only)
+
+[Timer]
+OnBootSec=1min
+OnUnitInactiveSec=1min
+AccuracySec=5s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

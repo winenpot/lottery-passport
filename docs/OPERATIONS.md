@@ -184,8 +184,24 @@ production, simply release the previous tag again. This is safe only because of 
 **during the campaign, migrations are additive** (new tables, new nullable columns, new indexes
 created `CONCURRENTLY`). Renames and drops use expand -> migrate -> contract across two releases.
 
-**Frontend release** (manual, both servers the same way; each release in its own directory,
-`current` is a relative symlink switched atomically):
+**Frontend release** (staging auto-deploys since ADR-0012; production stays manual on
+purpose, both the same `publish_web.sh` way; each release in its own directory, `current`
+is a relative symlink switched atomically):
+
+Staging: `lp-frontend-deploy.timer` runs `deploy/deploy_frontend.sh` every minute. When
+Arman's "Frontend CI" goes green on `TorshX_2`'s `main`, it downloads that run's
+`frontend-normal` artifact and calls `publish_web.sh` itself — nothing to do by hand once
+`FRONTEND_GH_TOKEN` is set (a fine-grained PAT on `TorshX_2` only, `Actions: read` +
+`Contents: read`; `deploy/env/staging.env.example` has the placeholder). `deploy_frontend.sh
+--status` shows what it last published and any failure; `journalctl -u lp-frontend-deploy
+-f` for its log. It is intentionally not installed on torshx (ADR-0012).
+
+**Not enabled on atpg yet** (2026-10-20): a main-push run never actually carries a
+`frontend-normal` artifact, only a `release-plan.json` risk report; resolving a main
+commit to the PR run that built it is an open question with Arman (ADR-0012 "Open
+question"). The script itself is written and tested against the real API.
+
+Production, still manual:
 
 1. Pick the artifact: Arman's `frontend-normal` CI artifact from `Arman13m99/TorshX_2`.
    Production takes only what is on `main` (a PR's own build is fine when its commit tree
@@ -198,7 +214,6 @@ created `CONCURRENTLY`). Renames and drops use expand -> migrate -> contract acr
 3. Publish with [`deploy/publish_web.sh`](../deploy/publish_web.sh), on the server:
 
 ```bash
-deploy/publish_web.sh frontend-normal.zip <short-commit>-<yyyymmdd>    # staging (data user)
 sudo env LP_BASE=/opt/lottery-passport deploy/publish_web.sh frontend-normal.zip <id>   # production
 # rollback: cd <base>/web && ln -sfn releases/<previous id> current.next && mv -T current.next current
 ```
