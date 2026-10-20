@@ -869,6 +869,44 @@
         "title": "RedemptionResponse",
         "type": "object"
       },
+      "ReferralStatusResponse": {
+        "properties": {
+          "coins_earned": {
+            "description": "Lifetime coins earned from referrals.",
+            "title": "Coins Earned",
+            "type": "integer"
+          },
+          "invited_count": {
+            "description": "Friends who have ever bound your code.",
+            "title": "Invited Count",
+            "type": "integer"
+          },
+          "pending_count": {
+            "description": "Invited but not yet qualified (sheet's own word: PENDING).",
+            "title": "Pending Count",
+            "type": "integer"
+          },
+          "qualified_count": {
+            "description": "Of those, how many have paid out the first-code bonus.",
+            "title": "Qualified Count",
+            "type": "integer"
+          },
+          "referral_code": {
+            "description": "Your own invite code.",
+            "title": "Referral Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "referral_code",
+          "invited_count",
+          "qualified_count",
+          "pending_count",
+          "coins_earned"
+        ],
+        "title": "ReferralStatusResponse",
+        "type": "object"
+      },
       "TeamChangeRequest": {
         "properties": {
           "flavor": {
@@ -1092,6 +1130,18 @@
             "title": "Profile Complete",
             "type": "boolean"
           },
+          "referral_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "This user's own invite code. Null until first requested.",
+            "title": "Referral Code"
+          },
           "role": {
             "title": "Role",
             "type": "string"
@@ -1222,6 +1272,19 @@
             ],
             "description": "3-16 characters; rules in docs/SECURITY.md.",
             "title": "Nickname"
+          },
+          "referrer_code": {
+            "anyOf": [
+              {
+                "maxLength": 8,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Bind the inviter who referred you. One-time only, and only before you have redeemed any code.",
+            "title": "Referrer Code"
           }
         },
         "title": "UserUpdate",
@@ -1749,7 +1812,7 @@
         ]
       },
       "patch": {
-        "description": "Send any of ``display_name``, ``nickname``, ``accept_terms_version``, ``home_venue_id``, ``location_city`` and ``avatar_id``; only the fields sent change. ``profile_complete`` becomes true once a nickname is set and the terms are accepted (only the nickname when ``/config`` says ``terms_required: false``).",
+        "description": "Send any of ``display_name``, ``nickname``, ``accept_terms_version``, ``home_venue_id``, ``location_city``, ``avatar_id`` and ``referrer_code``; only the fields sent change. ``profile_complete`` becomes true once a nickname is set and the terms are accepted (only the nickname when ``/config`` says ``terms_required: false``).",
         "operationId": "update_me",
         "requestBody": {
           "content": {
@@ -1790,7 +1853,7 @@
                 }
               }
             },
-            "description": "NICKNAME_TAKEN"
+            "description": "NICKNAME_TAKEN or REFERRAL_ALREADY_BOUND"
           },
           "422": {
             "content": {
@@ -1800,7 +1863,7 @@
                 }
               }
             },
-            "description": "NICKNAME_INVALID, TERMS_VERSION_INVALID, CATALOGUE_UNKNOWN or AVATAR_LOCKED"
+            "description": "NICKNAME_INVALID, TERMS_VERSION_INVALID, CATALOGUE_UNKNOWN, AVATAR_LOCKED, REFERRAL_CODE_UNKNOWN, REFERRAL_SELF or REFERRAL_CODE_TOO_LATE"
           }
         },
         "security": [
@@ -1890,6 +1953,42 @@
           }
         ],
         "summary": "Per-city passport progress",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/me/referrals": {
+      "get": {
+        "operationId": "get_my_referrals",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not signed in"
+          }
+        },
+        "security": [
+          {
+            "Session Cookie": []
+          }
+        ],
+        "summary": "Your invite code and referral counts",
         "tags": [
           "users"
         ]

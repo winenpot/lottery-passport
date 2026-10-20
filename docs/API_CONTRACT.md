@@ -858,6 +858,51 @@ Last week's top 3 (the «برندگان هفته قبل» tab): `{"week_key": ".
 - `venue` filters to players whose arrival or event registration was at that venue. The
   demo does not show a venue filter yet.
 
+## Referrals
+
+Invite a friend, earn coins when they finish their own mission (RF1; numbers from
+Mehdi's rewards sheet, tab «ریفرال»). One inviter per user, bound once, only while the
+invitee has redeemed 0 codes — binding later would backdate a referral onto redemptions
+nobody actually referred.
+
+- **First code**: once the invitee has a redeemed code AND a finished profile AND a
+  chosen team AND at least one accepted mini-game run, the inviter earns 15 coins. Until
+  then the payout is PENDING — nothing pays, not even for later codes.
+- **Later codes**: once the mission is complete, every one of the invitee's codes
+  redeemed within 180 days of their first redeemed code earns the inviter 5 coins each.
+- Settling runs on the invitee's own `GET /me` (every one of redeem/profile-update/
+  team-join/mini-game-finish is normally followed by a `/me` refresh in the client), not
+  inside those write endpoints' own transaction — a deliberate simplification from the
+  original same-transaction design; it costs at most one `/me` read's delay, never a
+  missed or doubled payout (idempotency keys).
+
+### `PATCH /api/v1/me` `referrer_code` (live, RF1)
+
+```json
+{"referrer_code": "K7M2QXJ9"}
+```
+
+One-time only. Errors: `REFERRAL_CODE_UNKNOWN` (422 — no user has that code),
+`REFERRAL_SELF` (422 — your own code), `REFERRAL_CODE_TOO_LATE` (422 — you have already
+redeemed a code), `REFERRAL_ALREADY_BOUND` (409 — a referrer is already bound).
+
+### `GET /api/v1/me` `referral_code` (live, RF1)
+
+Your own invite code (8 Crockford Base32 characters, same alphabet as printed product
+codes); generated and stored the first time it is read.
+
+### `GET /api/v1/me/referrals` (live, RF1)
+
+```json
+{
+  "referral_code": "K7M2QXJ9",
+  "invited_count": 3,
+  "qualified_count": 1,
+  "pending_count": 2,
+  "coins_earned": 20
+}
+```
+
 ## Challenges and submissions
 
 Automatic challenges (C1, B17) are live now; social-post submissions and manual

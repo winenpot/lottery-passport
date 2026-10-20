@@ -7,6 +7,16 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ### Added
 
+- Referrals (RF1): invite a friend, earn coins through the existing ledger when
+  their mission completes (a redeemed code, finished profile, chosen team, one
+  accepted mini-game run). `PATCH /me referrer_code` (one-time bind, before any
+  code is redeemed), `GET /me` `referral_code` (generated lazily), `GET
+  /me/referrals` (invited/qualified/pending counts, coins earned). Migration
+  0019 (`users.referral_code`, `referrals`). Settling runs on the invitee's own
+  `GET /me` rather than inside redeem/team-join/profile-update/mini-game-finish
+  — a deliberate simplification to avoid widening those four services'
+  constructors; see `app/application/referrals.py`'s module docstring.
+
 - Terms/privacy text (LG1): nginx serves each versioned legal file at
   `/legal/<version>` as `text/plain; charset=utf-8`, cached forever (a
   version is immutable once published, `docs/legal/README.md`). The
