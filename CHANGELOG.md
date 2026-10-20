@@ -17,14 +17,15 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
   — a deliberate simplification to avoid widening those four services'
   constructors; see `app/application/referrals.py`'s module docstring.
 
-- Terms/privacy text (LG1): nginx serves each versioned legal file at
-  `/legal/<version>` as `text/plain; charset=utf-8`, cached forever (a
-  version is immutable once published, `docs/legal/README.md`). The
-  compose stack mounts `docs/legal/` read-only into the nginx container
-  instead of the whole repo. `TERMS_URL`/`PRIVACY_URL` are set to the
-  same url (one file covers both sections; plain text has no anchors).
-  `TERMS_VERSION`/`TERMS_URL`/`PRIVACY_URL` still need setting per server
-  via an approved release, and Mehdi's approval of the text (LG2).
+- Terms/privacy on the admin panel (LG1'): one "Terms & privacy" tab with a wide,
+  right-to-left text field, seeded with the 2026-10-20 first draft (migration 0020,
+  table `legal_documents`). `GET /legal/<version>` renders it as a Persian HTML page
+  (headings with `#terms`/`#privacy` anchors, paragraphs, lists; everything escaped);
+  nginx forwards `/legal/*` to the API, no caching, so an edit shows at once. A trigger
+  freezes a version once any player accepted it (the panel explains the refusal).
+  Replaces LG1's plain-text file serving (never deployed): nginx no longer mounts
+  `docs/legal/`. `TERMS_VERSION`/`TERMS_URL`/`PRIVACY_URL` stay per-server `.env`
+  pointers, set once Mehdi approves the text (LG2).
 
 - `POST /auth/request` now rejects an unusual phone number (shape-valid, but
   the prefix is not on any publicly known allocated Iranian mobile range)

@@ -29,6 +29,7 @@ VIEW_PATHS = (
     "/admin/code-batch-model/list",
     "/admin/wallet-model/list",
     "/admin/coin-ledger-entry-model/list",
+    "/admin/legal-document-model/list",
 )
 
 

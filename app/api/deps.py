@@ -10,6 +10,7 @@ from app.application.app_config import AppConfigService
 from app.application.authentication import AuthenticationError, AuthenticationService
 from app.application.avatars import AvatarService
 from app.application.challenges import ChallengeService
+from app.application.legal import LegalDocumentService
 from app.application.me import MeService
 from app.application.mini_games import MiniGameService
 from app.application.passports import PassportService
@@ -86,6 +87,10 @@ def get_wallet_service(request: Request) -> WalletService:
 
 def get_avatar_service(request: Request) -> AvatarService:
     return cast(AvatarService, request.app.state.avatar_service)
+
+
+def get_legal_document_service(request: Request) -> LegalDocumentService:
+    return cast(LegalDocumentService, request.app.state.legal_document_service)
 
 
 def get_team_service(request: Request) -> TeamService:

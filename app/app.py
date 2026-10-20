@@ -33,6 +33,7 @@ from app.application.avatars import AvatarService
 from app.application.challenges import ChallengeService
 from app.application.coin_adjustments import CoinAdjustmentService
 from app.application.failure_throttle import ThrottleSettings
+from app.application.legal import LegalDocumentService
 from app.application.me import MeService
 from app.application.mini_games import MiniGameService
 from app.application.passports import PassportService
@@ -64,6 +65,7 @@ from app.infrastructure.postgres.repositories import (
     PostgreSQLChallengeRepository,
     PostgreSQLChallengesReader,
     PostgreSQLLastScanReader,
+    PostgreSQLLegalDocuments,
     PostgreSQLPassportRepository,
     PostgreSQLSessionRepository,
     PostgreSQLTeamsReader,
@@ -107,6 +109,13 @@ OPENAPI_TAGS = [
     {
         "name": "avatars",
         "description": "The avatar catalogue. See API_CONTRACT.md#config-and-profile.",
+    },
+    {
+        "name": "legal",
+        "description": (
+            "The terms of use + privacy page, edited in /admin. "
+            "See API_CONTRACT.md#terms-and-privacy-page."
+        ),
     },
     {
         "name": "teams",
@@ -193,6 +202,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     avatar_service = AvatarService(
         catalogue=PostgreSQLAvatarCatalogue(database.session_factory)
+    )
+    legal_document_service = LegalDocumentService(
+        PostgreSQLLegalDocuments(database.session_factory)
     )
     app_config_service = AppConfigService(
         clock=SystemClock(),
@@ -382,6 +394,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.app_config_service = app_config_service
     application.state.coin_adjustment_service = coin_adjustment_service
     application.state.avatar_service = avatar_service
+    application.state.legal_document_service = legal_document_service
     application.state.team_service = team_service
     application.state.me_service = me_service
     application.state.challenge_service = challenge_service

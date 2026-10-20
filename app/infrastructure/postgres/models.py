@@ -14,8 +14,10 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     Uuid,
+    func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -636,4 +638,31 @@ class UserAchievementModel(Base):
             "achievement_id", "user_id", name="uq_user_achievements_achievement_user"
         ),
         Index("ix_user_achievements_user", "user_id"),
+    )
+
+
+class LegalDocumentModel(Base):
+    """Terms of use + privacy text, one row per version (LG1', app/domain/
+    legal.py). Edited in /admin; a trigger (migration 0020) refuses UPDATE
+    and DELETE once any player accepted that version."""
+
+    __tablename__ = "legal_documents"
+
+    version: Mapped[str] = mapped_column(String(20), primary_key=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "version ~ '^[A-Za-z0-9_-]{1,20}$'", name="ck_legal_documents_version"
+        ),
+        CheckConstraint("length(body) > 0", name="ck_legal_documents_body"),
     )

@@ -22,6 +22,7 @@ from app.domain.authentication import AuthenticatedSession, AuthenticationChalle
 from app.domain.avatars import Avatar
 from app.domain.challenges import Challenge, ChallengeKind, ChallengePeriod
 from app.domain.ledger import LedgerEntry, LedgerReason, Wallet
+from app.domain.legal import LegalDocument
 from app.domain.nickname import Nickname
 from app.domain.passports import Campaign, CityCode, PassportProgress
 from app.domain.teams import TeamMembership
@@ -34,6 +35,7 @@ from app.infrastructure.postgres.models import (
     ChallengeClaimModel,
     ChallengeModel,
     CoinLedgerEntryModel,
+    LegalDocumentModel,
     PassportProgressModel,
     RedemptionCodeModel,
     SessionModel,
@@ -333,6 +335,22 @@ class PostgreSQLAvatarCatalogue:
             if model is None or not model.active:
                 return None
             return avatar_from_model(model)
+
+
+class PostgreSQLLegalDocuments:
+    """Implements ``LegalDocuments`` (app/application/legal.py)."""
+
+    def __init__(self, factory: async_sessionmaker[AsyncSession]) -> None:
+        self._factory = factory
+
+    async def get(self, version: str) -> LegalDocument | None:
+        async with self._factory() as session:
+            model = await session.get(LegalDocumentModel, version)
+            if model is None:
+                return None
+            return LegalDocument(
+                version=model.version, body=model.body, updated_at=model.updated_at
+            )
 
 
 def team_membership_from_model(model: TeamMembershipModel) -> TeamMembership:

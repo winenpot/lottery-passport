@@ -17,6 +17,14 @@ Parked features (not in the MVP contract): the city passport. See
 Newest first. **Breaking** means a call that worked before needs a change on your side.
 Check `GET /health` → `commit` to see which backend commit is deployed on the demo.
 
+**2026-10-20 (LG1': terms and privacy page)**
+
+- Added: `GET /legal/{version}` (no sign-in, HTML, right to left), the page `terms_url`
+  and `privacy_url` will point at — see [Terms and privacy page](#terms-and-privacy-page).
+  The text is edited in the admin panel. A server's `/config` keeps `terms_url` /
+  `privacy_url` null until its `.env` points them at the page, and `terms_version` names
+  the version to send as `accept_terms_version`.
+
 **2026-10-20 (N17: an abandoned mini-game run no longer locks the player out)**
 
 - Changed: `POST /mini-games/{mini_game_id}/runs` never answers `409` any more. If the
@@ -174,6 +182,7 @@ Check `GET /health` → `commit` to see which backend commit is deployed on the 
 - [Screen map](#screen-map)
 - [Authentication](#authentication)
 - [Config and profile](#config-and-profile)
+- [Terms and privacy page](#terms-and-privacy-page)
 - [Avatars](#avatars)
 - [Teams](#teams)
 - [Scanning codes](#scanning-codes)
@@ -414,8 +423,8 @@ profile setup before anything else. Errors: `OTP_INVALID`.
 ### `GET /api/v1/config` (live, partial; no authentication)
 
 Live today: `server_time`, `timezone`, `day_key`, `week_key`, `day_ends_at`, `week_ends_at`,
-`terms_version`, `terms_required`, `terms_url`, `privacy_url` (null until legal supplies
-real text), `limits.scans_per_day`, `nickname` limits, `location_cities` (the four real
+`terms_version`, `terms_required`, `terms_url`, `privacy_url` (null until the server's
+`.env` points them at its [terms page](#terms-and-privacy-page)), `limits.scans_per_day`, `nickname` limits, `location_cities` (the four real
 cities with lounges; not passport cities, which are flavors, `[{id, name}]` with Persian
 names: `tehran`, `ahvaz`, `mashhad`, `isfahan`), `venues` (active lounges, ordered by name,
 each `{"id", "name", "location_city", "address"}`; empty until the lounges are entered),
@@ -524,6 +533,24 @@ through profile setup before the camera opens.
 
 The demo's setup has no T&C checkbox. Add one to step 3 (or replace the "points are demo"
 checkbox in step 1) and send `accept_terms_version`.
+
+## Terms and privacy page
+
+### `GET /legal/{version}` (live, LG1'; no sign-in; HTML)
+
+A right-to-left Persian HTML page with the terms of use and the privacy section, for
+exactly one version. Link to it, do not rebuild it: `terms_url` is
+`https://<host>/legal/<version>` and `privacy_url` is the same page with `#privacy`
+(the privacy heading's anchor; the terms heading is `#terms`). Open it as a page or a
+new tab: it cannot be shown in an iframe (`X-Frame-Options: DENY`).
+
+- `version` is 1-20 letters, digits, `-` or `_`; anything else is `422`. An unknown
+  version is `404 NOT_FOUND` (the JSON error envelope).
+- The text is edited in the admin panel ("Terms & privacy"), not in the frontend or the
+  repo. A version any player has accepted can no longer change; new text means a new
+  version, and the server's `TERMS_VERSION` / `TERMS_URL` / `PRIVACY_URL` move to it.
+- Accepting: the player ticks the box, the app sends `PATCH /me`
+  `{"accept_terms_version": <config.terms_version>}`. Never send it on their behalf.
 
 ## Avatars
 

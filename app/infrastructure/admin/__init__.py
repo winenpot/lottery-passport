@@ -17,6 +17,7 @@ from uuid import UUID
 from sqladmin import Admin, BaseView, DBAuditBackend, Flash, ModelView, expose
 from sqladmin.audit import AuditEntry
 from sqladmin.authentication import AuthenticationBackend
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
@@ -37,6 +38,7 @@ from app.application.coin_adjustments import (
     PhoneNumberError,
     UserNotFoundError,
 )
+from app.domain.legal import LEGAL_VERSION_PATTERN
 from app.infrastructure.postgres.models import (
     AchievementModel,
     AuditLogModel,
@@ -44,6 +46,7 @@ from app.infrastructure.postgres.models import (
     ChallengeModel,
     CodeBatchModel,
     CoinLedgerEntryModel,
+    LegalDocumentModel,
     RewardRuleModel,
     UserAchievementModel,
     UserModel,
@@ -419,6 +422,61 @@ class UserAchievementAdmin(ReadOnlyView, model=UserAchievementModel):
     column_default_sort = (UserAchievementModel.unlocked_at, True)
 
 
+class LegalDocumentAdmin(ModelView, model=LegalDocumentModel):
+    """Terms of use + privacy (LG1'): one row per version, shown publicly at
+    ``/legal/<version>``. Players accept the version the server's
+    ``TERMS_VERSION`` names. A version any player accepted is frozen (the
+    0020 trigger is the guarantee; the check below only makes the refusal
+    readable): change the text by creating a new version instead. No
+    delete, for the same reason."""
+
+    name = "Terms & privacy"
+    name_plural = "Terms & privacy"
+    icon = "fa-solid fa-scale-balanced"
+    can_create = True
+    can_edit = True
+    can_delete = False
+    can_export = False
+    column_list = [LegalDocumentModel.version, LegalDocumentModel.updated_at]
+    column_default_sort = (LegalDocumentModel.version, True)
+    column_labels = {LegalDocumentModel.body: "text"}
+    # SQLAdmin drops primary keys from forms unless told otherwise, and the
+    # version is typed by the admin.
+    form_include_pk = True
+    form_columns = [LegalDocumentModel.version, LegalDocumentModel.body]
+    form_widget_args = {
+        "body": {
+            "rows": 40,
+            "dir": "rtl",
+            "style": "width: 100%; line-height: 1.8; font-family: Tahoma, sans-serif;",
+        }
+    }
+
+    async def on_model_change(
+        self, data: dict[str, Any], model: Any, is_created: bool, request: Request
+    ) -> None:
+        version = str(data.get("version") or "")
+        if not LEGAL_VERSION_PATTERN.match(version):
+            raise ValueError(
+                "Version: 1-20 letters, digits, '-' or '_' (for example 2026-10-20)."
+            )
+        if is_created:
+            return
+        # ``model`` still holds the stored version here (changes apply after).
+        async with self.session_maker() as session:
+            accepted = await session.scalar(
+                select(func.count())
+                .select_from(UserModel)
+                .where(UserModel.terms_version == model.version)
+            )
+        if accepted:
+            raise ValueError(
+                f"Version {model.version} was accepted by {accepted} player(s) and "
+                "can no longer change. Create a new version (for example a new "
+                "date) and point TERMS_VERSION at it."
+            )
+
+
 VIEWS: tuple[type[ModelView], ...] = (
     UserAdmin,
     VenueAdmin,
@@ -430,6 +488,7 @@ VIEWS: tuple[type[ModelView], ...] = (
     ChallengeAdmin,
     AchievementAdmin,
     UserAchievementAdmin,
+    LegalDocumentAdmin,
 )
 
 

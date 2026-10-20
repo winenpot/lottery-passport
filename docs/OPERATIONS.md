@@ -244,6 +244,22 @@ Sign up normally (so the account exists), then promote it directly on the databa
 on staging a 0969 test number shows the code on the page). `app/api/deps.require_admin`
 guards admin-only API routes.
 
+## Terms and privacy text
+
+Edited in the admin panel: **/admin → Terms & privacy** (one row per version; the page is
+`https://<host>/legal/<version>`, rules in [legal/README.md](legal/README.md)). To make a
+version the one players accept, set the three pointers in the server's `.env` and
+recreate the API (`compose.sh up -d --no-deps --force-recreate api`, then `/ready`):
+
+```bash
+TERMS_VERSION=2026-10-20
+TERMS_URL=https://<host>/legal/2026-10-20
+PRIVACY_URL=https://<host>/legal/2026-10-20#privacy
+```
+
+Once a player accepted a version it is frozen; new text = a new version in the panel,
+then move all three pointers to it. Production keeps `TERMS_REQUIRED` on.
+
 ## SMS provider
 
 Live: `app/infrastructure/sms.py` -- `KavenegarSmsSender` calls Kavenegar's

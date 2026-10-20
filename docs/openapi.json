@@ -2406,6 +2406,60 @@
         ]
       }
     },
+    "/legal/{version}": {
+      "get": {
+        "description": "No sign-in needed. An HTML page (right to left) for the exact version `/config` names in `terms_version`; link to it via `terms_url` / `privacy_url`. Open it as a page or a new tab: it cannot be framed.",
+        "operationId": "legal_page",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,20}$",
+              "title": "Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unknown version"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "VALIDATION_FAILED (see error.fields)"
+          }
+        },
+        "summary": "Terms of use + privacy page",
+        "tags": [
+          "legal"
+        ]
+      }
+    },
     "/ready": {
       "get": {
         "description": "503 if the database is unreachable, or if an ACTIVE code batch's pepper fingerprint does not match the pepper this process is running with. Used by deploy checks and uptime probes.",
@@ -2459,6 +2513,10 @@
     {
       "description": "The avatar catalogue. See API_CONTRACT.md#config-and-profile.",
       "name": "avatars"
+    },
+    {
+      "description": "The terms of use + privacy page, edited in /admin. See API_CONTRACT.md#terms-and-privacy-page.",
+      "name": "legal"
     },
     {
       "description": "Flavor team membership. See API_CONTRACT.md#teams.",

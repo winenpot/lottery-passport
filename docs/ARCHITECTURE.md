@@ -109,6 +109,7 @@ app/
     ledger.py          coin ledger entry types                               (done)
     passports.py       cities, campaigns, entries per code
     avatars.py         avatar catalogue entry                                 (done, P1)
+    legal.py           terms/privacy document per version                     (done, LG1')
     teams.py           flavor team unlock/choose/lock rule                    (done, P1)
     users.py, authentication.py
     phones.py          Iranian mobile normalization                          (B10)
@@ -117,6 +118,7 @@ app/
     unit_of_work.py    one-transaction ports for multi-table writes          (done)
     redemption_codes.py, wallets.py, passports.py                            (done)
     avatars.py         avatar catalogue read (GET /avatars)                  (done, P1)
+    legal.py           terms/privacy read (GET /legal/{version})             (done, LG1')
     teams.py           TeamService: GET/POST /me/team                        (done, P1)
     me.py              composes /me's team + last_scanned_flavor             (done, P1)
     authentication.py  phone OTP sign-in                                     (B10)
@@ -268,8 +270,13 @@ erDiagram
         timestamptz issued_at
         timestamptz expires_at
         timestamptz finished_at "null while open"
-        string status "open, accepted, rejected, expired (done G1)"
-        float average_reaction_ms "null while open"
+        string status "open, accepted, rejected, expired (done G1; a new start expires the open run, N17)"
+        float average_reaction_ms "null while open, and for expired runs"
+    }
+    legal_documents {
+        string version PK "= TERMS_VERSION, done LG1'"
+        text body "terms + privacy, edited in /admin; frozen once users.terms_version names it (trigger)"
+        timestamptz updated_at
     }
     submissions {
         uuid id PK
