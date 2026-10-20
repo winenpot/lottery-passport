@@ -44,6 +44,9 @@ services:
       - ${LP_BASE:?}/site:/etc/nginx/site:ro
       # Parent directory: web/current is switched atomically per release.
       - ${LP_BASE:?}/web:/srv/web:ro
+      # Versioned terms/privacy text (LG1); scoped to this one directory, not
+      # the whole repo, even though the repo is public anyway.
+      - ${LP_BASE:?}/repo/docs/legal:/etc/nginx/legal:ro
     mem_limit: ${NGINX_MEM_LIMIT:-128m}
     depends_on:
       - api

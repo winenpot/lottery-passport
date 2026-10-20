@@ -20,4 +20,14 @@ Rules:
   directory: the repository is public.
 
 Status: `terms-2026-10-20.fa.md` is the first draft, awaiting business approval.
-Serving it as a page (`/legal/terms-<version>`) is launch-plan task LG1.
+Serving (LG1) is built: nginx (`deploy/nginx/snippets/app.conf`) serves
+`https://<host>/legal/<version>` as `text/plain; charset=utf-8` straight from
+this directory (`deploy/compose.yml` mounts this directory read-only into the
+nginx container at `/etc/nginx/legal`), cached forever since a version is
+immutable once published. One file covers both sections, so `TERMS_URL` and
+`PRIVACY_URL` are the SAME url -- plain text has no anchors to scroll to a
+section, so a `#privacy` fragment would be a dead decoration, not a real
+jump; if that distinction matters later, split privacy into its own
+versioned file instead of faking an anchor. Still open: setting
+`TERMS_VERSION`/`TERMS_URL`/`PRIVACY_URL` on a server's `.env` (per-server,
+only via an approved release) and Mehdi's approval of the text (LG2).

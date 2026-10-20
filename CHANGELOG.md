@@ -7,6 +7,15 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ### Added
 
+- Terms/privacy text (LG1): nginx serves each versioned legal file at
+  `/legal/<version>` as `text/plain; charset=utf-8`, cached forever (a
+  version is immutable once published, `docs/legal/README.md`). The
+  compose stack mounts `docs/legal/` read-only into the nginx container
+  instead of the whole repo. `TERMS_URL`/`PRIVACY_URL` are set to the
+  same url (one file covers both sections; plain text has no anchors).
+  `TERMS_VERSION`/`TERMS_URL`/`PRIVACY_URL` still need setting per server
+  via an approved release, and Mehdi's approval of the text (LG2).
+
 - `POST /auth/request` now rejects an unusual phone number (shape-valid, but
   the prefix is not on any publicly known allocated Iranian mobile range)
   with `422 PHONE_UNUSUAL` before any Kavenegar call — Kavenegar is never
