@@ -199,7 +199,10 @@ Arman's "Frontend CI" goes green on `TorshX_2`'s `main`, it downloads that run's
 **Not enabled on atpg yet** (2026-10-20): a main-push run never actually carries a
 `frontend-normal` artifact, only a `release-plan.json` risk report; resolving a main
 commit to the PR run that built it is an open question with Arman (ADR-0012 "Open
-question"). The script itself is written and tested against the real API.
+question" + its 2026-10-20 afternoon update). The script itself is written and tested
+against the real API. Waiting on Arman to publish a small `resolved-build` receipt
+artifact on the main run (see the ADR) and on a human creating `FRONTEND_GH_TOKEN`
+(fine-grained PAT on `TorshX_2` only) through GitHub's web UI.
 
 Production, still manual:
 

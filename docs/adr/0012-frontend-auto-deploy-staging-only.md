@@ -83,3 +83,35 @@ not retried — when no `frontend-normal` artifact exists), but it does not yet 
 resolve a main commit to the PR run that actually built it. Asked Arman (2026-10-20,
 `.hermes/plans/2026-10-20_messages.md`) whether `release-plan.json` is his own consumer
 contract. The timer is written but not yet enabled on atpg until this resolves.
+
+**Update 2026-10-20, afternoon**: Arman confirmed `release-plan.json` is his own
+pre-check plan for an automated consumer (`risk`/`fail closed` select a deeper CI
+verification tier, not a deploy block), and that his repo already has the real resolver
+(`scripts/github-release-artifact.mjs`'s `approvedArtifact(target, {mode:'api'})`,
+used from `scripts/release-artifact.mjs`'s `sourceInfo()`), which correctly picks the
+accepted build whether it was freshly built on this run or reused from an earlier one.
+
+Chosen fix keeps ADR 0011/0012's pull-only shape (no inbound webhook, no credential
+pushed to us from his CI): ask Arman to have "Frontend CI" publish a small receipt
+artifact, `resolved-build`, on the *same main-push run* `deploy_frontend.sh` already
+finds, right after it calls `approvedArtifact` internally:
+
+```json
+{"schema": 1, "mainCommit": "<head sha of this run>",
+ "testedCommit": "<approval.run.head_sha>", "acceptedRunId": "<approval.run.id>",
+ "artifactId": "<approval.artifact.id>", "digest": "<approval.artifact.digest>",
+ "mode": "api"}
+```
+
+or `{"schema": 1, "status": "unresolved", "mainCommit": "..."}` when his resolver finds
+nothing acceptable, so the poller keeps its current fail-quiet behavior. We do not
+reimplement his fingerprint/acceptance logic in bash — we only follow the pointer he
+already computed. `deploy_frontend.sh`'s patch becomes small: look for `resolved-build`
+on the run it already locates, then fetch `frontend-normal` by `artifactId` directly
+(works across runs; GitHub artifact IDs are per-repo, not per-run), verify `digest`
+before handing the zip to `publish_web.sh`. Proposed to Arman in
+`.hermes/plans/2026-10-20_messages.md` (Delta 2026-10-20 16:40); not yet implemented on
+his side, so the timer stays uninstalled on atpg. `FRONTEND_GH_TOKEN` (fine-grained PAT,
+`TorshX_2` only, `Contents: read` + `Actions: read`) also still needs to be created
+through GitHub's web UI and dropped into staging's `.env` — that step needs a human and
+can't be scripted.
