@@ -44,6 +44,7 @@ from app.application.redemption_codes import (
     pepper_fingerprint,
     verify_active_batch_peppers,
 )
+from app.application.referrals import ReferralService
 from app.application.teams import TeamService
 from app.application.unit_of_work import UnitOfWork
 from app.application.wallets import WalletService
@@ -268,6 +269,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         zone=resolved_settings.campaign_zone,
         rejected_review_threshold=resolved_settings.mini_game_rejected_review_threshold,
     )
+    referral_service = ReferralService(
+        code_store=PostgreSQLUserRepository(database.session_factory),
+        unit_of_work=unit_of_work,
+        clock=SystemClock(),
+        terms_required=resolved_settings.terms_required,
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -380,6 +387,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.challenge_service = challenge_service
     application.state.achievement_service = achievement_service
     application.state.mini_game_service = mini_game_service
+    application.state.referral_service = referral_service
     application.state.sms_sender = sms_sender
     application.state.settings = resolved_settings
     return application

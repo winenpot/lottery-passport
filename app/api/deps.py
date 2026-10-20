@@ -16,6 +16,7 @@ from app.application.passports import PassportService
 from app.application.ports import ReadinessChecker
 from app.application.profile import ProfileService
 from app.application.redemption_codes import PepperGuard, RedemptionService
+from app.application.referrals import ReferralService
 from app.application.teams import TeamService
 from app.application.wallets import WalletService
 from app.domain.users import User, UserRole
@@ -105,6 +106,10 @@ def get_mini_game_service(request: Request) -> MiniGameService:
 
 def get_me_service(request: Request) -> MeService:
     return cast(MeService, request.app.state.me_service)
+
+
+def get_referral_service(request: Request) -> ReferralService:
+    return cast(ReferralService, request.app.state.referral_service)
 
 
 async def get_current_user(

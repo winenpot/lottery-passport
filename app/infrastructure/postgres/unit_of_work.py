@@ -27,6 +27,9 @@ from app.application.unit_of_work import (
     ClaimedCode,
     CodeLookup,
     InsufficientCoinsError,
+    ReferralBinding,
+    ReferralInviteeStatus,
+    ReferralSummary,
 )
 from app.domain.achievements import Achievement, AchievementFact
 from app.domain.audit import NewAuditEntry
@@ -40,6 +43,7 @@ from app.domain.mini_games import (
     NewMiniGameRun,
 )
 from app.domain.passports import Campaign, CityCode, PassportProgress
+from app.domain.referrals import FIRST_CODE_REASON_KEY
 from app.domain.reward_rules import Cadence, RewardRule
 from app.domain.teams import TeamMembership
 from app.infrastructure.postgres.models import (
@@ -50,9 +54,11 @@ from app.infrastructure.postgres.models import (
     MiniGameRunModel,
     PassportProgressModel,
     RedemptionCodeModel,
+    ReferralModel,
     RewardRuleModel,
     TeamMembershipModel,
     UserAchievementModel,
+    UserModel,
     WalletModel,
 )
 from app.infrastructure.postgres.repositories import (
@@ -137,6 +143,18 @@ class SqlRedemptionCodes:
             RedemptionCodeModel.redeemed_at >= since,
         )
         return int((await self._session.execute(statement)).scalar_one())
+
+    async def list_redeemed(self, user_id: UUID) -> list[tuple[UUID, datetime]]:
+        statement = (
+            select(RedemptionCodeModel.id, RedemptionCodeModel.redeemed_at)
+            .where(
+                RedemptionCodeModel.redeemed_by_user_id == user_id,
+                RedemptionCodeModel.redeemed_at.is_not(None),
+            )
+            .order_by(RedemptionCodeModel.redeemed_at.asc())
+        )
+        rows = (await self._session.execute(statement)).all()
+        return [(row[0], row[1]) for row in rows]
 
 
 class SqlPassports:
@@ -440,6 +458,97 @@ class SqlMiniGames:
         return int(result or 0)
 
 
+class SqlReferrals:
+    """Implements ``ReferralsInTransaction`` (app/domain/referrals.py, RF1)."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_by_invitee(self, invitee_id: UUID) -> ReferralBinding | None:
+        model = await self._session.get(ReferralModel, invitee_id)
+        if model is None:
+            return None
+        return ReferralBinding(
+            invitee_user_id=model.invitee_user_id,
+            inviter_user_id=model.inviter_user_id,
+            bound_at=model.bound_at,
+        )
+
+    async def resolve_code(self, referral_code: str) -> UUID | None:
+        result: UUID | None = await self._session.scalar(
+            select(UserModel.id).where(UserModel.referral_code == referral_code)
+        )
+        return result
+
+    async def bind(self, invitee_id: UUID, inviter_id: UUID, now: datetime) -> None:
+        await self._session.execute(
+            insert(ReferralModel).values(
+                invitee_user_id=invitee_id,
+                inviter_user_id=inviter_id,
+                bound_at=now,
+            )
+        )
+
+    async def invitee_status(self, invitee_id: UUID) -> ReferralInviteeStatus:
+        user = await self._session.get(UserModel, invitee_id)
+        has_team = (
+            await self._session.scalar(
+                select(TeamMembershipModel.id).where(
+                    TeamMembershipModel.user_id == invitee_id
+                )
+            )
+        ) is not None
+        has_accepted_run = (
+            await self._session.scalar(
+                select(MiniGameRunModel.id).where(
+                    MiniGameRunModel.user_id == invitee_id,
+                    MiniGameRunModel.status == MiniGameRunStatus.ACCEPTED.value,
+                )
+            )
+        ) is not None
+        return ReferralInviteeStatus(
+            nickname_set=user is not None and user.nickname is not None,
+            terms_accepted=user is not None and user.terms_accepted_at is not None,
+            has_team=has_team,
+            has_accepted_mini_game_run=has_accepted_run,
+        )
+
+    async def summary(self, inviter_user_id: UUID) -> ReferralSummary:
+        invited_count = int(
+            await self._session.scalar(
+                select(func.count()).where(
+                    ReferralModel.inviter_user_id == inviter_user_id
+                )
+            )
+            or 0
+        )
+        earned = await self._session.scalar(
+            select(func.coalesce(func.sum(CoinLedgerEntryModel.amount), 0)).where(
+                CoinLedgerEntryModel.user_id == inviter_user_id,
+                CoinLedgerEntryModel.idempotency_key.like("referral:%"),
+            )
+        )
+        qualified_count = int(
+            await self._session.scalar(
+                select(func.count())
+                .select_from(CoinLedgerEntryModel)
+                .where(
+                    CoinLedgerEntryModel.user_id == inviter_user_id,
+                    CoinLedgerEntryModel.idempotency_key.like(
+                        f"{FIRST_CODE_REASON_KEY}:%"
+                    ),
+                )
+            )
+            or 0
+        )
+        return ReferralSummary(
+            invited_count=invited_count,
+            qualified_count=qualified_count,
+            pending_count=max(invited_count - qualified_count, 0),
+            coins_earned=int(earned or 0),
+        )
+
+
 class SqlAlchemyUnitOfWork:
     """``async with SqlAlchemyUnitOfWork(factory) as uow: ...; await uow.commit()``."""
 
@@ -452,6 +561,7 @@ class SqlAlchemyUnitOfWork:
     challenges: SqlChallenges
     achievements: SqlAchievements
     mini_games: SqlMiniGames
+    referrals: SqlReferrals
 
     def __init__(self, factory: async_sessionmaker[AsyncSession]) -> None:
         self._factory = factory
@@ -470,6 +580,7 @@ class SqlAlchemyUnitOfWork:
         self.challenges = SqlChallenges(self._session)
         self.achievements = SqlAchievements(self._session)
         self.mini_games = SqlMiniGames(self._session)
+        self.referrals = SqlReferrals(self._session)
         return self
 
     async def __aexit__(

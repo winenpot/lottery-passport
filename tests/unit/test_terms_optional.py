@@ -11,7 +11,12 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from app.api.deps import get_current_user, get_me_service, get_redemption_service
+from app.api.deps import (
+    get_current_user,
+    get_me_service,
+    get_redemption_service,
+    get_referral_service,
+)
 from app.app import create_app
 from app.application.me import MeExtras
 from app.application.redemption_codes import RedemptionResult
@@ -118,12 +123,23 @@ class FakeMeService:
         return MeExtras(team=None, last_scanned_flavor=None)
 
 
+class FakeReferralService:
+    async def settle(self, user_id: UUID) -> None:
+        return None
+
+    async def ensure_code(self, user_id: UUID) -> str:
+        return "REFCODE1"
+
+
 def client(user: User, *, terms_required: bool) -> tuple[TestClient, FakeRedemptions]:
     fake = FakeRedemptions()
     application = create_app(Settings(database_url=DB, terms_required=terms_required))
     application.dependency_overrides[get_current_user] = lambda: user
     application.dependency_overrides[get_redemption_service] = lambda: fake
     application.dependency_overrides[get_me_service] = lambda: FakeMeService()
+    application.dependency_overrides[get_referral_service] = lambda: (
+        FakeReferralService()
+    )
     return TestClient(application, headers={"X-Requested-With": "test"}), fake
 
 

@@ -59,6 +59,11 @@ class UserModel(Base):
         ForeignKey("avatars.id", name="fk_users_avatar_id", ondelete="SET NULL"),
         nullable=True,
     )
+    # RF1: generated lazily on first read (ReferralService.ensure_code), not
+    # backfilled by migration 0019 for pre-existing users.
+    referral_code: Mapped[str | None] = mapped_column(
+        String(8), unique=True, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
@@ -132,6 +137,30 @@ class TeamMembershipModel(Base):
             "flavor IN ('PR', 'BE', 'PA', 'ME', 'MA', 'TO', 'MO')",
             name="ck_team_memberships_flavor",
         ),
+    )
+
+
+class ReferralModel(Base):
+    """One row per invitee (RF1): PK on ``invitee_user_id`` makes "one
+    inviter per user, bound once" a database guarantee, not just an
+    application check -- the same pattern as ``team_memberships``' switch
+    guard and ``mini_game_runs``' one-open-run index."""
+
+    __tablename__ = "referrals"
+
+    invitee_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    inviter_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    bound_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "invitee_user_id <> inviter_user_id", name="ck_referrals_no_self"
+        ),
+        Index("ix_referrals_inviter", "inviter_user_id"),
     )
 
 

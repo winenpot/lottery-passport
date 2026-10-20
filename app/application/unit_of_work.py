@@ -62,6 +62,13 @@ class RedemptionCodesInTransaction(Protocol):
 
     async def count_redeemed_since(self, user_id: UUID, since: datetime) -> int: ...
 
+    async def list_redeemed(self, user_id: UUID) -> list[tuple[UUID, datetime]]:
+        """Every code this user has redeemed, ``(code_id, redeemed_at)``,
+        ascending by ``redeemed_at``. Referrals (RF1) is the only caller
+        today -- it needs stable per-code ids for idempotency keys, which a
+        plain count cannot give."""
+        ...
+
 
 class PassportsInTransaction(Protocol):
     async def add_entries(
@@ -190,6 +197,58 @@ class AchievementsInTransaction(Protocol):
         ...
 
 
+@dataclass(frozen=True, slots=True)
+class ReferralBinding:
+    invitee_user_id: UUID
+    inviter_user_id: UUID
+    bound_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class ReferralInviteeStatus:
+    """What ``settle_payouts`` (app/domain/referrals.py) needs to decide if
+    the invitee's mission is complete. Raw fields, not a pre-computed
+    ``profile_complete`` bool: whether terms acceptance is REQUIRED is a
+    ``Settings`` value the application layer knows, not this port."""
+
+    nickname_set: bool
+    terms_accepted: bool
+    has_team: bool
+    has_accepted_mini_game_run: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ReferralSummary:
+    invited_count: int
+    qualified_count: int
+    pending_count: int
+    coins_earned: int
+
+
+class ReferralsInTransaction(Protocol):
+    """Referrals (RF1, app/domain/referrals.py), inside the unit of work:
+    binding and settling both share the wallet lock's per-user
+    serialization with every other coin-moving use case here."""
+
+    async def get_by_invitee(self, invitee_id: UUID) -> ReferralBinding | None: ...
+
+    async def resolve_code(self, referral_code: str) -> UUID | None:
+        """The inviter's user id for a referral code, or ``None`` if the
+        code matches no user."""
+        ...
+
+    async def bind(self, invitee_id: UUID, inviter_id: UUID, now: datetime) -> None:
+        """Insert the binding row. The primary key on ``invitee_user_id``
+        is the one-inviter-ever guard; the caller checks
+        ``get_by_invitee`` first for a clean 409 before even attempting
+        the insert."""
+        ...
+
+    async def invitee_status(self, invitee_id: UUID) -> ReferralInviteeStatus: ...
+
+    async def summary(self, inviter_user_id: UUID) -> ReferralSummary: ...
+
+
 class MiniGamesInTransaction(Protocol):
     """Server-verified mini-game runs (app/domain/mini_games.py, G1), inside
     the unit of work: opening/finishing a run shares its transaction with
@@ -256,6 +315,9 @@ class UnitOfWork(Protocol):
 
     @property
     def mini_games(self) -> MiniGamesInTransaction: ...
+
+    @property
+    def referrals(self) -> ReferralsInTransaction: ...
 
     async def __aenter__(self) -> Self: ...
 

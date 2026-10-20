@@ -12,6 +12,7 @@ from app.api.deps import (
     get_current_user,
     get_me_service,
     get_profile_service,
+    get_referral_service,
 )
 from app.app import create_app
 from app.application.app_config import AppConfigService
@@ -181,6 +182,17 @@ class FakeMeService:
         return MeExtras(team=None, last_scanned_flavor=None)
 
 
+class FakeReferralService:
+    """Minimal stand-in: these tests don't exercise referrals at all, just
+    the ``_response`` helper's two unconditional calls."""
+
+    async def settle(self, user_id: UUID) -> None:
+        return None
+
+    async def ensure_code(self, user_id: UUID) -> str:
+        return "REFCODE1"
+
+
 class FakeAvatars:
     def __init__(self) -> None:
         self.avatars = [
@@ -335,6 +347,7 @@ def client(store: FakeStore | None = None) -> tuple[TestClient, FakeStore]:
         FakeClock(), TEHRAN, "2026-10-01", 20, FakeVenues()
     )
     app.dependency_overrides[get_me_service] = lambda: FakeMeService()
+    app.dependency_overrides[get_referral_service] = lambda: FakeReferralService()
     assert store.user is not None
     user = store.user
     app.dependency_overrides[get_current_user] = lambda: user

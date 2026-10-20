@@ -11,6 +11,7 @@ from app.application.challenges import (
 )
 from app.application.mini_games import MiniGameFinishResult, RunStarted
 from app.application.redemption_codes import RedemptionResult
+from app.application.referrals import ReferralStatus
 from app.application.teams import FlavorProgress, TeamStatus
 from app.application.wallets import WalletView
 from app.domain.achievements import UnlockedAchievement
@@ -62,6 +63,10 @@ class UserResponse(BaseModel):
     home_venue_id: str | None
     location_city: str | None
     avatar_id: str | None
+    referral_code: str | None = Field(
+        default=None,
+        description="This user's own invite code. Null until first requested.",
+    )
     team: str | None = Field(
         description="Current flavor team (campaign slug, e.g. 'tokyo'), or null."
     )
@@ -84,6 +89,7 @@ class UserResponse(BaseModel):
         terms_required: bool,
         team: str | None = None,
         last_scanned_flavor: str | None = None,
+        referral_code: str | None = None,
     ) -> "UserResponse":
         return cls(
             id=user.id,
@@ -93,6 +99,7 @@ class UserResponse(BaseModel):
             home_venue_id=user.home_venue_id,
             location_city=user.location_city,
             avatar_id=user.avatar_id,
+            referral_code=referral_code,
             team=team,
             last_scanned_flavor=last_scanned_flavor,
             terms_accepted=user.terms_accepted_at is not None,
@@ -138,6 +145,14 @@ class UserUpdate(BaseModel):
         default=None,
         max_length=40,
         description="An unlocked ``id`` from ``GET /avatars``.",
+    )
+    referrer_code: str | None = Field(
+        default=None,
+        max_length=8,
+        description=(
+            "Bind the inviter who referred you. One-time only, and only "
+            "before you have redeemed any code."
+        ),
     )
 
 
@@ -528,4 +543,26 @@ class MiniGameRunFinishResponse(BaseModel):
             accepted=result.accepted,
             average_reaction_ms=result.average_reaction_ms,
             reason=result.reason.value if result.reason is not None else None,
+        )
+
+
+class ReferralStatusResponse(BaseModel):
+    referral_code: str = Field(description="Your own invite code.")
+    invited_count: int = Field(description="Friends who have ever bound your code.")
+    qualified_count: int = Field(
+        description="Of those, how many have paid out the first-code bonus."
+    )
+    pending_count: int = Field(
+        description="Invited but not yet qualified (sheet's own word: PENDING)."
+    )
+    coins_earned: int = Field(description="Lifetime coins earned from referrals.")
+
+    @classmethod
+    def from_status(cls, status: ReferralStatus) -> "ReferralStatusResponse":
+        return cls(
+            referral_code=status.referral_code,
+            invited_count=status.invited_count,
+            qualified_count=status.qualified_count,
+            pending_count=status.pending_count,
+            coins_earned=status.coins_earned,
         )

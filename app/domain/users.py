@@ -41,6 +41,7 @@ class User:
     home_venue_id: str | None = None
     location_city: str | None = None
     avatar_id: str | None = None
+    referral_code: str | None = None
 
     @property
     def profile_complete(self) -> bool:

@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import date, datetime
 from typing import Any, cast
 from uuid import UUID
@@ -60,6 +61,7 @@ def user_from_model(model: UserModel) -> User:
         home_venue_id=model.home_venue_id,
         location_city=model.location_city,
         avatar_id=model.avatar_id,
+        referral_code=model.referral_code,
     )
 
 
@@ -222,6 +224,52 @@ class PostgreSQLUserRepository(UserRepository):
                 return user_from_model(result) if result else None
         except IntegrityError as error:
             raise NicknameTaken(nickname.display if nickname else "") from error
+
+    async def ensure_referral_code(
+        self, user_id: UUID, candidate_generator: Callable[[], str]
+    ) -> str:
+        """The user's referral code, generating and storing one if absent.
+
+        A fresh session per attempt, retried a handful of times: the
+        candidate space (8 Crockford Base32 characters) is large enough
+        that a collision with another user's code is rare, but the unique
+        constraint (migration 0019) is the real guarantee -- this just
+        retries past the rare case instead of surfacing it as an error.
+        """
+        async with self._factory() as session:
+            existing = await session.scalar(
+                select(UserModel.referral_code).where(UserModel.id == user_id)
+            )
+            if existing is not None:
+                return existing
+        for _ in range(5):
+            candidate = candidate_generator()
+            try:
+                async with self._factory() as session:
+                    async with session.begin():
+                        await session.execute(
+                            update(UserModel)
+                            .where(
+                                UserModel.id == user_id,
+                                UserModel.referral_code.is_(None),
+                            )
+                            .values(referral_code=candidate)
+                        )
+                    result = await session.scalar(
+                        select(UserModel.referral_code).where(UserModel.id == user_id)
+                    )
+                    if result is not None:
+                        return result
+            except IntegrityError:
+                continue
+        raise RuntimeError(f"could not allocate a referral code for user {user_id}")
+
+    async def get_by_referral_code(self, referral_code: str) -> UUID | None:
+        async with self._factory() as session:
+            result: UUID | None = await session.scalar(
+                select(UserModel.id).where(UserModel.referral_code == referral_code)
+            )
+            return result
 
 
 def venue_from_model(model: VenueModel) -> Venue:

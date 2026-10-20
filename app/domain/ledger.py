@@ -23,6 +23,8 @@ class LedgerReason(StrEnum):
     SOCIAL_POST_REWARD = "social_post_reward"
     ADMIN_ADJUSTMENT = "admin_adjustment"
     STORE_PURCHASE = "store_purchase"
+    REFERRAL_FIRST_CODE = "referral_first_code"
+    REFERRAL_LATER_CODE = "referral_later_code"
 
 
 class Asset(StrEnum):
