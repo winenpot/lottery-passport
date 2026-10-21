@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Any, cast
 from uuid import UUID
 
@@ -28,6 +28,7 @@ from app.domain.challenges import Challenge, ChallengeKind, ChallengePeriod
 from app.domain.leaderboards import BestScore, MiniGameBoard
 from app.domain.ledger import LedgerEntry, LedgerReason, Wallet
 from app.domain.legal import LegalDocument
+from app.domain.media import MediaAsset, MediaContentType, NewMediaAsset, StoredMedia
 from app.domain.mini_games import MiniGameId, MiniGameRunStatus
 from app.domain.nickname import Nickname
 from app.domain.passports import Campaign, CityCode, PassportProgress
@@ -43,6 +44,7 @@ from app.infrastructure.postgres.models import (
     ChallengeModel,
     CoinLedgerEntryModel,
     LegalDocumentModel,
+    MediaAssetModel,
     MiniGameRunModel,
     PassportProgressModel,
     RedemptionCodeModel,
@@ -1113,3 +1115,51 @@ class PostgreSQLLeaderboardReader:
             if row is None:
                 return None
             return (row.rank, row.score)
+
+
+def media_asset_from_model(model: MediaAssetModel) -> MediaAsset:
+    return MediaAsset(
+        sha256=model.sha256,
+        content_type=MediaContentType(model.content_type),
+        byte_size=model.byte_size,
+        created_at=model.created_at,
+        created_by_user_id=model.created_by_user_id,
+    )
+
+
+class PostgreSQLMediaAssets:
+    """Implements ``MediaAssets`` (W10): the admin "Images" page's write,
+    ``GET /media/{sha256}.{ext}``'s read."""
+
+    def __init__(self, factory: async_sessionmaker[AsyncSession]) -> None:
+        self._factory = factory
+
+    async def put_if_absent(self, asset: NewMediaAsset) -> MediaAsset:
+        model = MediaAssetModel(
+            sha256=asset.sha256,
+            content_type=asset.content_type.value,
+            bytes_=asset.data,
+            byte_size=len(asset.data),
+            created_at=datetime.now(UTC),
+            created_by_user_id=asset.created_by_user_id,
+        )
+        try:
+            async with self._factory() as session:
+                async with session.begin():
+                    session.add(model)
+            return media_asset_from_model(model)
+        except IntegrityError:
+            async with self._factory() as session:
+                existing = await session.get(MediaAssetModel, asset.sha256)
+            if existing is None:
+                raise
+            return media_asset_from_model(existing)
+
+    async def get(self, sha256: str) -> StoredMedia | None:
+        async with self._factory() as session:
+            model = await session.get(MediaAssetModel, sha256)
+            if model is None:
+                return None
+            return StoredMedia(
+                content_type=MediaContentType(model.content_type), data=model.bytes_
+            )

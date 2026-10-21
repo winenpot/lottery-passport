@@ -37,6 +37,7 @@ from app.application.failure_throttle import ThrottleSettings
 from app.application.leaderboards import LeaderboardService
 from app.application.legal import LegalDocumentService
 from app.application.me import MeService
+from app.application.media import MediaService
 from app.application.mini_games import MiniGameService
 from app.application.passports import PassportService
 from app.application.ports import ReadinessChecker
@@ -71,6 +72,7 @@ from app.infrastructure.postgres.repositories import (
     PostgreSQLLastScanReader,
     PostgreSQLLeaderboardReader,
     PostgreSQLLegalDocuments,
+    PostgreSQLMediaAssets,
     PostgreSQLPassportRepository,
     PostgreSQLSessionRepository,
     PostgreSQLStatsReader,
@@ -278,6 +280,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         users=PostgreSQLUserRepository(database.session_factory),
         clock=SystemClock(),
     )
+    media_service = MediaService(assets=PostgreSQLMediaAssets(database.session_factory))
     teams_reader = PostgreSQLTeamsReader(database.session_factory)
     team_service = TeamService(
         reader=teams_reader,
@@ -419,6 +422,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         show_test_codes=resolved_settings.test_numbers_enabled,
         session_factory=database.session_factory,
         coin_adjustment_service=coin_adjustment_service,
+        media_service=media_service,
     )
     application.state.readiness_checker = readiness_checker
     application.state.pepper_guard = pepper_guard
@@ -430,6 +434,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.profile_service = profile_service
     application.state.app_config_service = app_config_service
     application.state.coin_adjustment_service = coin_adjustment_service
+    application.state.media_service = media_service
     application.state.avatar_service = avatar_service
     application.state.legal_document_service = legal_document_service
     application.state.team_service = team_service

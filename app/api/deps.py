@@ -13,6 +13,7 @@ from app.application.challenges import ChallengeService
 from app.application.leaderboards import LeaderboardService
 from app.application.legal import LegalDocumentService
 from app.application.me import MeService
+from app.application.media import MediaService
 from app.application.mini_games import MiniGameService
 from app.application.passports import PassportService
 from app.application.ports import ReadinessChecker
@@ -104,6 +105,10 @@ def get_challenge_service(request: Request) -> ChallengeService:
 
 def get_achievement_service(request: Request) -> AchievementService:
     return cast(AchievementService, request.app.state.achievement_service)
+
+
+def get_media_service(request: Request) -> MediaService:
+    return cast(MediaService, request.app.state.media_service)
 
 
 def get_mini_game_service(request: Request) -> MiniGameService:

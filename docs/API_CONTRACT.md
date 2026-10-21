@@ -17,6 +17,14 @@ Parked features (not in the MVP contract): the city passport. See
 Newest first. **Breaking** means a call that worked before needs a change on your side.
 Check `GET /health` → `commit` to see which backend commit is deployed on the demo.
 
+**2026-10-21 (W10: admin image upload)**
+
+- Added: `GET /media/{sha256}.{ext}` (B45) — serves an image an admin uploaded on the
+  new "Images" page, immutable and cached forever (content-addressed). Not a player
+  write path: there is no `POST` here, only `/admin`'s own page. Avatar/badge/prize-art
+  `image_url` fields can now point at this backend directly instead of only an
+  externally-hosted URL.
+
 **2026-10-21 (W13: achievement catalogue with progress)**
 
 - Added: `GET /api/v1/achievements` (B44) — every active achievement row with
@@ -638,13 +646,36 @@ new tab: it cannot be shown in an iframe (`X-Frame-Options: DENY`).
 
 Starts empty until Ashkan fills it in `/admin`. `image_url` must be served from the
 app's own origin (a relative path, or the same host): the PWA's CSP is
-`img-src 'self' data: blob:`, so any other host is blocked in the browser. Today an
-admin types the URL; uploading the image in `/admin` (served at `/media/...`) is planned
-(B45).
+`img-src 'self' data: blob:`, so any other host is blocked in the browser. An admin
+uploads the image on the "Images" page in `/admin` (B45, see [Images](#images)) and
+pastes the `/media/...` URL it returns in here; a plain externally-hosted URL still
+works too, as long as it is same-origin.
 Includes locked avatars (show them as
 "coming later"); `PATCH /me avatar_id` refuses a locked one with `422 AVATAR_LOCKED`.
 There is no unlock mechanism yet (avatar unlocks by coins/achievements are AFTER LAUNCH);
 every avatar an admin creates without `locked` is pickable immediately.
+
+## Images
+
+### `GET /media/{sha256}.{ext}` (live, B45; no sign-in needed)
+
+Serves an image an admin uploaded on the "Images" page in `/admin` (not a player write
+path — there is no `POST` here). `ext` is `png`, `jpg` or `webp`, matching the real type
+sniffed from the file's own magic bytes at upload time, never the filename or the
+client-sent Content-Type (both are trivially spoofable, and an upload page is a classic
+stored-XSS target if it trusts either — this is also why SVG is refused outright, magic
+bytes or not: an SVG can carry a `<script>` tag).
+
+- Immutable and cached forever (`Cache-Control: public, max-age=31536000, immutable`):
+  the sha256 in the URL is the content, so a URL never needs revalidating. `ETag` is the
+  same sha256; `X-Content-Type-Options: nosniff` stops a browser from re-sniffing the
+  bytes against the declared `Content-Type`.
+- 512 KB max; PNG, JPEG or WebP only. Uploading the same bytes twice is a no-op (same
+  sha256, same row) — not a duplicate.
+- 404 for an unknown hash, or if `ext` does not match the stored type (catches a
+  copy-paste'd wrong extension before it reaches a player's screen).
+- Reusable beyond avatars: badge and prize-art images (achievements, parked — see
+  [Achievements](#achievements)) will point here the same way once those exist.
 
 ## Teams
 

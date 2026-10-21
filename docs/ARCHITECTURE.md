@@ -110,6 +110,7 @@ app/
     passports.py       cities, campaigns, entries per code
     avatars.py         avatar catalogue entry                                 (done, P1)
     legal.py           terms/privacy document per version                     (done, LG1')
+    media.py           image sniff/size-limit/naming (admin upload)           (done, B45/W10)
     teams.py           flavor team unlock/choose/lock rule                    (done, P1)
     users.py, authentication.py
     phones.py          Iranian mobile normalization                          (B10)
@@ -119,6 +120,7 @@ app/
     redemption_codes.py, wallets.py, passports.py                            (done)
     avatars.py         avatar catalogue read (GET /avatars)                  (done, P1)
     legal.py           terms/privacy read (GET /legal/{version})             (done, LG1')
+    media.py           MediaService: GET /media/{sha256}.{ext}, admin upload (done, B45/W10)
     teams.py           TeamService: GET/POST /me/team                        (done, P1)
     me.py              composes /me's team + last_scanned_flavor             (done, P1)
     authentication.py  phone OTP sign-in                                     (B10)

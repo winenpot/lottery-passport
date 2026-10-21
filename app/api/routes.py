@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from app.api.deps import get_pepper_guard, get_readiness_checker
 from app.api.errors import ApiError, ErrorResponse
 from app.api.legal import router as legal_router
+from app.api.media import router as media_router
 from app.api.v1.achievements import router as achievements_router
 from app.api.v1.admin import router as admin_router
 from app.api.v1.auth import router as auth_router
@@ -33,6 +34,9 @@ router.include_router(leaderboards_router, prefix="/api/v1")
 router.include_router(admin_router, prefix="/api/v1")
 # A page, not an API resource: /legal/<version> (nginx forwards it here).
 router.include_router(legal_router)
+# Same: /media/<sha256>.<ext> is a URL an avatar/badge row points at, not a
+# JSON resource (app/api/media.py).
+router.include_router(media_router)
 
 
 class HealthResponse(BaseModel):

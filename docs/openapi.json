@@ -2854,6 +2854,58 @@
         ]
       }
     },
+    "/media/{sha256}.{extension}": {
+      "get": {
+        "description": "No sign-in needed. Immutable (content-addressed by sha256): cached forever at the edge, so Postgres serves each image about once per edge location, not once per view.",
+        "operationId": "get_media",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sha256",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Sha256",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "extension",
+            "required": true,
+            "schema": {
+              "pattern": "^(png|jpg|webp)$",
+              "title": "Extension",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "VALIDATION_FAILED (see error.fields)"
+          }
+        },
+        "summary": "A previously uploaded image",
+        "tags": [
+          "media"
+        ]
+      }
+    },
     "/ready": {
       "get": {
         "description": "503 if the database is unreachable, or if an ACTIVE code batch's pepper fingerprint does not match the pepper this process is running with. Used by deploy checks and uptime probes.",

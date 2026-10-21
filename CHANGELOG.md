@@ -7,6 +7,10 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ### Added
 
+- `GET /media/{sha256}.{ext}` + admin "Images" page (B45/W10): content-addressed
+  image upload (`media_assets` table, sha256 key, PNG/JPEG/WebP only by magic bytes,
+  max 512 KB, SVG refused), immutable caching. No file field on the Avatar form itself
+  (scope cut, documented) -- upload on the Images page, paste the URL into `image_url`.
 - Weighted print runs (PC, decision 2026-10-21): `scripts/print_run.py` issues
   `k` codes split over the seven flavors by exact weights (sum 1) against a
   1,000,000-code pool (142,857 per flavor, a quota; codes are drawn fresh, no

@@ -21,6 +21,7 @@ from sqladmin.filters import AllUniqueStringValuesFilter, StaticValuesFilter
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from starlette.applications import Starlette
+from starlette.datastructures import UploadFile
 from starlette.middleware import Middleware
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
@@ -39,7 +40,9 @@ from app.application.coin_adjustments import (
     PhoneNumberError,
     UserNotFoundError,
 )
+from app.application.media import MediaService
 from app.domain.legal import LEGAL_VERSION_PATTERN
+from app.domain.media import MediaError, MediaRefusal, extension_for
 from app.infrastructure.postgres.models import (
     AchievementModel,
     AuditLogModel,
@@ -735,6 +738,62 @@ class AdminTotpSetupView(BaseView):
             )
 
 
+_MEDIA_ERROR_MESSAGES: dict[MediaRefusal, str] = {
+    MediaRefusal.EMPTY: "Choose a file to upload.",
+    MediaRefusal.TOO_LARGE: "That file is larger than 512 KB.",
+    MediaRefusal.UNSUPPORTED_TYPE: (
+        "Only PNG, JPEG or WebP images are accepted (not SVG, not any other file)."
+    ),
+}
+
+
+class MediaUploadView(BaseView):
+    """ "Images" page (W10): upload a PNG/JPEG/WebP, get back the same-origin
+    URL to paste into an avatar/badge/prize-art row's ``image_url`` field.
+
+    Deliberately not a file field bolted onto those model forms: SQLAdmin
+    only renders form fields backed by a real model column, and
+    ``image_url`` is (and stays) a plain string column -- upload here, paste
+    the URL there, same two-step shape as copying coordinates off a map for
+    a venue today. ``service`` is a class attribute, same reason as
+    ``CoinAdjustmentView.service`` above.
+    """
+
+    name = "Images"
+    identity = "media-upload"
+    icon = "fa-solid fa-image"
+    service: ClassVar[MediaService]
+
+    @expose("/images", methods=["GET", "POST"], identity="media-upload")
+    async def form(self, request: Request) -> Response:
+        uploaded_url: str | None = None
+        if request.method == "POST":
+            uploaded_url = await self._submit(request)
+        return await self.templates.TemplateResponse(
+            request, "sqladmin/media_upload.html", {"uploaded_url": uploaded_url}
+        )
+
+    async def _submit(self, request: Request) -> str | None:
+        admin_id = request.session.get("uid")
+        data = await request.form()
+        upload = data.get("file")
+        if not isinstance(upload, UploadFile) or not upload.filename:
+            Flash.error(request, "Choose a file to upload.")
+            return None
+        content = await upload.read()
+        try:
+            asset = await self.service.upload(
+                content,
+                created_by_user_id=UUID(admin_id) if admin_id else None,
+            )
+        except MediaError as error:
+            Flash.error(request, _MEDIA_ERROR_MESSAGES[error.reason])
+            return None
+        url = f"/media/{asset.sha256}.{extension_for(asset.content_type)}"
+        Flash.success(request, f"Uploaded. URL: {url}")
+        return url
+
+
 def mount_admin(
     app: Starlette,
     engine: AsyncEngine,
@@ -746,6 +805,7 @@ def mount_admin(
     show_test_codes: bool,
     session_factory: async_sessionmaker[AsyncSession],
     coin_adjustment_service: CoinAdjustmentService,
+    media_service: MediaService,
 ) -> Admin:
     backend = PhoneSignInBackend(
         service,
@@ -772,4 +832,6 @@ def mount_admin(
     admin.add_view(CoinAdjustmentView)
     AdminTotpSetupView.service = service
     admin.add_view(AdminTotpSetupView)
+    MediaUploadView.service = media_service
+    admin.add_view(MediaUploadView)
     return admin
