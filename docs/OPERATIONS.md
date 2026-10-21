@@ -327,6 +327,17 @@ PRIVACY_URL=https://<host>/legal/2026-10-20#privacy
 Once a player accepted a version it is frozen; new text = a new version in the panel,
 then move all three pointers to it. Production keeps `TERMS_REQUIRED` on.
 
+## Admin image upload
+
+**/admin → Images** (B45/W10): upload a PNG, JPEG or WebP, up to 512 KB. The page
+answers with a `/media/<sha256>.<ext>` URL -- paste that into the field that needs it
+(today: an avatar row's `image_url`; later badges and prize art the same way). SVG is
+refused outright (it can carry a `<script>` tag); anything else that is not a real
+PNG/JPEG/WebP by its own magic bytes is refused too, whatever its filename says.
+Re-uploading the exact same bytes returns the same URL -- it is a no-op, not a second
+upload. Stored in Postgres (`media_assets` table), so it is covered by the existing
+`pg_dump` backup with no extra step and needs no new volume or vendor on either host.
+
 ## SMS provider
 
 Live: `app/infrastructure/sms.py` -- `KavenegarSmsSender` calls Kavenegar's
