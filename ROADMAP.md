@@ -60,6 +60,10 @@ Launch on D15 requires every one of these to be true:
 | D14 | Tue 20 Oct | 28 Mehr | full, **pilot at lounge #1** |
 | D15 | Wed 21 Oct | 29 Mehr | full, **go/no-go and launch** |
 
+**Revised 2026-10-19:** the production gate moved to Thu 22 Oct and the launch batches
+activate at 23:59 that night. The D13-D15 rows here and below are the original plan, kept
+for history; the backlog status is in [docs/TODO.md](docs/TODO.md).
+
 Assumptions (change the plan if any is wrong):
 
 - Saturday to Wednesday working week, Thursday half day, Friday off. That gives **11 full and 2 half working days**, not 15.
@@ -149,7 +153,8 @@ Two buffers are built in: the half days (D2, D9) and D13. If you are behind on D
 - Prize store (spending coins) and prize fulfilment.
 - Draw tooling and rehearsal ([DRAW.md](docs/DRAW.md)).
 - Identity check at prize claim (phone number matched to national ID).
-- Seasons / battle pass, squads, referrals, push notifications.
+- Seasons / battle pass, squads, push notifications. (Referrals moved before launch on
+  2026-10-19 and shipped: [TODO B40](docs/TODO.md).)
 - Challenges verified through game data (for example Dota 2 match history).
 - Redis, a second server, read replica: only when a measured need appears ([ADR 0004](docs/adr/0004-postgres-only-no-redis-for-mvp.md)).
 
@@ -159,7 +164,7 @@ Two buffers are built in: the half days (D2, D9) and D13. If you are behind on D
 |---|---|---|---|
 | Phase 2: stabilise and reward | D16 to about D30 (late Mehr to mid Aban) | People can spend coins; we can prove fairness | Prize store with stock limits; claim flow with identity check; check-in; story sharing; weekly report for the CEO (signups, redemptions per city/lounge, retention) |
 | Phase 3: first draw | Before the first draw date marketing announces | A draw nobody can credibly call rigged | Entry snapshot, published hash, public seed, rehearsal, winner verification ([DRAW.md](docs/DRAW.md)); legal sign-off |
-| Phase 4: season 2 | After the first draw | Retention | Seasons with resets, squads per lounge, game-data challenges, referrals; scale only where metrics say so |
+| Phase 4: season 2 | After the first draw | Retention | Seasons with resets, squads per lounge, game-data challenges; scale only where metrics say so |
 
 ## How we run the 15 days
 

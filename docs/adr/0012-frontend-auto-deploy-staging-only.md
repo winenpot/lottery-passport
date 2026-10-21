@@ -115,3 +115,17 @@ his side, so the timer stays uninstalled on atpg. `FRONTEND_GH_TOKEN` (fine-grai
 `TorshX_2` only, `Contents: read` + `Actions: read`) also still needs to be created
 through GitHub's web UI and dropped into staging's `.env` — that step needs a human and
 can't be scripted.
+
+**Update 2026-10-21**: Arman shipped the receipt (TorshX_2 PR #8, contract in his
+`docs/RESOLVED-BUILD-CONTRACT.md`). The first real one is on main run 39483512180
+(artifact `resolved-build`, id 12291803614) and points at `frontend-normal` artifact
+12290986593 from run 39478968673 (testedCommit `4e8f3fe`). His consumer rules, which the
+patched `deploy_frontend.sh` must follow: read the receipt only after the whole main run
+finished successfully; require `schema = 1` and `mainCommit` = that run's head sha; stop on
+`unresolved`, a missing or expired artifact, or any mismatch (never fall back to another
+build); check the zip's sha256 against `digest`, and `metadata.json` `mode = api` and
+`source.commit = testedCommit`. Not done on our side: the owner moved the consumer patch,
+`FRONTEND_GH_TOKEN` and the timer to after launch (2026-10-21). Until then an accepted
+build reaches staging by hand, the same way production does (`docs/OPERATIONS.md`
+"Frontend release").
+

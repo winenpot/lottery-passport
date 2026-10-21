@@ -189,31 +189,34 @@ purpose, both the same `publish_web.sh` way; each release in its own directory, 
 is a relative symlink switched atomically):
 
 Staging: `lp-frontend-deploy.timer` runs `deploy/deploy_frontend.sh` every minute. When
-Arman's "Frontend CI" goes green on `TorshX_2`'s `main`, it downloads that run's
-`frontend-normal` artifact and calls `publish_web.sh` itself — nothing to do by hand once
+Arman's "Frontend CI" goes green on `TorshX_2`'s `main`, it reads that run's
+`resolved-build` receipt, downloads the `frontend-normal` artifact it names and calls
+`publish_web.sh` itself — nothing to do by hand once
 `FRONTEND_GH_TOKEN` is set (a fine-grained PAT on `TorshX_2` only, `Actions: read` +
 `Contents: read`; `deploy/env/staging.env.example` has the placeholder). `deploy_frontend.sh
 --status` shows what it last published and any failure; `journalctl -u lp-frontend-deploy
 -f` for its log. It is intentionally not installed on torshx (ADR-0012).
 
-**Not enabled on atpg yet** (2026-10-20): a main-push run never actually carries a
-`frontend-normal` artifact, only a `release-plan.json` risk report; resolving a main
-commit to the PR run that built it is an open question with Arman (ADR-0012 "Open
-question" + its 2026-10-20 afternoon update). The script itself is written and tested
-against the real API. Waiting on Arman to publish a small `resolved-build` receipt
-artifact on the main run (see the ADR) and on a human creating `FRONTEND_GH_TOKEN`
-(fine-grained PAT on `TorshX_2` only) through GitHub's web UI.
+**Not enabled on atpg yet** (2026-10-21): a main-push run usually carries no
+`frontend-normal` artifact (Arman's CI reuses an accepted build), only a `resolved-build`
+receipt pointing at the build to publish (ADR-0012, update 2026-10-21). The script still
+looks for `frontend-normal` on the same run, so it cannot find it; switching it to the
+receipt, creating `FRONTEND_GH_TOKEN` and installing the timer are after launch (owner,
+2026-10-21). Until then staging is published by hand like production, below.
 
-Production, still manual:
+By hand (production always; staging until the timer is on):
 
-1. Pick the artifact: Arman's `frontend-normal` CI artifact from `Arman13m99/TorshX_2`.
+1. Pick the artifact: the `resolved-build` artifact on the newest successful run of
+   "Frontend CI" on `main` names it (`artifactId`, `digest`, `testedCommit`; `status:
+   unresolved` = nothing to publish). It is Arman's `frontend-normal` CI artifact from
+   `Arman13m99/TorshX_2`.
    Production takes only what is on `main` (a PR's own build is fine when its commit tree
    equals the merge commit's tree: `gh api repos/Arman13m99/TorshX_2/commits/<sha> --jq
    .commit.tree.sha`). His CI can skip the build on `main` when the tree is unchanged, so the
    run on the `main` head may carry no frontend artifact at all.
 2. Verify: the zip's sha256 equals GitHub's `digest` for that artifact id
    (`gh api repos/Arman13m99/TorshX_2/actions/artifacts/<id> --jq .digest`), and
-   `metadata.json` says `"mode": "api"`.
+   `metadata.json` says `"mode": "api"` (and its `source.commit` equals `testedCommit`).
 3. Publish with [`deploy/publish_web.sh`](../deploy/publish_web.sh), on the server:
 
 ```bash
@@ -227,8 +230,8 @@ The script refuses a non-`api` build or an existing release id, copies only `ind
 strictly needed: Compose mounts the parent directory `<base>/web`, so nginx resolves
 `current` on every request. Check afterwards: `index.html` sha256 equals the artifact's, an
 unknown `/assets/x.js` answers 404 (not HTML), `/scan` answers the app, `/health` is the API.
-Release in use (19 Oct): `fa97809-20261019` on both servers. There is no automatic frontend
-CD yet.
+Releases in use (20 Oct evening): staging `7048b88-20261020`, production
+`fa97809-20261019`. There is no automatic frontend CD yet.
 
 ## Code batches in production
 

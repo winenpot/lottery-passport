@@ -17,6 +17,22 @@ Parked features (not in the MVP contract): the city passport. See
 Newest first. **Breaking** means a call that worked before needs a change on your side.
 Check `GET /health` → `commit` to see which backend commit is deployed on the demo.
 
+**2026-10-21 (doc truth pass, no code change)**
+
+- Removed: the planned "Invites" section (`GET /me/invite`, `POST /me/invite/redeem`,
+  `INVITE_INVALID`). Referrals (RF1, live since 2026-10-20) replaced it; see
+  [Referrals](#referrals).
+- Fixed: the error table lists the four `REFERRAL_*` codes and the live `MINI_GAME_*`
+  codes instead of the old draft's `GAME_SESSION_INVALID` / `SCORE_REJECTED`;
+  `CHALLENGE_NOT_COMPLETED` was never emitted (a claim before the target answers
+  `CHALLENGE_NOT_UNLOCKED`). The screen map points at the live mini-game, referral and
+  avatar endpoints; the wallet `reason` list is the set the backend actually writes.
+- Clarified: an avatar `image_url` must be served from the app's own origin (the PWA's
+  CSP is `img-src 'self' data: blob:`); the earlier `cdn.torshx.com` example host does
+  not exist.
+- Moved: [Achievements](#achievements) now comes after the challenge submissions it used
+  to split in two.
+
 **2026-10-20 (LG1': terms and privacy page)**
 
 - Added: `GET /legal/{version}` (no sign-in, HTML, right to left), the page `terms_url`
@@ -35,6 +51,15 @@ Check `GET /health` → `commit` to see which backend commit is deployed on the 
 - Changed: finishing a run that a newer start replaced answers
   `409 MINI_GAME_RUN_EXPIRED` (same as finishing after the 2 minutes), not
   `MINI_GAME_RUN_ALREADY_FINISHED`. Use the newest `run_id` only.
+
+**2026-10-20 (RF1: referrals)**
+
+- Added: `PATCH /me` accepts `referrer_code` (bound once, only before your first redeemed
+  code, never your own); `GET /me` gains `referral_code`; `GET /me/referrals`
+  (`invited_count`, `qualified_count`, `pending_count`, `coins_earned`). Errors
+  `REFERRAL_CODE_UNKNOWN` (422), `REFERRAL_SELF` (422), `REFERRAL_CODE_TOO_LATE` (422),
+  `REFERRAL_ALREADY_BOUND` (409). Wallet reasons `referral_first_code` and
+  `referral_later_code`. See [Referrals](#referrals).
 
 **2026-10-19 (FX1-FX3, FX7: browser-readable errors, config truth pass, feature flags)**
 
@@ -191,9 +216,10 @@ Check `GET /health` → `commit` to see which backend commit is deployed on the 
 - [Daily wheel](#daily-wheel)
 - [Mini-games and game leaderboards](#mini-games)
 - [Weekly coins leaderboard](#weekly-coins-leaderboard)
+- [Referrals](#referrals)
 - [Challenges and submissions](#challenges-and-submissions)
+- [Achievements](#achievements)
 - [Connected social accounts](#connected-social-accounts)
-- [Invites](#invites)
 - [Reward shop](#reward-shop)
 - [Weekly PS5 draw](#weekly-ps5-draw)
 - [Events and tournaments](#events-and-tournaments)
@@ -310,16 +336,19 @@ and the id in our logs: put it in bug reports.
 | `CODE_ATTEMPTS_LIMITED` | 429 | Too many invalid codes recently | Countdown from `Retry-After` |
 | `STREAK_ALREADY_CLAIMED` | 409 | Today's streak reward already taken | Show tomorrow's reward |
 | `SPIN_ALREADY_USED` | 409 | Today's spin already used | Show the next spin time |
-| `GAME_SESSION_INVALID` | 409 | Session unknown, expired, already finished, or belongs to someone else | Start a new round |
-| `SCORE_REJECTED` | 422 | Score beyond what a human can do, or timing does not match | "This round did not count" |
+| `MINI_GAME_RUN_ALREADY_FINISHED` | 409 | `POST /mini-games/runs/{run_id}/finish` on a run that was already finished | Start a new run |
+| `MINI_GAME_RUN_EXPIRED` | 409 | The run timed out, or a newer start replaced it | Start a new run; use the newest `run_id` only |
+| `MINI_GAME_ROUND_COUNT_MISMATCH` | 422 | `reactions_ms` length differs from the issued round count | A bug in the client |
 | `CHALLENGE_NOT_ACTIVE` | 409 | Challenge ended or not started | Refresh the list |
-| `CHALLENGE_NOT_COMPLETED` | 409 | Target not reached yet | Show progress |
 | `SUBMISSION_EXISTS` | 409 | Already submitted this period, or the link was used before | Show its status |
 | `URL_INVALID` | 422 | Not an accepted Instagram/X link, or not the player's own account (`error.reason`) | Show the accepted format |
 | `SOCIAL_NOT_CONNECTED` | 409 | A submission needs a connected account on that platform | Open connected accounts |
 | `SOCIAL_HANDLE_TAKEN` | 409 | The handle is linked to another player | Link to support |
 | `SOCIAL_VERIFY_FAILED` | 422 | Verification code not found on the profile | Show the steps again |
-| `INVITE_INVALID` | 422 | Unknown code, own code, too late, or an invite was already used | Show the message |
+| `REFERRAL_CODE_UNKNOWN` | 422 | `PATCH /me referrer_code`: no player has that code | Highlight the field |
+| `REFERRAL_SELF` | 422 | `PATCH /me referrer_code`: the player's own code | Highlight the field |
+| `REFERRAL_CODE_TOO_LATE` | 422 | `PATCH /me referrer_code` after the player already redeemed a code | Hide the field |
+| `REFERRAL_ALREADY_BOUND` | 409 | A referrer is already bound to this player | Show the bound state |
 | `INSUFFICIENT_COINS` | 409 | Balance too low | Show the missing amount |
 | `OUT_OF_STOCK` | 409 | Reward has no stock | Offer "notify me" |
 | `TICKET_LIMIT` | 409 | Weekly ticket cap reached | Show the cap |
@@ -338,22 +367,22 @@ and the id in our logs: put it in bug reports.
 | Demo route / panel | Endpoints |
 |---|---|
 | `/` landing, `/enter` sign-in (steps 1–2) | `POST /auth/request`, `POST /auth/verify` |
-| Profile setup (step 3: avatar, nickname, favourite games, invite code) | `GET /config`, `PATCH /me`, `POST /me/invite/redeem` |
-| `/home` header, next reward, today's game | `GET /me`, `GET /rewards/next`, `GET /games` |
+| Profile setup (step 3: avatar, nickname, favourite games, invite code) | `GET /config`, `GET /avatars`, `PATCH /me` (the invite code is `referrer_code`) |
+| `/home` header, next reward, today's game | `GET /me`, `GET /rewards/next` (planned); today's game is picked in the frontend |
 | Home shortcut «گردونه» (spin panel) | `GET /spin`, `POST /spin` |
 | Home shortcut «استریک» (streak panel) | `GET /me/streak`, `POST /me/streak/claim` |
 | Home shortcut «PS5», `/rewards` → قرعه‌کشی PS5 | `GET /draws/current`, `POST /draws/current/tickets` |
 | Home shortcut «تورنومنت», `/events` | `GET /events`, `POST`/`DELETE /events/{id}/registration` |
-| Home shortcut «لیدربورد», `/leaderboard/:id` | `GET /leaderboards/games/{id}` (plus `GET /leaderboards/weekly` if an overall board is shown) |
+| Home shortcut «لیدربورد», `/leaderboard/:id` | `GET /leaderboards/mini-games/{mini_game_id}` (planned; plus `GET /leaderboards/weekly` if an overall board is shown) |
 | Home shortcut «فروشگاه», `/rewards` → فروشگاه | `GET /rewards`, `POST /rewards/{id}/orders`, `PUT`/`DELETE /rewards/{id}/notify` |
 | `/rewards` → جایزه‌های من | `GET /me/orders` |
 | Bell (activity panel) | `GET /me/activity`, `POST /me/activity/seen` |
-| `/games`, `/games/:id`, `/play` | `GET /games`, `POST /games/{id}/sessions`, `POST /game-sessions/{id}/finish` |
+| `/games`, `/games/:id`, `/play` | `POST /mini-games/{mini_game_id}/runs`, `POST /mini-games/runs/{run_id}/finish` |
 | `/scan` (camera, manual entry, stats) | `POST /redemptions`, `GET /me/scans` |
 | `/challenges`, `/challenges/:id` | `GET /challenges`, `POST /challenges/{id}/claim`, `POST /challenges/{id}/submissions` |
 | `/profile` | `GET`/`PATCH /me`, `GET /me/wallet`, `POST /auth/logout` |
 | Profile → حساب‌های متصل | `/me/social-accounts...` |
-| Profile → دعوت دوستان | `GET /me/invite` |
+| Profile → دعوت دوستان | `GET /me` (`referral_code`), `GET /me/referrals` |
 | Profile → تنظیمات, پشتیبانی | Static in the frontend; support contacts come from `GET /config.support` |
 | `/b/<code>` product QR | `POST /redemptions` (after sign-in) |
 | `/q/:venue` venue QR, `/go` campaign link | `POST /me/arrivals` |
@@ -558,12 +587,16 @@ new tab: it cannot be shown in an iframe (`X-Frame-Options: DENY`).
 
 ```json
 [
-  {"id": "avatar-1", "image_url": "https://cdn.torshx.com/avatars/1.png", "locked": false},
-  {"id": "avatar-2", "image_url": "https://cdn.torshx.com/avatars/2.png", "locked": true}
+  {"id": "avatar-1", "image_url": "/media/<sha256>.webp", "locked": false},
+  {"id": "avatar-2", "image_url": "/media/<sha256>.webp", "locked": true}
 ]
 ```
 
-Starts empty until Ashkan fills it in `/admin`. Includes locked avatars (show them as
+Starts empty until Ashkan fills it in `/admin`. `image_url` must be served from the
+app's own origin (a relative path, or the same host): the PWA's CSP is
+`img-src 'self' data: blob:`, so any other host is blocked in the browser. Today an
+admin types the URL; uploading the image in `/admin` (served at `/media/...`) is planned.
+Includes locked avatars (show them as
 "coming later"); `PATCH /me avatar_id` refuses a locked one with `422 AVATAR_LOCKED`.
 There is no unlock mechanism yet (avatar unlocks by coins/achievements are AFTER LAUNCH);
 every avatar an admin creates without `locked` is pickable immediately.
@@ -689,9 +722,11 @@ Feeds the stats row on `/scan`.
 }
 ```
 
-`reason` values: `code_redemption`, `challenge_reward`, `social_post_reward`,
-`streak_reward`, `spin_reward`, `game_reward`, `invite_reward`, `welcome_bonus`,
-`tournament_prize`, `store_purchase`, `draw_ticket`, `admin_adjustment`.
+`reason` values the backend writes today: `code_redemption`, `first_code_bonus`,
+`challenge_reward`, `achievement_reward`, `referral_first_code`, `referral_later_code`,
+`admin_adjustment`. Reserved for planned features: `social_post_reward` (B18),
+`tournament_prize` (B22), `store_purchase` (reward shop). Spin, streak and draw get their
+own reasons when they ship; show an unknown reason with a generic label.
 
 ### `GET /api/v1/rewards/next` (planned)
 
@@ -1067,6 +1102,37 @@ validate, so this is a path error, unlike `CATALOGUE_UNKNOWN` elsewhere),
 `CHALLENGE_NOT_UNLOCKED` (409, `error.details` has `required` and `have`),
 `CHALLENGE_ALREADY_CLAIMED` (409, already claimed this period).
 
+### `POST /api/v1/challenges/{id}/submissions` (planned, B18)
+
+```json
+{"url": "https://www.instagram.com/stories/nightowl/3456789012345678901/"}
+```
+
+`201 {"id": "f00d...", "status": "pending"}`.
+
+Accepted links (query strings and fragments are stripped server-side):
+
+| Platform | Patterns |
+|---|---|
+| instagram | `https://(www.)instagram.com/p/<id>/`, `/reel/<id>/`, `/stories/<username>/<id>/` |
+| x | `https://(x|twitter).com/<username>/status/<id>` |
+
+- The player must have a connected account on that platform; otherwise the error is
+  `SOCIAL_NOT_CONNECTED`.
+- When the link contains a username (stories, X), it must match the connected account;
+  otherwise `URL_INVALID` with reason `not_owner`.
+- A link can be used only once across all players.
+- Review happens within 24 hours. Stories expire after 24 hours, so story submissions go to
+  the top of the review queue, and a story that has expired before review is rejected with
+  `expired`.
+
+Errors: `URL_INVALID`, `SUBMISSION_EXISTS`, `CHALLENGE_NOT_ACTIVE`,
+`SOCIAL_NOT_CONNECTED`, `TERMS_NOT_ACCEPTED`.
+
+### `GET /api/v1/me/submissions` (planned, B18)
+
+`[{"id", "challenge_id", "platform", "url", "status", "reason", "created_at", "reviewed_at"}]`, newest first.
+
 ## Achievements
 
 Auto-unlocked, auto-paid milestones (AC1 MVP slice). There is no claim endpoint and
@@ -1098,37 +1164,6 @@ assets and Mehdi's approved 8-12 item list, AC1's own spec pass — not done); "
 achievements with progress (only unlocked ones list today). `fact` is a closed set, today
 just `checkin_streak` (fed by `daily_checkin` claims); a game high score or a lounge-visit
 count would be a new fact, not a parameter on this one.
-
-### `POST /api/v1/challenges/{id}/submissions` (planned, B18)
-
-```json
-{"url": "https://www.instagram.com/stories/nightowl/3456789012345678901/"}
-```
-
-`201 {"id": "f00d...", "status": "pending"}`.
-
-Accepted links (query strings and fragments are stripped server-side):
-
-| Platform | Patterns |
-|---|---|
-| instagram | `https://(www.)instagram.com/p/<id>/`, `/reel/<id>/`, `/stories/<username>/<id>/` |
-| x | `https://(x|twitter).com/<username>/status/<id>` |
-
-- The player must have a connected account on that platform; otherwise the error is
-  `SOCIAL_NOT_CONNECTED`.
-- When the link contains a username (stories, X), it must match the connected account;
-  otherwise `URL_INVALID` with reason `not_owner`.
-- A link can be used only once across all players.
-- Review happens within 24 hours. Stories expire after 24 hours, so story submissions go to
-  the top of the review queue, and a story that has expired before review is rejected with
-  `expired`.
-
-Errors: `URL_INVALID`, `SUBMISSION_EXISTS`, `CHALLENGE_NOT_ACTIVE`,
-`SOCIAL_NOT_CONNECTED`, `TERMS_NOT_ACCEPTED`.
-
-### `GET /api/v1/me/submissions` (planned, B18)
-
-`[{"id", "challenge_id", "platform", "url", "status", "reason", "created_at", "reviewed_at"}]`, newest first.
 
 ## Connected social accounts
 
@@ -1168,22 +1203,6 @@ Errors: `SOCIAL_VERIFY_FAILED`.
 ### `DELETE /api/v1/me/social-accounts/{platform}` (planned)
 
 `204`. Pending submissions from that account stay as they are.
-
-## Invites
-
-### `GET /api/v1/me/invite` (planned)
-
-```json
-{"code": "TX-NIGHTOWL", "invited_count": 2, "reward_per_invite": 100, "rewarded_count": 1}
-```
-
-The inviter is paid when the invited player makes their first successful scan, not at
-sign-up. This stops farming with fresh phone numbers.
-
-### `POST /api/v1/me/invite/redeem` (planned)
-
-`{"code": "TX-PLAYER"}` → `200 {"accepted": true}`. Allowed once per account, only within
-7 days of sign-up, and never with your own code. Errors: `INVITE_INVALID`.
 
 ## Reward shop
 

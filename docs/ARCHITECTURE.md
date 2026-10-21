@@ -167,6 +167,8 @@ erDiagram
     achievements ||--o{ user_achievements : "unlocked via"
     users ||--o{ user_achievements : unlocks
     users ||--o{ mini_game_runs : plays
+    users ||--o{ referrals : "invites (inviter)"
+    users ||--o| referrals : "was invited (invitee)"
     challenges ||--o{ submissions : receives
     users ||--o{ submissions : sends
     venues ||--o{ tournaments : hosts
@@ -177,8 +179,9 @@ erDiagram
         uuid id PK
         string identifier UK "E.164 mobile (B10)"
         string display_name "nickname"
-        uuid home_venue_id FK "planned B15"
-        string terms_version "planned B15"
+        uuid home_venue_id FK "done B15"
+        string terms_version "done B15; the accepted legal_documents version"
+        string referral_code UK "RF1, done: 8 Crockford Base32 chars, created on first read"
         string location_city "P1, done: real home city, not a flavor"
         string avatar_id FK "P1, done"
     }
@@ -273,6 +276,11 @@ erDiagram
         string status "open, accepted, rejected, expired (done G1; a new start expires the open run, N17)"
         float average_reaction_ms "null while open, and for expired runs"
     }
+    referrals {
+        uuid invitee_user_id PK "FK users; one inviter per player, bound once (RF1, done)"
+        uuid inviter_user_id FK "CHECK <> invitee"
+        timestamptz bound_at
+    }
     legal_documents {
         string version PK "= TERMS_VERSION, done LG1'"
         text body "terms + privacy, edited in /admin; frozen once users.terms_version names it (trigger)"
@@ -297,14 +305,15 @@ erDiagram
     }
 ```
 
-Not drawn, all *planned*: `audit_log` (actor, action, entity, JSON diff, IP, time), `jobs` (kind, payload, status,
-run_at, attempts, expires_at), `redemption_failures` (user, IP, time; for the throttle),
-`role_change_events` (actor, target user, from_role, to_role, reason, when — append-only;
-see T1.1b in the implementation plan).
+Not drawn, built: `audit_log` (actor, action, entity, JSON diff, IP, time; migration 0012),
+`redemption_failures` (user, IP, time; for the throttle; 0007), `reward_rules` (admin-tunable
+amounts, ADR 0010; 0013), `code_batch_events` (append-only: event_type, batch_id, actor,
+recorded_at; 0006). Not drawn, *planned*: `jobs` (kind, payload, status, run_at, attempts,
+expires_at; B11), `role_change_events` (actor, target user, from_role, to_role, reason,
+when — append-only).
 
-Note: `users.role` (`player`, `staff`, `marketing`, `admin`) arrives with migration 0007
-(T1.1b). The `code_batch_events` append-only table (event_type, batch_id, actor, recorded_at)
-already exists from migration 0006.
+Note: `users.role` is `player` or `admin` (migration 0008); `staff`/`marketing` arrive only
+when a real caller needs them.
 
 **Data dictionary highlights**
 
@@ -313,7 +322,7 @@ already exists from migration 0006.
 | `redemption_codes.code_hash` | `HMAC-SHA256(pepper, canonical code)`. The pepper lives only in the environment. Unique. |
 | `redemption_codes.batch_id` | A code is redeemable only while its batch is `active`. Rows from before migration 0005 have no batch and can never be redeemed. |
 | `passport_progress.points` | Entries in that city's draw. Each comes from one redeemed code, so the redeemed rows in `redemption_codes` are the audit trail for entries. |
-| `coin_ledger_entries.idempotency_key` | One key per logical award: `code_redemption:<code id>`, `challenge:<id>:<period>:<user>`, `achievement:<id>:<user>` (one-time ever, no period), `tournament:<id>:<place>`, `adjustment:<uuid>`. Unique, so an award can never be recorded twice. |
+| `coin_ledger_entries.idempotency_key` | One key per logical award: `code_redemption:<code id>`, `first_code:<user>`, `challenge:<id>:<period>:<user>`, `achievement:<id>:<user>` (one-time ever, no period), `referral:first:<invitee>`, `referral:code:<code id>`, `admin_adjustment:<uuid>`; planned: `tournament:<id>:<place>`. Unique, so an award can never be recorded twice. |
 | `coin_ledger_entries` | Append-only (trigger). Corrections are new entries with `reason = admin_adjustment`. |
 | `wallets.balance` | Cached sum of the user's ledger, updated in the same transaction as each entry. Reconcile with `SUM(amount)` (query in [OPERATIONS.md](OPERATIONS.md#daily-checks)). |
 | `challenge_claims.period_key` | `D:2026-10-10` for a Tehran day (also the `daily_checkin` kind's login/streak history), `W:2026-10-10` for the week starting that Saturday, `M:2026-10` for a Tehran calendar month, `ONCE` for one-off challenges. |
