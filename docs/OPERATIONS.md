@@ -235,14 +235,26 @@ Releases in use (20 Oct evening): staging `7048b88-20261020`, production
 
 ## Code batches in production
 
-Generate print batches **on the production server**, so the pepper never leaves it:
+Generate print batches **on the production server**, so the pepper never leaves it.
+Production codes are issued as weighted print runs
+([CODES.md](CODES.md#print-runs-weighted-from-the-1000000-code-pool)); dry-run first:
 
 ```bash
 cd /opt/lottery-passport          # var/ is mode 700, owned by the deploy user
+repo/deploy/compose.sh run --rm api python -m scripts.print_run --k 7000 --equal --dry-run
+repo/deploy/compose.sh run --rm --user 0 -v "$PWD/var:/out" api \
+  python -m scripts.print_run --k 7000 --equal --coins-per-code 100 \
+  --base-url https://torshx.com --output-dir /out/print-runs/<name>
+repo/deploy/compose.sh run --rm api python -m scripts.code_batches list
+```
+
+`generate_codes` (one flavor, one batch) still works for rehearsal batches; its codes count
+against the quota too:
+
+```bash
 repo/deploy/compose.sh run --rm --user 0 -v "$PWD/var:/out" api \
   python -m scripts.generate_codes --city tokyo --quantity 50000 --coins-per-code 10 \
   --label "Tokyo can run 1" --base-url https://torshx.com --output /out/tokyo-run1.csv
-repo/deploy/compose.sh run --rm api python -m scripts.code_batches list
 ```
 
 Then follow [CODES.md](CODES.md#handing-codes-to-the-printer): encrypt, send, confirm the

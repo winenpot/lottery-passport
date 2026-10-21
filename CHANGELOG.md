@@ -7,6 +7,14 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ### Added
 
+- Weighted print runs (PC, decision 2026-10-21): `scripts/print_run.py` issues
+  `k` codes split over the seven flavors by exact weights (sum 1) against a
+  1,000,000-code pool (142,857 per flavor, a quota; codes are drawn fresh, no
+  plaintext pool is stored). Refused as a whole if any flavor would pass its
+  quota; one `generated`, export-frozen batch + shuffled CSV per flavor, a
+  code-free `manifest.json`, advisory-locked, voided and cleaned up on a
+  half-way failure. Pure allocation in `app/domain/print_runs.py`.
+  `generate_batch(shuffle=True)` writes CSV rows in CSPRNG order.
 - Two challenge kinds (W12, B43): `first_mini_game` (once, any ACCEPTED
   `mini_game_runs` row) and `tap_reflex_fast` (period, an ACCEPTED
   `tap_reflex` run under a fixed 250 ms threshold --

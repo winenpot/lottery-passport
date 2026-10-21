@@ -23,6 +23,7 @@ import asyncio
 import csv
 import hashlib
 import os
+import secrets
 import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -138,8 +139,13 @@ async def generate_batch(
     pepper: str,
     format_id: str = "",
     generate: CodeGenerator | None = None,
+    shuffle: bool = False,
 ) -> UUID:
-    """Create the batch, insert ``quantity`` unique codes, write the CSV."""
+    """Create the batch, insert ``quantity`` unique codes, write the CSV.
+
+    ``shuffle`` writes the CSV rows in CSPRNG order instead of chunk-sorted
+    order (holds the whole batch in memory; print runs use it).
+    """
     if not 0 < quantity <= MAX_QUANTITY:
         raise ValueError(f"quantity must be between 1 and {MAX_QUANTITY}")
     if coins_per_code < 0:
@@ -178,6 +184,7 @@ async def generate_batch(
         )
 
     remaining = quantity
+    rows: list[list[str]] = []
     with os.fdopen(descriptor, "w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(CSV_HEADER)
@@ -187,7 +194,7 @@ async def generate_batch(
             inserted = await insert_codes(
                 factory, batch_id, city, candidates, pepper, now
             )
-            writer.writerows(
+            chunk = [
                 [
                     str(batch_id),
                     city.name,
@@ -196,8 +203,16 @@ async def generate_batch(
                     qr_url(base_url, code, code_format),
                 ]
                 for code in inserted
-            )
+            ]
+            if shuffle:
+                rows.extend(chunk)
+            else:
+                writer.writerows(chunk)
             remaining -= len(inserted)
+        if shuffle:
+            # The printer's order says nothing about generation order.
+            secrets.SystemRandom().shuffle(rows)
+            writer.writerows(rows)
     write_checksum(output)
     return batch_id
 

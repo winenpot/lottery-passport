@@ -12,6 +12,7 @@ Section 1 is written to be handed to the factory as-is.
 - [4. The check character](#4-the-check-character)
 - [Validating codes in the browser](#validating-codes-in-the-browser)
 - [5. Batches](#5-batches)
+- [Print runs: weighted, from the 1,000,000-code pool](#print-runs-weighted-from-the-1000000-code-pool)
 - [Handing codes to the printer](#handing-codes-to-the-printer)
 - [6. Quality control](#6-quality-control)
 - [7. Adding a code format](#7-adding-a-code-format)
@@ -145,6 +146,45 @@ a misconfigured `REDEMPTION_CODE_PEPPER` (wrong value, stale secret, another env
 pepper copied by mistake) would silently turn every redemption into `CODE_INVALID` — indistinguishable
 from a bad scan — until support tickets added up. A `NULL` fingerprint (batches generated before
 this guard existed) is never flagged. See [ADR-0002](adr/0002-random-codes-hmac-storage-batches.md).
+
+## Print runs: weighted, from the 1,000,000-code pool
+
+Production codes are issued as **print runs** (decision 2026-10-21). The campaign pool is
+1,000,000 codes split evenly over the seven flavors: 142,857 each (7 x 142,857 = 999,999;
+the remainder is dropped). A run asks for `k` codes and one weight per flavor, the weights
+adding up to exactly 1. Flavor `i` gets `n_i` codes, `w_i * k` rounded so the counts add up
+to exactly `k` (largest remainder, so each `n_i` is within 1 of `w_i * k`). The run is
+refused **as a whole** if any flavor would go past its quota (`n_i > remaining_i`). Taking
+a flavor's last code is allowed. Runs repeat until a flavor is used up.
+
+- The pool is a **quota, not stored codes**. Picking `n_i` codes at random from a pile of
+  random codes is the same as generating `n_i` fresh random codes. So each run draws fresh
+  from the CSPRNG and no plaintext pool is ever kept to sample from. The database still
+  knows every code that exists (as an HMAC), and each code can be claimed by exactly one
+  player.
+- Every code ever generated counts against its flavor's quota, including codes in voided
+  batches and in batches made with `generate_codes` directly. The quota is read from
+  `code_batches.quantity`.
+- Each flavor in the run becomes one ordinary batch (`generated`, labelled
+  `PR-<UTC time> <flavor> n/k`) with its own CSV in random order, a `.sha256`, and an
+  `exported` event recording that checksum (so the format is frozen). A `manifest.json`
+  records the weights, the split and the batch ids. It never contains codes.
+- All or nothing: if generation fails half-way, every batch of the run is voided and its
+  files are deleted. A Postgres advisory lock stops two runs from overlapping. The quota is
+  re-read after the lock is taken.
+- Weights are exact: decimals (`0.3`) or fractions (`1/7`). `--equal` means 1/7 each, and
+  flavors left out weigh 0. Code: `app/domain/print_runs.py`, `scripts/print_run.py`.
+
+```bash
+python -m scripts.print_run --k 7000 --equal --dry-run      # split + quota table only
+python -m scripts.print_run --k 7000 --weights "TO=0.3,PR=0.2,BE=0.1,PA=0.1,ME=0.1,MA=0.1,MO=0.1" \
+    --coins-per-code 100 --base-url https://torshx.com --output-dir /out/run1
+```
+
+`--base-url` must be `https://torshx.com`: the in-app scanner accepts only that host, and
+the apex redirects `/b/*` to the app. On a server, see
+[OPERATIONS.md](OPERATIONS.md#code-batches-in-production). Activating, voiding and handing
+over work per batch, exactly as above and below.
 
 ## Printing QR sheets for a test run
 
