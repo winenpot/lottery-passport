@@ -1,6 +1,58 @@
 {
   "components": {
     "schemas": {
+      "AchievementProgressResponse": {
+        "description": "``GET /achievements`` (B44/W13): every active row, locked or not --\n``GET /me/achievements`` above only ever lists unlocked ones.",
+        "properties": {
+          "fact": {
+            "title": "Fact",
+            "type": "string"
+          },
+          "have": {
+            "title": "Have",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reward_coins": {
+            "title": "Reward Coins",
+            "type": "integer"
+          },
+          "threshold": {
+            "title": "Threshold",
+            "type": "integer"
+          },
+          "unlocked": {
+            "title": "Unlocked",
+            "type": "boolean"
+          },
+          "unlocked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unlocked At"
+          }
+        },
+        "required": [
+          "id",
+          "fact",
+          "threshold",
+          "reward_coins",
+          "have",
+          "unlocked",
+          "unlocked_at"
+        ],
+        "title": "AchievementProgressResponse",
+        "type": "object"
+      },
       "AchievementUnlockResponse": {
         "properties": {
           "id": {
@@ -1420,6 +1472,46 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/achievements": {
+      "get": {
+        "operationId": "list_achievements",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AchievementProgressResponse"
+                  },
+                  "title": "Response List Achievements",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not signed in"
+          }
+        },
+        "security": [
+          {
+            "Session Cookie": []
+          }
+        ],
+        "summary": "Every active achievement and this player's progress",
+        "tags": [
+          "achievements"
+        ]
+      }
+    },
     "/api/v1/admin/users": {
       "get": {
         "description": "Newest first, keyset-paginated. Pass the previous response's ``next_cursor`` as ``cursor``; ``next_cursor`` is null on the last page.",

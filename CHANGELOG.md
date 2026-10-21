@@ -15,6 +15,10 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
   code-free `manifest.json`, advisory-locked, voided and cleaned up on a
   half-way failure. Pure allocation in `app/domain/print_runs.py`.
   `generate_batch(shuffle=True)` writes CSV rows in CSPRNG order.
+- `GET /api/v1/achievements` (B44/W13): every active achievement row with `have`
+  (progress toward `threshold`), `unlocked`, `unlocked_at` (null until unlocked) --
+  closes B37's gap where a locked achievement didn't appear at all.
+  `GET /me/achievements` (unlocked-only) is unchanged.
 - Two challenge kinds (W12, B43): `first_mini_game` (once, any ACCEPTED
   `mini_game_runs` row) and `tap_reflex_fast` (period, an ACCEPTED
   `tap_reflex` run under a fixed 250 ms threshold --

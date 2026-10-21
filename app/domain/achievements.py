@@ -52,3 +52,18 @@ class UnlockedAchievement:
     threshold: int
     reward_coins: int
     unlocked_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class AchievementProgress:
+    """Every active achievement with this player's progress (B44, W13):
+    the "locked, X/Y" view ``GET /me/achievements`` (unlocked-only) cannot
+    give, since it omits a row entirely until it unlocks."""
+
+    id: str
+    fact: AchievementFact
+    threshold: int
+    reward_coins: int
+    have: int
+    unlocked: bool
+    unlocked_at: datetime | None

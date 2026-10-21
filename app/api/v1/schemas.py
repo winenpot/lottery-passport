@@ -15,7 +15,7 @@ from app.application.redemption_codes import RedemptionResult
 from app.application.referrals import ReferralStatus
 from app.application.teams import FlavorProgress, TeamStatus
 from app.application.wallets import WalletView
-from app.domain.achievements import UnlockedAchievement
+from app.domain.achievements import AchievementProgress, UnlockedAchievement
 from app.domain.avatars import Avatar
 from app.domain.passports import CAMPAIGN_BY_CITY, PassportProgress
 from app.domain.users import User
@@ -515,6 +515,33 @@ class UnlockedAchievementResponse(BaseModel):
             threshold=achievement.threshold,
             reward_coins=achievement.reward_coins,
             unlocked_at=achievement.unlocked_at,
+        )
+
+
+class AchievementProgressResponse(BaseModel):
+    """``GET /achievements`` (B44/W13): every active row, locked or not --
+    ``GET /me/achievements`` above only ever lists unlocked ones."""
+
+    id: str
+    fact: str
+    threshold: int
+    reward_coins: int
+    have: int
+    unlocked: bool
+    unlocked_at: datetime | None
+
+    @classmethod
+    def from_domain(
+        cls, progress: AchievementProgress
+    ) -> "AchievementProgressResponse":
+        return cls(
+            id=progress.id,
+            fact=progress.fact.value,
+            threshold=progress.threshold,
+            reward_coins=progress.reward_coins,
+            have=progress.have,
+            unlocked=progress.unlocked,
+            unlocked_at=progress.unlocked_at,
         )
 
 

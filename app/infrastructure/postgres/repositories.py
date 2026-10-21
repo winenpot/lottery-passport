@@ -688,6 +688,18 @@ async def list_active_achievements_by_fact(
     return [achievement_definition_from_model(row) for row in rows]
 
 
+async def list_active_achievements(session: AsyncSession) -> list[Achievement]:
+    """Every active achievement, any fact (B44/W13's progress view --
+    ``list_active_achievements_by_fact`` stays for the claim-time unlock
+    check, which only ever cares about one fact at a time)."""
+    rows = await session.scalars(
+        select(AchievementModel)
+        .where(AchievementModel.active.is_(True))
+        .order_by(AchievementModel.id)
+    )
+    return [achievement_definition_from_model(row) for row in rows]
+
+
 async def achievement_already_unlocked(
     session: AsyncSession, achievement_id: str, user_id: UUID
 ) -> bool:
@@ -707,6 +719,10 @@ class PostgreSQLAchievementsReader:
 
     def __init__(self, factory: async_sessionmaker[AsyncSession]) -> None:
         self._factory = factory
+
+    async def list_active(self) -> list[Achievement]:
+        async with self._factory() as session:
+            return await list_active_achievements(session)
 
     async def list_unlocked(self, user_id: UUID) -> list[UnlockedAchievement]:
         async with self._factory() as session:

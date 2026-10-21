@@ -123,8 +123,8 @@ app/
     me.py              composes /me's team + last_scanned_flavor             (done, P1)
     authentication.py  phone OTP sign-in                                     (B10)
     jobs.py            enqueue/claim/complete jobs                           (B11)
-    challenges.py      ChallengeService: GET/POST /challenges (3 kinds)      (done, C1)
-    achievements.py    AchievementService: GET /me/achievements              (done, AC1 slice)
+    challenges.py      ChallengeService: GET/POST /challenges (5 kinds)      (done, C1 + W12)
+    achievements.py    AchievementService: GET /achievements + /me/achievements (done, AC1 + W13)
     submissions.py, leaderboards.py, tournaments.py                          (B18-B22)
   infrastructure/
     postgres/          models, read repositories, unit_of_work.py (writes)

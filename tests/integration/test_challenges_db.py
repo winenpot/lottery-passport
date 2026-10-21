@@ -19,6 +19,7 @@ import pytest
 from sqlalchemy import delete, insert
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
+from app.application.achievements import AchievementService
 from app.application.challenges import ChallengeService
 from app.application.unit_of_work import UnitOfWork
 from app.core.config import Settings
@@ -35,6 +36,7 @@ from app.infrastructure.postgres.models import (
     UserAchievementModel,
 )
 from app.infrastructure.postgres.repositories import (
+    PostgreSQLAchievementsReader,
     PostgreSQLChallengesReader,
     PostgreSQLTeamsReader,
     PostgreSQLUserRepository,
@@ -521,4 +523,59 @@ async def test_tap_reflex_fast_claim_pays_only_for_a_fast_accepted_run_today(
             await service_tomorrow.claim(user_id, challenge_id)
         assert caught.value.reason is ChallengeClaimRefusal.NOT_UNLOCKED
     finally:
+        await delete_challenge(database, challenge_id)
+
+
+def make_achievement_service(
+    database: PostgreSQLAdapter, now: datetime
+) -> AchievementService:
+    return AchievementService(
+        reader=PostgreSQLAchievementsReader(database.session_factory),
+        challenges=PostgreSQLChallengesReader(database.session_factory),
+        clock=FixedClock(now),
+        zone=ZONE,
+    )
+
+
+async def test_achievement_progress_shows_locked_rows_before_the_first_unlock(
+    database: PostgreSQLAdapter,
+) -> None:
+    """B44/W13: a new player sees every active achievement, not just the
+    ones they have unlocked -- the gap ``GET /me/achievements`` (unlocked
+    only) cannot close on its own."""
+    challenge_id = f"it-daily-checkin-{uuid4().hex[:8]}"
+    achievement_3 = f"it-streak-3-{uuid4().hex[:8]}"
+    achievement_7 = f"it-streak-7-{uuid4().hex[:8]}"
+    await add_challenge(database, challenge_id, "daily_checkin", "day", 1, 10)
+    await add_achievement(database, achievement_3, "checkin_streak", 3, 20)
+    await add_achievement(database, achievement_7, "checkin_streak", 7, 50)
+    try:
+        user_id = await new_user_id(database)
+        now = datetime(2026, 10, 15, 9, 0, tzinfo=UTC)  # D:2026-10-15 in Tehran
+        achievements = make_achievement_service(database, now)
+
+        progress = await achievements.list_progress(user_id)
+        by_id = {p.id: p for p in progress}
+        assert (achievement_3 in by_id) and (achievement_7 in by_id)
+        assert (by_id[achievement_3].have, by_id[achievement_3].unlocked) == (0, False)
+        assert (by_id[achievement_7].have, by_id[achievement_7].unlocked) == (0, False)
+        assert by_id[achievement_3].unlocked_at is None
+
+        # Build a 3-day streak through the real claim path, same as the
+        # end-to-end daily-checkin test above.
+        service = make_service(database, now)
+        await add_checkin_claim(database, challenge_id, user_id, "D:2026-10-13")
+        await add_checkin_claim(database, challenge_id, user_id, "D:2026-10-14")
+        result = await service.claim(user_id, challenge_id)
+        assert [u.id for u in result.achievements_unlocked] == [achievement_3]
+
+        progress = await achievements.list_progress(user_id)
+        by_id = {p.id: p for p in progress}
+        assert (by_id[achievement_3].have, by_id[achievement_3].unlocked) == (3, True)
+        assert by_id[achievement_3].unlocked_at is not None
+        # Still locked, but progress reflects the same streak, not 0 any more.
+        assert (by_id[achievement_7].have, by_id[achievement_7].unlocked) == (3, False)
+    finally:
+        await delete_achievement(database, achievement_3)
+        await delete_achievement(database, achievement_7)
         await delete_challenge(database, challenge_id)

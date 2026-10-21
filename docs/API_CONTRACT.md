@@ -17,6 +17,13 @@ Parked features (not in the MVP contract): the city passport. See
 Newest first. **Breaking** means a call that worked before needs a change on your side.
 Check `GET /health` → `commit` to see which backend commit is deployed on the demo.
 
+**2026-10-21 (W13: achievement catalogue with progress)**
+
+- Added: `GET /api/v1/achievements` (B44) — every active achievement row with
+  `have`/`unlocked`/`unlocked_at` (null until unlocked), so the page is not empty before
+  a player's first unlock. `GET /api/v1/me/achievements` is unchanged (unlocked rows
+  only) — see [Achievements](#achievements).
+
 **2026-10-21 (W12: two new challenge kinds)**
 
 - Added: challenge kinds `first_mini_game` (once: ever finished an ACCEPTED
@@ -1230,13 +1237,26 @@ does not re-pay an already-unlocked milestone: `user_achievements` has
 would be a stronger economy than committing to an actual 30-day streak (break-and-rebuild
 every week beats one long run) — see `docs/vault/Decisions.md` 2026-10-15.
 
+### `GET /api/v1/achievements` (live, B44/W13)
+
+```json
+[
+  {"id": "streak_3", "fact": "checkin_streak", "threshold": 3, "reward_coins": 20,
+   "have": 1, "unlocked": false, "unlocked_at": null},
+  {"id": "streak_7", "fact": "checkin_streak", "threshold": 7, "reward_coins": 50,
+   "have": 7, "unlocked": true, "unlocked_at": "2026-10-15T08:30:00Z"}
+]
+```
+
+Every ACTIVE achievement row, locked or not — the gap `GET /me/achievements` above
+cannot close on its own, since it only ever lists rows that have already unlocked. A
+brand-new player sees every row at `have: 0, unlocked: false, unlocked_at: null`
+instead of an empty page (B37's missing "locked, X/Y" view). `have` is the same
+primitive `GET /challenges`/`GET /me/stats` already compute (`current_streak`) for
+`checkin_streak`; a future fact would add its own branch the same way.
+
 **Not in this response yet:** badge artwork/name (Persian copy and images need Ashkan's
-assets and Mehdi's approved 8-12 item list, AC1's own spec pass — not done); "locked"
-achievements with progress (only unlocked ones list today; a catalogue read,
-`GET /api/v1/achievements` with every active row, `unlocked_at` or null, and progress, is
-planned as B44). `fact` is a closed set, today
-just `checkin_streak` (fed by `daily_checkin` claims); a game high score or a lounge-visit
-count would be a new fact, not a parameter on this one.
+assets and Mehdi's approved 8-12 item list, AC1's own spec pass — not done).
 
 ## Connected social accounts
 

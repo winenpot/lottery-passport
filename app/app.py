@@ -280,6 +280,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     achievement_service = AchievementService(
         reader=PostgreSQLAchievementsReader(database.session_factory),
+        challenges=challenges_reader,
+        clock=SystemClock(),
+        zone=resolved_settings.campaign_zone,
     )
     mini_game_service = MiniGameService(
         unit_of_work=unit_of_work,
