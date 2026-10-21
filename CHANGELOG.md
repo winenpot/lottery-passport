@@ -7,6 +7,17 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ### Added
 
+- `GET /me/stats` (B48): `scans_total`, `flavors_discovered`,
+  `challenges_completed`, `achievements_unlocked`, `checkin_streak_days`,
+  `mini_game_runs_accepted`, `mini_game_best_reaction_ms`. Not a SQL view --
+  `PostgreSQLStatsReader` runs one round trip of independent, per-user-indexed
+  scalar subqueries (each hits its own small index rather than scanning its
+  table); a plain view buys nothing over that (Postgres just inlines the same
+  query), and a materialized view would show a stale count right after a
+  player's own scan. Fixes the frontend's "اسکن‌های من" box, which read a
+  demo-only placeholder with no backend field behind it at all --
+  `scans_total` is that field now.
+
 - Reserved-name check on `PATCH /me display_name` (`DISPLAY_NAME_RESERVED`, 422): the
   legacy `display_name` field has no charset restriction of its own, so unlike
   `nickname` it let staff/brand/trademarked names like "Lich King" through with no

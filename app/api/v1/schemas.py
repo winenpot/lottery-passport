@@ -9,6 +9,7 @@ from app.application.challenges import (
     ChallengeClaimResult,
     ChallengeProgress,
 )
+from app.application.me import UserStats
 from app.application.mini_games import MiniGameFinishResult, RunStarted
 from app.application.redemption_codes import RedemptionResult
 from app.application.referrals import ReferralStatus
@@ -355,6 +356,31 @@ class WalletResponse(BaseModel):
                 )
                 for entry in view.recent
             ],
+        )
+
+
+class UserStatsResponse(BaseModel):
+    """``GET /me/stats`` (B48). Coins and referrals are NOT repeated here --
+    ``GET /me/wallet`` and ``GET /me/referrals`` already cover those."""
+
+    scans_total: int
+    flavors_discovered: int
+    challenges_completed: int
+    achievements_unlocked: int
+    checkin_streak_days: int
+    mini_game_runs_accepted: int
+    mini_game_best_reaction_ms: float | None
+
+    @classmethod
+    def from_domain(cls, stats: UserStats) -> "UserStatsResponse":
+        return cls(
+            scans_total=stats.scans_total,
+            flavors_discovered=stats.flavors_discovered,
+            challenges_completed=stats.challenges_completed,
+            achievements_unlocked=stats.achievements_unlocked,
+            checkin_streak_days=stats.checkin_streak_days,
+            mini_game_runs_accepted=stats.mini_game_runs_accepted,
+            mini_game_best_reaction_ms=stats.mini_game_best_reaction_ms,
         )
 
 

@@ -17,6 +17,19 @@ Parked features (not in the MVP contract): the city passport. See
 Newest first. **Breaking** means a call that worked before needs a change on your side.
 Check `GET /health` → `commit` to see which backend commit is deployed on the demo.
 
+**2026-10-21 (user stats endpoint)**
+
+- Added: `GET /me/stats` (B48) -- `scans_total`, `flavors_discovered`,
+  `challenges_completed`, `achievements_unlocked`, `checkin_streak_days`,
+  `mini_game_runs_accepted`, `mini_game_best_reaction_ms`. One query
+  (`PostgreSQLStatsReader`, per-user-indexed scalar subqueries, not a SQL
+  view); the streak alone reuses `ChallengesReader.checkin_days` +
+  `app.domain.periods.current_streak`, the same primitives `GET /challenges`
+  already computes it with. Built to fix the frontend's "اسکن‌های من" /
+  "No. bottles scanned" box, which read a demo-only placeholder
+  (`useScanStats()` hardcoding `count: null` once wired to the real API) with
+  nothing behind it on the backend -- `scans_total` is that field.
+
 **2026-10-21 (reserved display names)**
 
 - Added: `PATCH /me display_name` now rejects staff/brand/trademarked names
@@ -990,6 +1003,28 @@ codes); generated and stored the first time it is read.
   "coins_earned": 20
 }
 ```
+
+### `GET /api/v1/me/stats` (live, B48)
+
+```json
+{
+  "scans_total": 7,
+  "flavors_discovered": 3,
+  "challenges_completed": 4,
+  "achievements_unlocked": 1,
+  "checkin_streak_days": 2,
+  "mini_game_runs_accepted": 5,
+  "mini_game_best_reaction_ms": 243.5
+}
+```
+
+Scan/challenge/achievement/mini-game counts only — coins and referrals are not
+repeated here, see `GET /me/wallet` and `GET /me/referrals` above. All but
+`checkin_streak_days` come from one query (per-user indexed `COUNT`s, not a SQL
+view — see `PostgreSQLStatsReader`'s docstring for why a plain view buys nothing
+here and a materialized one would show a stale count right after a player's own
+scan). `mini_game_best_reaction_ms` is `null` until the player has an accepted
+run.
 
 ## Challenges and submissions
 

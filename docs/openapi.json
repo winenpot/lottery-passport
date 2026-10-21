@@ -1193,6 +1193,57 @@
         "title": "UserResponse",
         "type": "object"
       },
+      "UserStatsResponse": {
+        "description": "``GET /me/stats`` (B48). Coins and referrals are NOT repeated here --\n``GET /me/wallet`` and ``GET /me/referrals`` already cover those.",
+        "properties": {
+          "achievements_unlocked": {
+            "title": "Achievements Unlocked",
+            "type": "integer"
+          },
+          "challenges_completed": {
+            "title": "Challenges Completed",
+            "type": "integer"
+          },
+          "checkin_streak_days": {
+            "title": "Checkin Streak Days",
+            "type": "integer"
+          },
+          "flavors_discovered": {
+            "title": "Flavors Discovered",
+            "type": "integer"
+          },
+          "mini_game_best_reaction_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mini Game Best Reaction Ms"
+          },
+          "mini_game_runs_accepted": {
+            "title": "Mini Game Runs Accepted",
+            "type": "integer"
+          },
+          "scans_total": {
+            "title": "Scans Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "scans_total",
+          "flavors_discovered",
+          "challenges_completed",
+          "achievements_unlocked",
+          "checkin_streak_days",
+          "mini_game_runs_accepted",
+          "mini_game_best_reaction_ms"
+        ],
+        "title": "UserStatsResponse",
+        "type": "object"
+      },
       "UserUpdate": {
         "description": "Every field is optional; only the ones sent are changed.",
         "properties": {
@@ -1989,6 +2040,43 @@
           }
         ],
         "summary": "Your invite code and referral counts",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/me/stats": {
+      "get": {
+        "description": "Coins and referrals are not repeated here -- see ``GET /me/wallet`` and ``GET /me/referrals``.",
+        "operationId": "get_my_stats",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not signed in"
+          }
+        },
+        "security": [
+          {
+            "Session Cookie": []
+          }
+        ],
+        "summary": "Scan, challenge, achievement and mini-game counts",
         "tags": [
           "users"
         ]

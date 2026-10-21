@@ -14,6 +14,7 @@ from app.application.authentication import (
     SessionRepository,
     UserRepository,
 )
+from app.application.me import RawStats
 from app.application.passports import PassportRepository
 from app.application.profile import NicknameTaken
 from app.application.wallets import WalletReader
@@ -36,6 +37,7 @@ from app.infrastructure.postgres.models import (
     ChallengeModel,
     CoinLedgerEntryModel,
     LegalDocumentModel,
+    MiniGameRunModel,
     PassportProgressModel,
     RedemptionCodeModel,
     SessionModel,
@@ -424,6 +426,88 @@ class PostgreSQLLastScanReader:
                 .limit(1)
             )
             return CityCode(city) if city is not None else None
+
+
+class PostgreSQLStatsReader:
+    """Implements ``StatsReader`` (``GET /me/stats``, B48).
+
+    Deliberately NOT a SQL view. A plain view is just stored query text --
+    Postgres inlines it and runs the same plan every time, so it buys
+    nothing over calling these queries directly. A materialized view would
+    cache a stale answer, wrong for a player who just scanned a code and
+    expects their own count to move; refreshing it per user on every write
+    would cost more than this already does. The actual speed comes from one
+    round trip of independent, per-user-indexed scalar subqueries -- each
+    hits its own small index (``ix_redemption_codes_redeemer_time``,
+    ``ix_challenge_claims_user``, ``ix_user_achievements_user``,
+    ``ix_mini_game_runs_user_status``) rather than scanning its table.
+    """
+
+    def __init__(self, factory: async_sessionmaker[AsyncSession]) -> None:
+        self._factory = factory
+
+    async def get_user_stats(self, user_id: UUID) -> RawStats:
+        async with self._factory() as session:
+            scans_total = (
+                select(func.count())
+                .select_from(RedemptionCodeModel)
+                .where(RedemptionCodeModel.redeemed_by_user_id == user_id)
+                .scalar_subquery()
+            )
+            flavors_discovered = (
+                select(func.count(func.distinct(RedemptionCodeModel.city)))
+                .select_from(RedemptionCodeModel)
+                .where(RedemptionCodeModel.redeemed_by_user_id == user_id)
+                .scalar_subquery()
+            )
+            challenges_completed = (
+                select(func.count())
+                .select_from(ChallengeClaimModel)
+                .where(ChallengeClaimModel.user_id == user_id)
+                .scalar_subquery()
+            )
+            achievements_unlocked = (
+                select(func.count())
+                .select_from(UserAchievementModel)
+                .where(UserAchievementModel.user_id == user_id)
+                .scalar_subquery()
+            )
+            accepted = (
+                MiniGameRunModel.user_id == user_id,
+                MiniGameRunModel.status == "accepted",
+            )
+            mini_game_runs_accepted = (
+                select(func.count())
+                .select_from(MiniGameRunModel)
+                .where(*accepted)
+                .scalar_subquery()
+            )
+            mini_game_best_reaction_ms = (
+                select(func.min(MiniGameRunModel.average_reaction_ms))
+                .select_from(MiniGameRunModel)
+                .where(*accepted)
+                .scalar_subquery()
+            )
+            row = (
+                await session.execute(
+                    select(
+                        scans_total.label("scans_total"),
+                        flavors_discovered.label("flavors_discovered"),
+                        challenges_completed.label("challenges_completed"),
+                        achievements_unlocked.label("achievements_unlocked"),
+                        mini_game_runs_accepted.label("mini_game_runs_accepted"),
+                        mini_game_best_reaction_ms.label("mini_game_best_reaction_ms"),
+                    )
+                )
+            ).one()
+            return RawStats(
+                scans_total=row.scans_total,
+                flavors_discovered=row.flavors_discovered,
+                challenges_completed=row.challenges_completed,
+                achievements_unlocked=row.achievements_unlocked,
+                mini_game_runs_accepted=row.mini_game_runs_accepted,
+                mini_game_best_reaction_ms=row.mini_game_best_reaction_ms,
+            )
 
 
 def challenge_definition_from_model(model: ChallengeModel) -> Challenge:

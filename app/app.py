@@ -68,6 +68,7 @@ from app.infrastructure.postgres.repositories import (
     PostgreSQLLegalDocuments,
     PostgreSQLPassportRepository,
     PostgreSQLSessionRepository,
+    PostgreSQLStatsReader,
     PostgreSQLTeamsReader,
     PostgreSQLUserRepository,
     PostgreSQLVenueRepository,
@@ -261,12 +262,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         clock=SystemClock(),
         lock=timedelta(days=resolved_settings.team_lock_days),
     )
+    challenges_reader = PostgreSQLChallengesReader(database.session_factory)
     me_service = MeService(
         teams=teams_reader,
         last_scans=PostgreSQLLastScanReader(database.session_factory),
+        stats=PostgreSQLStatsReader(database.session_factory),
+        challenges=challenges_reader,
+        clock=SystemClock(),
+        zone=resolved_settings.campaign_zone,
     )
     challenge_service = ChallengeService(
-        reader=PostgreSQLChallengesReader(database.session_factory),
+        reader=challenges_reader,
         teams=teams_reader,
         unit_of_work=unit_of_work,
         clock=SystemClock(),

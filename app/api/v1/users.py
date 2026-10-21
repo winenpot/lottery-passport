@@ -16,6 +16,7 @@ from app.api.v1.schemas import (
     PassportProgressResponse,
     ReferralStatusResponse,
     UserResponse,
+    UserStatsResponse,
     UserUpdate,
 )
 from app.application.authentication import AuthenticationService, DisplayNameReserved
@@ -218,3 +219,20 @@ async def get_my_passports(
 ) -> list[PassportProgressResponse]:
     progress = await service.list_for_user(current_user.id)
     return [PassportProgressResponse.from_domain(item) for item in progress]
+
+
+@router.get(
+    "/me/stats",
+    response_model=UserStatsResponse,
+    summary="Scan, challenge, achievement and mini-game counts",
+    description=(
+        "Coins and referrals are not repeated here -- see ``GET /me/wallet`` "
+        "and ``GET /me/referrals``."
+    ),
+    responses=_AUTH_REQUIRED,
+)
+async def get_my_stats(
+    current_user: Annotated[User, Depends(get_current_user)],
+    me_service: Annotated[MeService, Depends(get_me_service)],
+) -> UserStatsResponse:
+    return UserStatsResponse.from_domain(await me_service.stats(current_user.id))
