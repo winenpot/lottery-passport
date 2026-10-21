@@ -17,6 +17,7 @@ from uuid import UUID
 from sqladmin import Admin, BaseView, DBAuditBackend, Flash, ModelView, expose
 from sqladmin.audit import AuditEntry
 from sqladmin.authentication import AuthenticationBackend
+from sqladmin.filters import AllUniqueStringValuesFilter, StaticValuesFilter
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from starlette.applications import Starlette
@@ -47,6 +48,7 @@ from app.infrastructure.postgres.models import (
     CodeBatchModel,
     CoinLedgerEntryModel,
     LegalDocumentModel,
+    MiniGameRunModel,
     RewardRuleModel,
     UserAchievementModel,
     UserModel,
@@ -264,6 +266,47 @@ class CoinLedgerAdmin(ReadOnlyView, model=CoinLedgerEntryModel):
     ]
     column_searchable_list = [CoinLedgerEntryModel.reason]
     column_default_sort = (CoinLedgerEntryModel.created_at, True)
+
+
+class MiniGameRunAdmin(ReadOnlyView, model=MiniGameRunModel):
+    """W11: "performance saved, cheating watched" made visible in the panel.
+
+    ``status`` is the stored verdict (open/accepted/rejected/expired); the
+    *why* behind a rejection (app/domain/mini_games.py's ``MiniGameRunRejection``)
+    is computed at finish time and returned in the API response but never
+    persisted on this row, so it cannot be shown here without a migration
+    adding a column for it -- out of scope for this read-only view.
+    """
+
+    name = "Mini-game run"
+    name_plural = "Mini-game runs"
+    icon = "fa-solid fa-bolt"
+    column_list = [
+        MiniGameRunModel.user_id,
+        MiniGameRunModel.mini_game_id,
+        MiniGameRunModel.status,
+        MiniGameRunModel.average_reaction_ms,
+        MiniGameRunModel.issued_at,
+        MiniGameRunModel.finished_at,
+    ]
+    column_filters = [
+        StaticValuesFilter(
+            MiniGameRunModel.status,
+            [
+                ("open", "open"),
+                ("accepted", "accepted"),
+                ("rejected", "rejected"),
+                ("expired", "expired"),
+            ],
+            title="Status",
+        ),
+        AllUniqueStringValuesFilter(MiniGameRunModel.user_id, title="Player"),
+    ]
+    column_sortable_list = [
+        MiniGameRunModel.issued_at,
+        MiniGameRunModel.average_reaction_ms,
+    ]
+    column_default_sort = (MiniGameRunModel.issued_at, True)
 
 
 class AvatarAdmin(ModelView, model=AvatarModel):
@@ -491,6 +534,7 @@ VIEWS: tuple[type[ModelView], ...] = (
     CodeBatchAdmin,
     WalletAdmin,
     CoinLedgerAdmin,
+    MiniGameRunAdmin,
     AvatarAdmin,
     RewardRuleAdmin,
     ChallengeAdmin,
