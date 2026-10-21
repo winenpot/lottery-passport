@@ -13,6 +13,7 @@ from sqlalchemy import (
     Identity,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -690,4 +691,33 @@ class LegalDocumentModel(Base):
             "version ~ '^[A-Za-z0-9_-]{1,20}$'", name="ck_legal_documents_version"
         ),
         CheckConstraint("length(body) > 0", name="ck_legal_documents_body"),
+    )
+
+
+class MediaAssetModel(Base):
+    """Admin-uploaded image, content-addressed (W10). Stored in Postgres so
+    backups and both hosts need nothing extra; the sha256 primary key makes
+    re-uploading the same bytes a no-op read, never a duplicate row."""
+
+    __tablename__ = "media_assets"
+
+    sha256: Mapped[str] = mapped_column(String(64), primary_key=True)
+    content_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    bytes_: Mapped[bytes] = mapped_column("bytes", LargeBinary, nullable=False)
+    byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "content_type IN ('image/png', 'image/jpeg', 'image/webp')",
+            name="ck_media_assets_content_type",
+        ),
+        CheckConstraint(
+            "byte_size > 0 AND byte_size <= 524288", name="ck_media_assets_byte_size"
+        ),
     )

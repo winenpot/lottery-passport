@@ -31,6 +31,7 @@ VIEW_PATHS = (
     "/admin/coin-ledger-entry-model/list",
     "/admin/mini-game-run-model/list",
     "/admin/legal-document-model/list",
+    "/admin/images",
 )
 
 
