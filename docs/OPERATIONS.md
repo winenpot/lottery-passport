@@ -351,6 +351,7 @@ Live: `app/infrastructure/sms.py` -- `KavenegarSmsSender` calls Kavenegar's
 
 **What**: PostgreSQL only (everything important is in it). Code and configuration are in git and the password manager.
 **How**: [`backup.sh`](../deploy/backup.sh) every 6 hours: `pg_dump` to a local file, verify it with `pg_restore --list`, upload to an encrypted **restic** repository on another provider's object storage, prune old snapshots once a day, ping a heartbeat monitor.
+**Current state (2026-10-21)**: running on production (`torshx`), but `RESTIC_REPOSITORY` points at a **local path** (`/var/backups/lottery-passport-restic`), not off-site object storage — no account/credentials exist yet. This proves the dump/verify/prune/restore pipeline end-to-end but does **not** protect against losing the VM itself. Swap `RESTIC_REPOSITORY` to an `s3:...` URL + fill the AWS keys in `backup.env`, then `restic init` again against the new repository, once an off-site account exists.
 **Targets**: RPO 6 hours; RTO 2 hours (new VM + restore + deploy), proven by the drill.
 
 ```bash
@@ -372,7 +373,7 @@ it took. Write the time in the table below after each drill.
 
 | Date | Snapshot | Restore time | Result | By |
 |---|---|---|---|---|
-| | | | | |
+| 2026-10-21 | 2b0e44b3 (production, first snapshot) | 5 s | OK — 6 users, 0 codes, 0 wallet mismatches | Ashkan (agent) |
 
 **Full restore onto a new VM**: server setup → copy `.env` and `backup.env` from the
 password manager → `repo/deploy/compose.sh up -d --wait postgres` → `restic dump --tag db latest <DUMP_DIR>/lottery_passport.dump > db.dump`
