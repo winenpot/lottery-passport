@@ -32,6 +32,9 @@ Check `GET /health` → `commit` to see which backend commit is deployed on the 
   not exist.
 - Moved: [Achievements](#achievements) now comes after the challenge submissions it used
   to split in two.
+- Planned, not live: challenge kinds `first_mini_game` and `tap_reflex_fast` (B43),
+  `GET /api/v1/achievements` with locked rows and progress (B44), avatar images uploaded
+  in `/admin` and served at `/media/<sha256>.<ext>` (B45).
 
 **2026-10-20 (LG1': terms and privacy page)**
 
@@ -595,7 +598,8 @@ new tab: it cannot be shown in an iframe (`X-Frame-Options: DENY`).
 Starts empty until Ashkan fills it in `/admin`. `image_url` must be served from the
 app's own origin (a relative path, or the same host): the PWA's CSP is
 `img-src 'self' data: blob:`, so any other host is blocked in the browser. Today an
-admin types the URL; uploading the image in `/admin` (served at `/media/...`) is planned.
+admin types the URL; uploading the image in `/admin` (served at `/media/...`) is planned
+(B45).
 Includes locked avatars (show them as
 "coming later"); `PATCH /me avatar_id` refuses a locked one with `422 AVATAR_LOCKED`.
 There is no unlock mechanism yet (avatar unlocks by coins/achievements are AFTER LAUNCH);
@@ -1050,8 +1054,11 @@ an earlier draft of this contract written against the frontend demo mock and are
 superseded by the shape above for every LIVE challenge.
 
 **Not shipped yet** (do not build a client assuming these): `scan_count`/`game_score`/
-`social_post`/`manual` kinds. `first_game`/`tap_reflex_fast` challenge kinds feeding off
-the now-live [Mini-games](#mini-games) runs are not wired yet either.
+`social_post`/`manual` kinds. Planned next (B43), fed by the live
+[Mini-games](#mini-games) runs: `first_mini_game` (period `once`: the player has at least
+one accepted mini-game run) and `tap_reflex_fast` (period `day`: an accepted `tap_reflex`
+run that Tehran day with an average reaction under a server-side threshold, default
+250 ms). Until a kind ships, the client must not offer a claim for it.
 
 ### `POST /api/v1/challenges/{id}/claim` (live, B17; MVP subset)
 
@@ -1161,7 +1168,9 @@ every week beats one long run) — see `docs/vault/Decisions.md` 2026-10-15.
 
 **Not in this response yet:** badge artwork/name (Persian copy and images need Ashkan's
 assets and Mehdi's approved 8-12 item list, AC1's own spec pass — not done); "locked"
-achievements with progress (only unlocked ones list today). `fact` is a closed set, today
+achievements with progress (only unlocked ones list today; a catalogue read,
+`GET /api/v1/achievements` with every active row, `unlocked_at` or null, and progress, is
+planned as B44). `fact` is a closed set, today
 just `checkin_streak` (fed by `daily_checkin` claims); a game high score or a lounge-visit
 count would be a new fact, not a parameter on this one.
 
