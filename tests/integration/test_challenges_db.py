@@ -29,6 +29,7 @@ from app.infrastructure.postgres.models import (
     AchievementModel,
     ChallengeClaimModel,
     ChallengeModel,
+    MiniGameRunModel,
     RedemptionCodeModel,
     TeamMembershipModel,
     UserAchievementModel,
@@ -157,6 +158,33 @@ async def add_checkin_claim(
                 user_id=user_id,
                 period_key=period_key,
                 claimed_at=datetime.now(UTC),
+            )
+        )
+
+
+async def add_mini_game_run(
+    database: PostgreSQLAdapter,
+    user_id: UUID,
+    *,
+    status: str,
+    average_reaction_ms: float,
+    finished_at: datetime,
+) -> None:
+    """Inserts a finished ``mini_game_runs`` row directly -- the plausibility
+    assessment itself (app/domain/mini_games.py) is tested there; this
+    models its outcome for the challenge engine's own read."""
+    async with database.session_factory() as session, session.begin():
+        await session.execute(
+            insert(MiniGameRunModel).values(
+                id=uuid4(),
+                user_id=user_id,
+                mini_game_id="tap_reflex",
+                round_delays_ms=[800, 900, 1000, 1100, 1200],
+                issued_at=finished_at,
+                expires_at=finished_at,
+                finished_at=finished_at,
+                status=status,
+                average_reaction_ms=average_reaction_ms,
             )
         )
 
@@ -368,4 +396,129 @@ async def test_daily_checkin_streak_unlocks_an_achievement_end_to_end(
         assert result_tomorrow.coin_balance == 10 + 20 + 10
     finally:
         await delete_achievement(database, achievement_id)
+        await delete_challenge(database, challenge_id)
+
+
+async def test_first_mini_game_and_tap_reflex_fast_kinds_are_allowed_rows(
+    database: PostgreSQLAdapter,
+) -> None:
+    """W12: the widened ``ck_challenges_kind`` CHECK accepts both new kinds
+    (the negative case -- an unknown kind is still rejected -- is already
+    covered by ``test_challenge_checks_reject_bad_rows`` above)."""
+    first_id = f"it-first-mini-game-{uuid4().hex[:8]}"
+    fast_id = f"it-tap-reflex-fast-{uuid4().hex[:8]}"
+    await add_challenge(database, first_id, "first_mini_game", "once", 1, 20)
+    await add_challenge(database, fast_id, "tap_reflex_fast", "day", 1, 20)
+    await delete_challenge(database, first_id)
+    await delete_challenge(database, fast_id)
+
+
+async def test_first_mini_game_claim_end_to_end(database: PostgreSQLAdapter) -> None:
+    challenge_id = f"it-first-mini-game-{uuid4().hex[:8]}"
+    await add_challenge(database, challenge_id, "first_mini_game", "once", 1, 20)
+    try:
+        user_id = await new_user_id(database)
+        now = datetime(2026, 10, 15, 9, 0, tzinfo=UTC)
+        service = make_service(database, now)
+
+        with pytest.raises(ChallengeClaimError) as caught:
+            await service.claim(user_id, challenge_id)
+        assert caught.value.reason is ChallengeClaimRefusal.NOT_UNLOCKED
+
+        # A REJECTED run does not count, any mini-game id does.
+        await add_mini_game_run(
+            database,
+            user_id,
+            status="rejected",
+            average_reaction_ms=180,
+            finished_at=now,
+        )
+        with pytest.raises(ChallengeClaimError) as caught:
+            await service.claim(user_id, challenge_id)
+        assert caught.value.reason is ChallengeClaimRefusal.NOT_UNLOCKED
+
+        await add_mini_game_run(
+            database,
+            user_id,
+            status="accepted",
+            average_reaction_ms=400,
+            finished_at=now,
+        )
+        result = await service.claim(user_id, challenge_id)
+        assert (result.coins_awarded, result.coin_balance) == (20, 20)
+
+        with pytest.raises(ChallengeClaimError) as caught:
+            await service.claim(user_id, challenge_id)
+        assert caught.value.reason is ChallengeClaimRefusal.ALREADY_CLAIMED
+    finally:
+        await delete_challenge(database, challenge_id)
+
+
+async def test_tap_reflex_fast_claim_pays_only_for_a_fast_accepted_run_today(
+    database: PostgreSQLAdapter,
+) -> None:
+    """A slow ACCEPTED run and a fast REJECTED run must both fail to
+    unlock; only an ACCEPTED run under the threshold pays, once per
+    Tehran day."""
+    challenge_id = f"it-tap-reflex-fast-{uuid4().hex[:8]}"
+    await add_challenge(database, challenge_id, "tap_reflex_fast", "day", 1, 20)
+    try:
+        user_id = await new_user_id(database)
+        now = datetime(2026, 10, 15, 9, 0, tzinfo=UTC)  # D:2026-10-15 in Tehran
+        service = make_service(database, now)
+
+        # A slow ACCEPTED run (over the 250 ms threshold): not fast enough.
+        await add_mini_game_run(
+            database,
+            user_id,
+            status="accepted",
+            average_reaction_ms=400,
+            finished_at=now,
+        )
+        with pytest.raises(ChallengeClaimError) as caught:
+            await service.claim(user_id, challenge_id)
+        assert caught.value.reason is ChallengeClaimRefusal.NOT_UNLOCKED
+
+        # A fast REJECTED run (implausible): plausibility beats speed.
+        await add_mini_game_run(
+            database,
+            user_id,
+            status="rejected",
+            average_reaction_ms=120,
+            finished_at=now,
+        )
+        with pytest.raises(ChallengeClaimError) as caught:
+            await service.claim(user_id, challenge_id)
+        assert caught.value.reason is ChallengeClaimRefusal.NOT_UNLOCKED
+
+        # A genuinely fast, ACCEPTED run today: claimable, pays once.
+        await add_mini_game_run(
+            database,
+            user_id,
+            status="accepted",
+            average_reaction_ms=210,
+            finished_at=now,
+        )
+        result = await service.claim(user_id, challenge_id)
+        assert (result.coins_awarded, result.coin_balance) == (20, 20)
+
+        with pytest.raises(ChallengeClaimError) as caught:
+            await service.claim(user_id, challenge_id)
+        assert caught.value.reason is ChallengeClaimRefusal.ALREADY_CLAIMED
+
+        # Yesterday's fast run must not count toward today's claim.
+        yesterday = datetime(2026, 10, 14, 9, 0, tzinfo=UTC)
+        await add_mini_game_run(
+            database,
+            user_id,
+            status="accepted",
+            average_reaction_ms=150,
+            finished_at=yesterday,
+        )
+        tomorrow = datetime(2026, 10, 16, 9, 0, tzinfo=UTC)
+        service_tomorrow = make_service(database, tomorrow)
+        with pytest.raises(ChallengeClaimError) as caught:
+            await service_tomorrow.claim(user_id, challenge_id)
+        assert caught.value.reason is ChallengeClaimRefusal.NOT_UNLOCKED
+    finally:
         await delete_challenge(database, challenge_id)

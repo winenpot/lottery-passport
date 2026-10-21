@@ -21,11 +21,22 @@ Shipped (both backed by data that already exists, no passive tracking):
   data a streak is computed from (``app.domain.periods.current_streak``)
   -- see ``app/application/challenges.py`` for the streak + achievement
   unlock that runs on a ``DAILY_CHECKIN`` claim.
+* ``FIRST_MINI_GAME`` -- once: the player has ever finished an ACCEPTED
+  ``mini_game_runs`` row, of any mini-game id (G1 unblocked this; W11
+  added the admin view onto the same table). Sheet: "first game" 20 coins
+  once. ``target`` is a count like ``DISTINCT_FLAVORS``, not a game id.
+* ``TAP_REFLEX_FAST`` -- period: an ACCEPTED ``tap_reflex`` run finished in
+  the period with ``average_reaction_ms`` under ``TAP_REFLEX_FAST_THRESHOLD_MS``.
+  Sheet: "Tap Reflex < 250 ms" 20 coins daily. The threshold is a fixed
+  backend constant, not an admin-tunable column -- re-using ``target`` as
+  a millisecond ceiling would invert the generic ``have >= target``
+  comparison every other kind relies on (lower reaction time is better),
+  so ``target`` here stays an ordinary count (how many qualifying runs
+  this period, normally 1).
 
 NOT shipped yet, deliberately left out of this enum rather than wired to a
-data source that does not exist:
-
-* "first game" / "Tap Reflex" -- blocked on G1 (no game-run data exists).
+data source that does not exist: the social-post kinds (B18 -- needs
+submissions + a review queue).
 
 Claims live in ``challenge_claims`` (one row per user per challenge per
 period; the UNIQUE constraint is the idempotent-claim guard, the same
@@ -42,6 +53,13 @@ class ChallengeKind(StrEnum):
     TEAM_CHOICE = "team_choice"
     DISTINCT_FLAVORS = "distinct_flavors"
     DAILY_CHECKIN = "daily_checkin"
+    FIRST_MINI_GAME = "first_mini_game"
+    TAP_REFLEX_FAST = "tap_reflex_fast"
+
+
+# Fixed, not admin-tunable (see ``TAP_REFLEX_FAST`` above for why it is not
+# a ``challenges.target`` column instead).
+TAP_REFLEX_FAST_THRESHOLD_MS = 250
 
 
 class ChallengePeriod(StrEnum):

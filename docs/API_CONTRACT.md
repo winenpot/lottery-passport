@@ -17,6 +17,16 @@ Parked features (not in the MVP contract): the city passport. See
 Newest first. **Breaking** means a call that worked before needs a change on your side.
 Check `GET /health` → `commit` to see which backend commit is deployed on the demo.
 
+**2026-10-21 (W12: two new challenge kinds)**
+
+- Added: challenge kinds `first_mini_game` (once: ever finished an ACCEPTED
+  `mini_game_runs` row, any mini-game id) and `tap_reflex_fast` (period: an ACCEPTED
+  `tap_reflex` run under a fixed 250 ms average-reaction threshold). Both read
+  `mini_game_runs` directly, same no-passive-tracking principle as `distinct_flavors`
+  — see [Challenges and submissions](#challenges-and-submissions). No new copy from
+  Arman yet: until his titles merge, the frontend shows `چالش جدید` with claim
+  disabled for these two kinds, same as any unknown-copy kind.
+
 **2026-10-21 (user stats endpoint)**
 
 - Added: `GET /me/stats` (B48) -- `scans_total`, `flavors_discovered`,
@@ -54,9 +64,10 @@ Check `GET /health` → `commit` to see which backend commit is deployed on the 
   not exist.
 - Moved: [Achievements](#achievements) now comes after the challenge submissions it used
   to split in two.
-- Planned, not live: challenge kinds `first_mini_game` and `tap_reflex_fast` (B43),
-  `GET /api/v1/achievements` with locked rows and progress (B44), avatar images uploaded
-  in `/admin` and served at `/media/<sha256>.<ext>` (B45).
+- Planned, not live: `GET /api/v1/achievements` with locked rows and progress (B44),
+  avatar images uploaded in `/admin` and served at `/media/<sha256>.<ext>` (B45).
+  Challenge kinds `first_mini_game` and `tap_reflex_fast` (B43) shipped same-day — see
+  the entry above.
 
 **2026-10-20 (LG1': terms and privacy page)**
 
@@ -1086,6 +1097,14 @@ closed set this backend knows how to check progress for:
   if today has not been claimed yet, so it does not look broken before the player has
   had a chance). Supersedes the sheet's "5-day login"/"5-day activity" items — see
   `docs/vault/Decisions.md` 2026-10-15.
+- `first_mini_game` (W12): `have` is 1 once the player has ever finished an ACCEPTED
+  `mini_game_runs` row, any mini-game id. `target` is a count like `distinct_flavors`
+  (normally 1), not a game id; `period` is `once`.
+- `tap_reflex_fast` (W12): `have` counts ACCEPTED `tap_reflex` runs finished within the
+  current period with an average reaction time under a fixed 250 ms threshold
+  (`app.domain.challenges.TAP_REFLEX_FAST_THRESHOLD_MS` — a backend constant, not an
+  admin-tunable column; `target` stays an ordinary count, normally 1 per day). A
+  REJECTED run never counts regardless of speed — plausibility is checked before speed.
 
 `completed = have >= target`. `claimed` is whether this player already claimed this
 challenge for its current period — a completed-and-claimed row stays visible (so the UI

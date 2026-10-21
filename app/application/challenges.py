@@ -32,6 +32,7 @@ from app.application.unit_of_work import UnitOfWork, UnitOfWorkFactory
 from app.domain.achievements import AchievementFact
 from app.domain.challenges import (
     ONCE_PERIOD_KEY,
+    TAP_REFLEX_FAST_THRESHOLD_MS,
     Challenge,
     ChallengeClaimError,
     ChallengeClaimRefusal,
@@ -61,6 +62,12 @@ class ChallengesReader(Protocol):
     async def distinct_flavors_since(self, user_id: UUID, since: datetime) -> int: ...
 
     async def checkin_days(self, challenge_id: str, user_id: UUID) -> set[date]: ...
+
+    async def accepted_mini_game_runs_total(self, user_id: UUID) -> int: ...
+
+    async def fast_tap_reflex_runs_since(
+        self, user_id: UUID, since: datetime, max_average_ms: float
+    ) -> int: ...
 
     async def has_claimed(
         self, challenge_id: str, user_id: UUID, period_key: str
@@ -129,6 +136,13 @@ class ChallengeService:
             return 1 if await self._teams.current(user_id) is not None else 0
         if challenge.kind is ChallengeKind.DAILY_CHECKIN:
             return 1
+        if challenge.kind is ChallengeKind.FIRST_MINI_GAME:
+            return await self._reader.accepted_mini_game_runs_total(user_id)
+        if challenge.kind is ChallengeKind.TAP_REFLEX_FAST:
+            assert period_start is not None
+            return await self._reader.fast_tap_reflex_runs_since(
+                user_id, period_start, TAP_REFLEX_FAST_THRESHOLD_MS
+            )
         assert period_start is not None  # every other kind has a period start
         return await self._reader.distinct_flavors_since(user_id, period_start)
 
@@ -195,6 +209,13 @@ class ChallengeService:
             return 1 if await uow.teams.current(user_id) is not None else 0
         if challenge.kind is ChallengeKind.DAILY_CHECKIN:
             return 1
+        if challenge.kind is ChallengeKind.FIRST_MINI_GAME:
+            return await uow.challenges.accepted_mini_game_runs_total(user_id)
+        if challenge.kind is ChallengeKind.TAP_REFLEX_FAST:
+            assert period_start is not None
+            return await uow.challenges.fast_tap_reflex_runs_since(
+                user_id, period_start, TAP_REFLEX_FAST_THRESHOLD_MS
+            )
         assert period_start is not None
         return await uow.challenges.distinct_flavors_since(user_id, period_start)
 

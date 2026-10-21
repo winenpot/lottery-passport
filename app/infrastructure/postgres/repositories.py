@@ -24,6 +24,7 @@ from app.domain.avatars import Avatar
 from app.domain.challenges import Challenge, ChallengeKind, ChallengePeriod
 from app.domain.ledger import LedgerEntry, LedgerReason, Wallet
 from app.domain.legal import LegalDocument
+from app.domain.mini_games import MiniGameId, MiniGameRunStatus
 from app.domain.nickname import Nickname
 from app.domain.passports import Campaign, CityCode, PassportProgress
 from app.domain.teams import TeamMembership
@@ -558,6 +559,38 @@ async def distinct_flavors_count_since(
     return int(result or 0)
 
 
+async def accepted_mini_game_run_count(session: AsyncSession, user_id: UUID) -> int:
+    """Shared by ``SqlChallenges`` and ``PostgreSQLChallengesReader``:
+    lifetime count of this user's ACCEPTED ``mini_game_runs`` rows, any
+    mini-game id (``ChallengeKind.FIRST_MINI_GAME``)."""
+    result = await session.scalar(
+        select(func.count()).where(
+            MiniGameRunModel.user_id == user_id,
+            MiniGameRunModel.status == MiniGameRunStatus.ACCEPTED.value,
+        )
+    )
+    return int(result or 0)
+
+
+async def fast_tap_reflex_run_count_since(
+    session: AsyncSession, user_id: UUID, since: datetime, max_average_ms: float
+) -> int:
+    """Shared by ``SqlChallenges`` and ``PostgreSQLChallengesReader``: how
+    many of this user's ACCEPTED ``tap_reflex`` runs finished since
+    ``since`` with ``average_reaction_ms`` under ``max_average_ms``
+    (``ChallengeKind.TAP_REFLEX_FAST``)."""
+    result = await session.scalar(
+        select(func.count()).where(
+            MiniGameRunModel.user_id == user_id,
+            MiniGameRunModel.mini_game_id == MiniGameId.TAP_REFLEX.value,
+            MiniGameRunModel.status == MiniGameRunStatus.ACCEPTED.value,
+            MiniGameRunModel.finished_at >= since,
+            MiniGameRunModel.average_reaction_ms < max_average_ms,
+        )
+    )
+    return int(result or 0)
+
+
 async def challenge_already_claimed(
     session: AsyncSession, challenge_id: str, user_id: UUID, period_key: str
 ) -> bool:
@@ -611,6 +644,18 @@ class PostgreSQLChallengesReader:
     async def checkin_days(self, challenge_id: str, user_id: UUID) -> set[date]:
         async with self._factory() as session:
             return await checkin_dates(session, challenge_id, user_id)
+
+    async def accepted_mini_game_runs_total(self, user_id: UUID) -> int:
+        async with self._factory() as session:
+            return await accepted_mini_game_run_count(session, user_id)
+
+    async def fast_tap_reflex_runs_since(
+        self, user_id: UUID, since: datetime, max_average_ms: float
+    ) -> int:
+        async with self._factory() as session:
+            return await fast_tap_reflex_run_count_since(
+                session, user_id, since, max_average_ms
+            )
 
     async def has_claimed(
         self, challenge_id: str, user_id: UUID, period_key: str

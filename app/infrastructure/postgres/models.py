@@ -505,7 +505,8 @@ class ChallengeModel(Base):
             "reward_coins >= 0", name="ck_challenges_reward_coins_non_negative"
         ),
         CheckConstraint(
-            "kind IN ('team_choice', 'distinct_flavors', 'daily_checkin')",
+            "kind IN ('team_choice', 'distinct_flavors', 'daily_checkin', "
+            "'first_mini_game', 'tap_reflex_fast')",
             name="ck_challenges_kind",
         ),
         CheckConstraint(

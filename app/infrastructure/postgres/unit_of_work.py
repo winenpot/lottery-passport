@@ -62,12 +62,14 @@ from app.infrastructure.postgres.models import (
     WalletModel,
 )
 from app.infrastructure.postgres.repositories import (
+    accepted_mini_game_run_count,
     achievement_already_unlocked,
     challenge_already_claimed,
     checkin_dates,
     count_flavor_codes,
     current_team_membership,
     distinct_flavors_count_since,
+    fast_tap_reflex_run_count_since,
     get_challenge_by_id,
     get_challenge_by_kind,
     list_active_achievements_by_fact,
@@ -333,6 +335,16 @@ class SqlChallenges:
 
     async def checkin_days(self, challenge_id: str, user_id: UUID) -> set[date]:
         return await checkin_dates(self._session, challenge_id, user_id)
+
+    async def accepted_mini_game_runs_total(self, user_id: UUID) -> int:
+        return await accepted_mini_game_run_count(self._session, user_id)
+
+    async def fast_tap_reflex_runs_since(
+        self, user_id: UUID, since: datetime, max_average_ms: float
+    ) -> int:
+        return await fast_tap_reflex_run_count_since(
+            self._session, user_id, since, max_average_ms
+        )
 
     async def has_claimed(
         self, challenge_id: str, user_id: UUID, period_key: str

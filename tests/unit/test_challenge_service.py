@@ -38,6 +38,8 @@ class Store:
     wallets: dict[UUID, int] = field(default_factory=dict)
     team_memberships: list[TeamMembership] = field(default_factory=list)
     flavors_since: dict[UUID, int] = field(default_factory=dict)  # test-set progress
+    mini_game_runs_total: dict[UUID, int] = field(default_factory=dict)
+    fast_tap_reflex_since: dict[UUID, int] = field(default_factory=dict)
     claims: set[tuple[str, UUID, str]] = field(default_factory=set)
     challenges: dict[str, Challenge] = field(default_factory=dict)
     achievements: dict[str, Achievement] = field(default_factory=dict)
@@ -80,6 +82,14 @@ class FakeChallengesReader:
 
     async def checkin_days(self, challenge_id: str, user_id: UUID) -> set[date]:
         return _checkin_dates(self.store, challenge_id, user_id)
+
+    async def accepted_mini_game_runs_total(self, user_id: UUID) -> int:
+        return self.store.mini_game_runs_total.get(user_id, 0)
+
+    async def fast_tap_reflex_runs_since(
+        self, user_id: UUID, since: datetime, max_average_ms: float
+    ) -> int:
+        return self.store.fast_tap_reflex_since.get(user_id, 0)
 
     async def has_claimed(
         self, challenge_id: str, user_id: UUID, period_key: str
@@ -135,6 +145,14 @@ class FakeChallenges:
 
     async def checkin_days(self, challenge_id: str, user_id: UUID) -> set[date]:
         return _checkin_dates(self.store, challenge_id, user_id)
+
+    async def accepted_mini_game_runs_total(self, user_id: UUID) -> int:
+        return self.store.mini_game_runs_total.get(user_id, 0)
+
+    async def fast_tap_reflex_runs_since(
+        self, user_id: UUID, since: datetime, max_average_ms: float
+    ) -> int:
+        return self.store.fast_tap_reflex_since.get(user_id, 0)
 
     async def has_claimed(
         self, challenge_id: str, user_id: UUID, period_key: str
@@ -244,6 +262,28 @@ def daily_checkin_challenge(reward: int = 10) -> Challenge:
     return Challenge(
         id="daily_checkin",
         kind=ChallengeKind.DAILY_CHECKIN,
+        period=ChallengePeriod.DAY,
+        target=1,
+        reward_coins=reward,
+        active=True,
+    )
+
+
+def first_mini_game_challenge(reward: int = 20) -> Challenge:
+    return Challenge(
+        id="first_mini_game",
+        kind=ChallengeKind.FIRST_MINI_GAME,
+        period=ChallengePeriod.ONCE,
+        target=1,
+        reward_coins=reward,
+        active=True,
+    )
+
+
+def tap_reflex_fast_challenge(reward: int = 20) -> Challenge:
+    return Challenge(
+        id="tap_reflex_fast",
+        kind=ChallengeKind.TAP_REFLEX_FAST,
         period=ChallengePeriod.DAY,
         target=1,
         reward_coins=reward,
@@ -507,3 +547,58 @@ async def test_two_milestones_crossed_in_one_claim_both_unlock() -> None:
     assert result.streak == 2
     assert {u.id for u in result.achievements_unlocked} == {"streak_1", "streak_2"}
     assert result.coin_balance == 10 + 5 + 15
+
+
+async def test_first_mini_game_is_locked_until_an_accepted_run_exists() -> None:
+    user = uuid4()
+    store = Store(challenges={"first_mini_game": first_mini_game_challenge()})
+    service, _ = build(store)
+
+    progress = await service.list(user)
+    assert (progress[0].have, progress[0].completed) == (0, False)
+
+    with pytest.raises(ChallengeClaimError) as caught:
+        await service.claim(user, "first_mini_game")
+    assert caught.value.reason is ChallengeClaimRefusal.NOT_UNLOCKED
+
+
+async def test_first_mini_game_pays_once_an_accepted_run_exists() -> None:
+    user = uuid4()
+    store = Store(
+        challenges={"first_mini_game": first_mini_game_challenge(reward=20)},
+        mini_game_runs_total={user: 1},  # one ACCEPTED run, any mini-game id
+    )
+    service, store = build(store)
+
+    result = await service.claim(user, "first_mini_game")
+
+    assert (result.coins_awarded, result.coin_balance) == (20, 20)
+    # Once-per-player (period ONCE): a second claim is refused even if more
+    # runs pile up afterwards.
+    with pytest.raises(ChallengeClaimError) as caught:
+        await service.claim(user, "first_mini_game")
+    assert caught.value.reason is ChallengeClaimRefusal.ALREADY_CLAIMED
+
+
+async def test_tap_reflex_fast_pays_only_for_a_qualifying_run_today() -> None:
+    """The domain plausibility/threshold check itself lives in
+    app/domain/mini_games.py and is tested there; this is the engine's
+    read of the resulting count, same shape as ``distinct_flavors_since``."""
+    user = uuid4()
+    store = Store(challenges={"tap_reflex_fast": tap_reflex_fast_challenge()})
+    service, _ = build(store)
+
+    # No ACCEPTED run under the threshold yet (e.g. only a slow or a
+    # REJECTED run today): not unlocked.
+    with pytest.raises(ChallengeClaimError) as caught:
+        await service.claim(user, "tap_reflex_fast")
+    assert caught.value.reason is ChallengeClaimRefusal.NOT_UNLOCKED
+
+    # One ACCEPTED run under the threshold today: claimable, pays once.
+    store.fast_tap_reflex_since[user] = 1
+    result = await service.claim(user, "tap_reflex_fast")
+    assert (result.coins_awarded, result.coin_balance) == (20, 20)
+
+    with pytest.raises(ChallengeClaimError) as caught:
+        await service.claim(user, "tap_reflex_fast")
+    assert caught.value.reason is ChallengeClaimRefusal.ALREADY_CLAIMED

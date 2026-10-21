@@ -7,6 +7,15 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ### Added
 
+- Two challenge kinds (W12, B43): `first_mini_game` (once, any ACCEPTED
+  `mini_game_runs` row) and `tap_reflex_fast` (period, an ACCEPTED
+  `tap_reflex` run under a fixed 250 ms threshold --
+  `app.domain.challenges.TAP_REFLEX_FAST_THRESHOLD_MS`). No new table --
+  progress reads `mini_game_runs` directly, same principle as
+  `distinct_flavors`. `challenges.kind`'s CHECK widened additively
+  (migration 0021). Frontend copy for both still pending from Arman; until
+  it merges they render as "چالش جدید" with claim disabled, like any other
+  unknown-copy kind.
 - `GET /me/stats` (B48): `scans_total`, `flavors_discovered`,
   `challenges_completed`, `achievements_unlocked`, `checkin_streak_days`,
   `mini_game_runs_accepted`, `mini_game_best_reaction_ms`. Not a SQL view --

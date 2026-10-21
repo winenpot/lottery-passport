@@ -167,6 +167,19 @@ class ChallengesInTransaction(Protocol):
         computed from (``app.domain.periods.current_streak``)."""
         ...
 
+    async def accepted_mini_game_runs_total(self, user_id: UUID) -> int:
+        """Lifetime count of this user's ACCEPTED ``mini_game_runs`` rows,
+        any mini-game id (``FIRST_MINI_GAME``)."""
+        ...
+
+    async def fast_tap_reflex_runs_since(
+        self, user_id: UUID, since: datetime, max_average_ms: float
+    ) -> int:
+        """Count of this user's ACCEPTED ``tap_reflex`` runs finished since
+        ``since`` with ``average_reaction_ms < max_average_ms``
+        (``TAP_REFLEX_FAST``)."""
+        ...
+
     async def has_claimed(
         self, challenge_id: str, user_id: UUID, period_key: str
     ) -> bool: ...
