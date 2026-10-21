@@ -17,6 +17,15 @@ Parked features (not in the MVP contract): the city passport. See
 Newest first. **Breaking** means a call that worked before needs a change on your side.
 Check `GET /health` → `commit` to see which backend commit is deployed on the demo.
 
+**2026-10-21 (reserved display names)**
+
+- Added: `PATCH /me display_name` now rejects staff/brand/trademarked names
+  (`DISPLAY_NAME_RESERVED`, 422), the same reserved list `nickname` already
+  enforces, folded to ignore spaces/punctuation since `display_name` has no
+  charset restriction of its own. `nickname` already rejected these outright
+  (its charset has no space), so this only closes the gap on the legacy
+  field.
+
 **2026-10-21 (doc truth pass, no code change)**
 
 - Removed: the planned "Invites" section (`GET /me/invite`, `POST /me/invite/redeem`,
@@ -324,6 +333,7 @@ and the id in our logs: put it in bug reports.
 | `PROFILE_INCOMPLETE` | 403 | Nickname not set yet | Go to profile setup |
 | `NICKNAME_INVALID` | 422 | Length or characters not allowed | Show the rule |
 | `NICKNAME_TAKEN` | 409 | Someone else has it | Suggest another |
+| `DISPLAY_NAME_RESERVED` | 422 | `PATCH /me display_name` (the legacy field; `nickname` already rejects these by charset) collapses to a reserved key — staff, brand or trademarked names | Show "this name is reserved" |
 | `CATALOGUE_UNKNOWN` | 422 | Unknown avatar, favourite game, game, reward or venue id | Reload `/config` |
 | `AVATAR_LOCKED` | 422 | `PATCH /me avatar_id` picked a locked avatar | Pick an unlocked one |
 | `FLAVOR_NOT_UNLOCKED` | 409 | `POST /me/team` picked a flavor with under 5 lifetime codes (`error.details.required`/`have`) | Show "N more to unlock" |

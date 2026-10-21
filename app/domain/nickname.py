@@ -13,10 +13,25 @@ NICKNAME_MAX_LENGTH = 16
 
 ZWNJ = "\u200c"
 
-# Names players may not take (compared on the folded key). Staff, brand and
-# lounge names are added here; the profanity list is maintained by the owner.
+# Names players may not take (compared on the folded key). Staff, brand,
+# lounge and trademarked/franchise names are added here; the owner maintains
+# this list (a set, so a repeated addition is still just one entry). Used two
+# ways: `parse_nickname` below checks the exact folded key (nicknames never
+# contain spaces, so write multi-word entries only for `is_reserved_name`'s
+# benefit); `is_reserved_name` checks the collapsed (whitespace/punctuation
+# stripped) form, for free-text fields such as `display_name` that have no
+# charset restriction of their own.
 RESERVED_KEYS = frozenset(
-    {"admin", "administrator", "support", "staff", "system", "moderator", "torshx"}
+    {
+        "admin",
+        "administrator",
+        "support",
+        "staff",
+        "system",
+        "moderator",
+        "torshx",
+        "lich king",  # trademarked (World of Warcraft); collapses to "lichking"
+    }
 )
 
 _PERSIAN_LETTER_RANGES = (
@@ -72,6 +87,26 @@ def parse_nickname(raw: str) -> Nickname:
     if value.startswith(ZWNJ) or value.endswith(ZWNJ) or ZWNJ * 2 in value:
         raise NicknameError("misplaced zero-width non-joiner")
     key = value.casefold().translate(_FOLD)
-    if key in RESERVED_KEYS:
+    if key in RESERVED_KEYS or is_reserved_name(value):
         raise NicknameError("this name is reserved")
     return Nickname(display=value, key=key)
+
+
+def _collapse(text: str) -> str:
+    """Case/variant-folded, alphanumeric-only: letters only, no spaces,
+    punctuation or Persian digits (already ASCII-folded by ``_FOLD``)."""
+    folded = unicodedata.normalize("NFC", text).casefold().translate(_FOLD)
+    return "".join(char for char in folded if char.isalnum())
+
+
+_RESERVED_COLLAPSED = frozenset(_collapse(key) for key in RESERVED_KEYS)
+
+
+def is_reserved_name(raw: str) -> bool:
+    """``True`` if ``raw`` collapses to a reserved key.
+
+    Looser than the nickname charset: for free-text fields such as
+    ``display_name`` that allow spaces and punctuation the nickname rules
+    reject outright, so "Lich King", "lich_king" and "LichKing" all match.
+    """
+    return _collapse(raw) in _RESERVED_COLLAPSED

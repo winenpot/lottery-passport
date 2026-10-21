@@ -9,6 +9,7 @@ from app.application.authentication import (
     AuthenticationService,
     AuthenticationSettings,
     DailyLimitError,
+    DisplayNameReserved,
     PhoneInvalidError,
     PhoneUnusualError,
     ResendCooldownError,
@@ -425,3 +426,28 @@ async def test_first_request_sends_the_signup_purpose_later_ones_login() -> None
     clock.current += timedelta(seconds=1)
     await service.request_challenge(PHONE)
     assert sms.purpose == "login"
+
+
+@pytest.mark.asyncio
+async def test_reserved_display_names_are_rejected_unlike_the_old_demo_field() -> None:
+    # display_name has no charset restriction of its own (legacy field), so
+    # without this check "Lich King" -- which the nickname rules already
+    # reject outright, charset and reserved list both -- would slip through.
+    service, _, _, users = build_service()
+    user = await users.create(PHONE, datetime(2026, 1, 1, tzinfo=UTC))
+
+    with pytest.raises(DisplayNameReserved):
+        await service.update_display_name(user.id, "Lich King")
+
+    unchanged = await users.get_by_id(user.id)
+    assert unchanged is not None and unchanged.display_name is None
+
+
+@pytest.mark.asyncio
+async def test_a_non_reserved_display_name_is_still_accepted() -> None:
+    service, _, _, users = build_service()
+    user = await users.create(PHONE, datetime(2026, 1, 1, tzinfo=UTC))
+
+    updated = await service.update_display_name(user.id, "Phase Two")
+
+    assert updated.display_name == "Phase Two"

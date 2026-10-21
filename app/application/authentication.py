@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 
 from app.application.otp_test_numbers import is_test_phone_number
 from app.domain.authentication import AuthenticatedSession, AuthenticationChallenge
+from app.domain.nickname import is_reserved_name
 from app.domain.phone import (
     PhoneNumberError,
     has_known_mobile_prefix,
@@ -36,6 +37,16 @@ class ResendCooldownError(AuthenticationError):
 
 class DailyLimitError(AuthenticationError):
     """Too many codes requested for this number in the last 24 hours."""
+
+
+class DisplayNameReserved(AuthenticationError):
+    """``display_name`` collapses to a reserved key (brand/staff/profanity).
+
+    ``display_name`` has no charset restriction (legacy field, see
+    docs/API_CONTRACT.md "Demo to contract migration"), so it needs its own
+    reserved-name check; `nickname` already rejects these through
+    `app.domain.nickname.parse_nickname`.
+    """
 
 
 class PhoneNotAllowedError(AuthenticationError):
@@ -423,6 +434,8 @@ class AuthenticationService:
     async def update_display_name(
         self, user_id: UUID, display_name: str | None
     ) -> User:
+        if display_name is not None and is_reserved_name(display_name):
+            raise DisplayNameReserved(display_name)
         user = await self._users.update_display_name(
             user_id, display_name, self._clock.now()
         )

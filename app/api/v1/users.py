@@ -18,7 +18,7 @@ from app.api.v1.schemas import (
     UserResponse,
     UserUpdate,
 )
-from app.application.authentication import AuthenticationService
+from app.application.authentication import AuthenticationService, DisplayNameReserved
 from app.application.me import MeService
 from app.application.passports import PassportService
 from app.application.profile import (
@@ -109,9 +109,9 @@ async def get_me(
         422: {
             "model": ErrorResponse,
             "description": (
-                "NICKNAME_INVALID, TERMS_VERSION_INVALID, CATALOGUE_UNKNOWN, "
-                "AVATAR_LOCKED, REFERRAL_CODE_UNKNOWN, REFERRAL_SELF or "
-                "REFERRAL_CODE_TOO_LATE"
+                "NICKNAME_INVALID, DISPLAY_NAME_RESERVED, TERMS_VERSION_INVALID, "
+                "CATALOGUE_UNKNOWN, AVATAR_LOCKED, REFERRAL_CODE_UNKNOWN, "
+                "REFERRAL_SELF or REFERRAL_CODE_TOO_LATE"
             ),
         },
     },
@@ -156,9 +156,14 @@ async def update_me(
     except AvatarLocked as error:
         raise ApiError(422, "AVATAR_LOCKED", "this avatar is locked") from error
     if "display_name" in sent:
-        user = await auth_service.update_display_name(
-            current_user.id, payload.display_name
-        )
+        try:
+            user = await auth_service.update_display_name(
+                current_user.id, payload.display_name
+            )
+        except DisplayNameReserved as error:
+            raise ApiError(
+                422, "DISPLAY_NAME_RESERVED", "this name is reserved"
+            ) from error
     if "referrer_code" in sent and payload.referrer_code is not None:
         try:
             await referral_service.bind(current_user.id, payload.referrer_code)

@@ -30,7 +30,12 @@ from app.application.profile import (
 from app.core.config import Settings
 from app.domain.avatars import Avatar
 from app.domain.calendar import campaign_period
-from app.domain.nickname import Nickname, NicknameError, parse_nickname
+from app.domain.nickname import (
+    Nickname,
+    NicknameError,
+    is_reserved_name,
+    parse_nickname,
+)
 from app.domain.users import AccountStatus, User, UserRole, VerificationStatus
 from app.domain.venues import Venue
 
@@ -85,6 +90,19 @@ def test_whitespace_is_trimmed_and_nfc_normalised() -> None:
     decomposed = "e\u0301le"  # e + combining acute: not whitelisted either way
     with pytest.raises(NicknameError):
         parse_nickname(decomposed)
+
+
+@pytest.mark.parametrize(
+    "raw",
+    ["Lich King", "lich_king", "LichKing", "lich-king", "LICH KING"],
+)
+def test_reserved_names_are_blocked_regardless_of_spacing(raw: str) -> None:
+    assert is_reserved_name(raw)
+
+
+@pytest.mark.parametrize("raw", ["NightOwl", "Lich", "King", "Lichking2"])
+def test_non_reserved_names_are_not_blocked(raw: str) -> None:
+    assert not is_reserved_name(raw)
 
 
 # --- calendar -------------------------------------------------------------

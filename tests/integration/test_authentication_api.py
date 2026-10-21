@@ -54,6 +54,16 @@ async def test_passwordless_authentication_api(test_database_url: str) -> None:
         assert update_response.status_code == 200
         assert update_response.json()["display_name"] == "Phase Two"
 
+        # display_name has no charset restriction of its own, unlike nickname
+        # (which the nickname rules would reject outright); the reserved-name
+        # check is what stops "Lich King" here.
+        reserved_response = client.patch(
+            "/api/v1/me", json={"display_name": "Lich King"}
+        )
+        assert reserved_response.status_code == 422
+        assert reserved_response.json()["error"]["code"] == "DISPLAY_NAME_RESERVED"
+        assert client.get("/api/v1/me").json()["display_name"] == "Phase Two"
+
         logout_response = client.post("/api/v1/auth/logout")
         assert logout_response.status_code == 204
         assert client.get("/api/v1/me").status_code == 401

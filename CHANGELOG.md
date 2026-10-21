@@ -7,6 +7,17 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ### Added
 
+- Reserved-name check on `PATCH /me display_name` (`DISPLAY_NAME_RESERVED`, 422): the
+  legacy `display_name` field has no charset restriction of its own, so unlike
+  `nickname` it let staff/brand/trademarked names like "Lich King" through with no
+  reserved-word check and no uniqueness check. `app.domain.nickname.is_reserved_name`
+  folds case/variants and strips whitespace/punctuation before comparing against the
+  same `RESERVED_KEYS` list `nickname` uses, so "Lich King", "lich_king" and "LichKing"
+  all match. `display_name` itself still has no uniqueness constraint (unlike
+  `nickname`'s `uq_users_nickname_key`) — it was never meant to be unique and the
+  contract is moving callers off it (`docs/API_CONTRACT.md` "Demo to contract
+  migration").
+
 - Referrals (RF1): invite a friend, earn coins through the existing ledger when
   their mission completes (a redeemed code, finished profile, chosen team, one
   accepted mini-game run). `PATCH /me referrer_code` (one-time bind, before any
