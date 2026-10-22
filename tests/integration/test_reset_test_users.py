@@ -11,12 +11,13 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import insert, select, update
+from sqlalchemy import delete, insert, select, update
 
 from app.core.config import Settings
 from app.domain.passports import CityCode
 from app.infrastructure.postgres.database import PostgreSQLAdapter
 from app.infrastructure.postgres.models import (
+    AuditLogModel,
     CoinLedgerEntryModel,
     RedemptionCodeModel,
     UserModel,
@@ -38,6 +39,28 @@ async def database(test_database_url: str) -> AsyncIterator[PostgreSQLAdapter]:
         yield adapter
     finally:
         await adapter.dispose()
+
+
+@pytest.fixture(autouse=True)
+async def _isolated_reset_state(database: PostgreSQLAdapter) -> None:
+    """Scrub exactly the state ``check_safe_to_reset`` looks at.
+
+    The integration suite shares one real Postgres instance across every
+    module in a CI run, with no per-module cleanup (none of the other
+    integration tests isolate themselves either). ``check_safe_to_reset``
+    is unlike every other test in this suite: it reads GLOBAL counts
+    (any redeemed code, any ledger/wallet/audit row), not rows scoped to
+    one test's own data. Without this, a code redeemed by an unrelated
+    module (for example ``test_redemption_flow.py``) makes every
+    refusal test in this file observe the wrong count and fail on the
+    "already redeemed" branch instead of the one it is asserting on.
+    """
+    async with database.session_factory() as session:
+        await session.execute(update(RedemptionCodeModel).values(redeemed_at=None))
+        await session.execute(delete(CoinLedgerEntryModel))
+        await session.execute(delete(WalletModel))
+        await session.execute(delete(AuditLogModel))
+        await session.commit()
 
 
 async def make_user(database: PostgreSQLAdapter, last4: str) -> str:
