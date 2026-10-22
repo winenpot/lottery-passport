@@ -95,7 +95,7 @@ async def test_refuses_when_a_code_is_already_redeemed(
     database: PostgreSQLAdapter, tmp_path: Path
 ) -> None:
     await make_user(database, "9098")
-    await generate_batch(
+    batch_id = await generate_batch(
         database.session_factory,
         city=CityCode.PARIS,
         quantity=1,
@@ -106,8 +106,13 @@ async def test_refuses_when_a_code_is_already_redeemed(
         pepper=PEPPER,
     )
     async with database.session_factory() as session:
+        # Scoped to this test's own batch: an unscoped UPDATE here would mark
+        # every redemption_codes row in the shared CI database as redeemed,
+        # corrupting every other integration test that runs in the same job.
         await session.execute(
-            update(RedemptionCodeModel).values(redeemed_at=datetime.now(UTC))
+            update(RedemptionCodeModel)
+            .where(RedemptionCodeModel.batch_id == batch_id)
+            .values(redeemed_at=datetime.now(UTC))
         )
         await session.commit()
 
