@@ -253,9 +253,12 @@ The script refuses a non-`api` build or an existing release id, copies only `ind
 strictly needed: Compose mounts the parent directory `<base>/web`, so nginx resolves
 `current` on every request. Check afterwards: `index.html` sha256 equals the artifact's, an
 unknown `/assets/x.js` answers 404 (not HTML), `/scan` answers the app, `/health` is the API.
-Releases in use: staging `7048b88-20261020` (20 Oct evening), production
-`f780f84-20261022` (22 Oct 09:32 UTC: Arman's accepted PR15 build, artifact
-12412282587; previous `fa97809-20261019`). There is no automatic frontend CD yet.
+Releases in use: staging `29ad3f0-20261022` and production `29ad3f0-20261022`
+(22 Oct 11:38 UTC: Arman's PR #17 merge commit `29ad3f0`, "Add game result
+actions and exact Home challenge navigation", artifact 12421845936, 457/457
+files digest-verified against `metadata.json`; previous was staging
+`4e8f3fe-20261020` / production `f780f84-20261022`, PR15). There is no
+automatic frontend CD yet on atpg (production never has one, by design).
 
 ## Code batches in production
 
