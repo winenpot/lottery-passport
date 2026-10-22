@@ -37,6 +37,13 @@ On staging and production the app refuses to start if `CORS_ORIGINS` contains `*
 
 Staging and production never share a database, secrets or a pepper. Codes generated on staging can never work in production.
 
+**Admin session length (2026-10-22)**: production sets `ADMIN_SESSION_MAX_AGE_SECONDS=14400`
+(4h) in `.env`, up from the 1h default (`app/core/config.py`, capped at 8h). Deliberately far
+short of the player session (`auth_session_ttl_seconds`, 30 days): `/admin` can move real coin
+balances (`admin_adjustment` ledger entries), so a leaked admin cookie should go stale fast.
+Applying a change here needs `compose.sh up -d --no-deps --force-recreate api` (the value is
+read at process start, a reload is not enough).
+
 ## How a change reaches a server
 
 ```text
