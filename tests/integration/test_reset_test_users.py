@@ -128,17 +128,22 @@ async def database(_scratch_database_url: str) -> AsyncIterator[PostgreSQLAdapte
 async def _reset_between_tests(database: PostgreSQLAdapter) -> None:
     """Clear only what's safe to clear between tests in this module.
 
-    ``wallets`` and ``redemption_codes.redeemed_at`` have no append-only
-    trigger, so each test starts from a known-empty state regardless of
-    execution order. ``coin_ledger_entries``/``audit_log`` are never
-    touched here -- they cannot be, by design -- so the two tests that
-    write to them (wallet test, then ledger test) rely on running in that
-    order, which is this file's normal top-to-bottom order; no test
-    reorder plugin is installed in this project.
+    ``users``/``wallets``/``redemption_codes.redeemed_at`` have no
+    append-only trigger, so each test starts from a known-empty state
+    regardless of execution order (deleting users first would violate the
+    RESTRICT foreign key from wallets/coin_ledger_entries/audit_log, so
+    wallets are cleared first). ``coin_ledger_entries``/``audit_log`` are
+    never touched here -- they cannot be, by design -- so the two tests
+    that write to them (wallet test, then ledger test) rely on running in
+    that order, which is this file's normal top-to-bottom order and the
+    last two tests in it, so no later test in this module needs users
+    deleted out from under a still-standing ledger entry; no test reorder
+    plugin is installed in this project.
     """
     async with database.session_factory() as session:
         await session.execute(update(RedemptionCodeModel).values(redeemed_at=None))
         await session.execute(delete(WalletModel))
+        await session.execute(delete(UserModel))
         await session.commit()
 
 
