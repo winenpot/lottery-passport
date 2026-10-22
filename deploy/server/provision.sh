@@ -116,6 +116,19 @@ JSON
     ssh_port="$(sshd -T 2>/dev/null | awk '$1 == "port" {print $2; exit}')"
     # Never guess: a wrong port here locks everyone out.
     [[ "$ssh_port" =~ ^[0-9]+$ ]] || die "cannot read the SSH port from sshd -T"
+    # sshd_config alone is not enough: Ubuntu >= 22.10 binds the port through
+    # ssh.socket, which ignores sshd_config's Port. A reboot without this falls
+    # back to 22 while the firewall and sshd_config still say $ssh_port, and
+    # locks everyone out (lottery-passport prod, 2026-10-22). Pin it here too.
+    if systemctl list-unit-files ssh.socket >/dev/null 2>&1; then
+        install -d /etc/systemd/system/ssh.socket.d
+        printf '[Socket]\nListenStream=\nListenStream=%s\n' "$ssh_port" \
+            >/etc/systemd/system/ssh.socket.d/port.conf
+        systemctl daemon-reload
+        systemctl restart ssh.socket
+        systemctl show ssh.socket -p Listen --value | grep -q ":$ssh_port " ||
+            die "ssh.socket did not come up on $ssh_port; check manually before closing this session"
+    fi
     ufw default deny incoming >/dev/null
     ufw default allow outgoing >/dev/null
     ufw allow "$ssh_port/tcp" >/dev/null

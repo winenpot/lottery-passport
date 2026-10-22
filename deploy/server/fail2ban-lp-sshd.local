@@ -1,0 +1,28 @@
+# fail2ban jail for the production SSH port (installed 2026-10-22).
+# Copy to /etc/fail2ban/jail.d/lp-sshd.local, then: systemctl restart fail2ban
+#
+# Why: ~60,000 password guesses a day hit port 2222 from bots (root, ubuntu,
+# admin, ...). Bans live in fail2ban's own nftables table, so they never touch
+# ufw's rules or the DOCKER-USER chain lp-firewall.service manages.
+#
+# Check:   sudo fail2ban-client status sshd
+# Unban:   sudo fail2ban-client set sshd unbanip <ip>
+
+[DEFAULT]
+banaction = nftables-multiport
+banaction_allports = nftables-allports
+backend = systemd
+# Repeat offenders get longer bans: 1 h, 2 h, 4 h ... capped at 1 week.
+bantime = 1h
+bantime.increment = true
+bantime.maxtime = 1w
+findtime = 10m
+# Loopback and the staging server (atpg). Add an office IP here if it is
+# static; home IPs change, so do not rely on them.
+ignoreip = 127.0.0.1/8 ::1 194.62.17.124
+
+[sshd]
+enabled = true
+port = 2222
+mode = aggressive
+maxretry = 5

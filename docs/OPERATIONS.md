@@ -92,6 +92,29 @@ whenever Docker starts) rebuilds a chain `LP-ORIGIN` under `DOCKER-USER`: the pu
 (`deploy/nginx/update_arvan_ips.sh`), commit, and the next deploy plus
 `sudo systemctl restart lp-firewall` apply it.
 
+**SSH: keys only, plus fail2ban.** Production's SSH port (2222) is open to the internet and
+bots guess passwords on it all day (about 61,700 tries between 18 and 21 Oct, mostly one
+address; usernames root/ubuntu/admin, never a success). Since 2026-10-22 production runs
+`harden_ssh`'s `10-lp-hardening.conf` (no passwords, no root login; `torshx`'s password only
+works at the VMware console) and fail2ban with
+[`deploy/server/fail2ban-lp-sshd.local`](../deploy/server/fail2ban-lp-sshd.local)
+(5 failures in 10 minutes = 1 hour ban, doubling for repeat offenders; bans in its own
+nftables table, so ufw and `LP-ORIGIN` are untouched). Install on a new VM:
+`sudo apt-get install -y fail2ban`, copy the file to `/etc/fail2ban/jail.d/lp-sshd.local`,
+`sudo systemctl restart fail2ban`. New people get access by adding their PUBLIC key to
+`~torshx/.ssh/authorized_keys`, never by a shared password. Audit on 2026-10-22: every
+accepted login since the VM was built came from the owner's addresses; no extra keys, accounts,
+units, cron jobs or modified package files (`dpkg --verify`).
+
+**Before any reboot or SSH/firewall change** (incident 2026-10-22: a kernel-update reboot came
+back without SSH on 2222 and needed the provider's console): (1) confirm the console path works
+(provider panel / VMware console and the `torshx` password); (2) `scripts.server_check` must show
+`ssh-boot` PASS: Ubuntu's socket-activated SSH listens where `ssh.socket` says, not where a hand
+edit or a running sshd says. The port lives in `/etc/systemd/system/ssh.socket.d/port.conf`
+(`[Socket]`, `ListenStream=`, `ListenStream=2222`), then `systemctl daemon-reload && systemctl
+restart ssh.socket`; (3) keep a second SSH session open; (4) after the reboot, probe sparingly:
+fail2ban counts failed connects.
+
 Check that Ubuntu's clock is synchronized (`timedatectl`). If international NTP servers are
 unreachable, configure the domestic NTP servers your provider documents.
 
@@ -364,6 +387,13 @@ Live: `app/infrastructure/sms.py` -- `KavenegarSmsSender` calls Kavenegar's
 **What**: PostgreSQL only (everything important is in it). Code and configuration are in git and the password manager.
 **How**: [`backup.sh`](../deploy/backup.sh) every 6 hours: `pg_dump` to a local file, verify it with `pg_restore --list`, upload to an encrypted **restic** repository on another provider's object storage, prune old snapshots once a day, ping a heartbeat monitor.
 **Current state (2026-10-21)**: running on production (`torshx`), but `RESTIC_REPOSITORY` points at a **local path** (`/var/backups/lottery-passport-restic`), not off-site object storage — no account/credentials exist yet. This proves the dump/verify/prune/restore pipeline end-to-end but does **not** protect against losing the VM itself. Swap `RESTIC_REPOSITORY` to an `s3:...` URL + fill the AWS keys in `backup.env`, then `restic init` again against the new repository, once an off-site account exists.
+**Interim off-site copy (2026-10-22)**: an office PC pulls a dump over SSH with
+[`scripts/backup_pull.py`](../scripts/backup_pull.py) (`uv run python -m scripts.backup_pull --target lp-prod --dest D:/lp-backups`,
+Task Scheduler every 6 hours), then proves THAT local file restores: it is streamed back into a throwaway, network-less
+`postgres:16-bookworm` container on the server (`--verify remote`, default) or restored by Docker on the PC (`--verify local`),
+with row counts and the wallet-equals-ledger check. Keeps every dump for 7 days, then one per day for 60. First run
+2026-10-21T22:52Z: 499 KB pulled in 2.3 s, restore check 6.0 s, 6 users / 7 batches / 7,000 codes, 0 wallet mismatches.
+The dumps hold phone numbers: encrypted disk only.
 **Targets**: RPO 6 hours; RTO 2 hours (new VM + restore + deploy), proven by the drill.
 
 ```bash
@@ -439,6 +469,17 @@ or refuse Iranian traffic.
 ## Daily checks
 
 Five minutes, every morning during the campaign (and after any incident):
+
+From a laptop, one read-only command first (`ssh -o BatchMode=yes`, key only; it never
+writes and prints no secrets): containers, `/health` + `/ready` inside and outside,
+deployed commit, alembic revision, batches by status, user/code/catalogue counts, terms
+versions, timers, TLS expiry, last backup log lines, errors in the last hour. Exits 1 on
+any FAIL.
+
+```bash
+uv run python -m scripts.server_check --target <ssh alias or user@host> [-p <port>] \
+    [--base /opt/lottery-passport] [--public-url https://play.torshx.com]
+```
 
 ```sql
 -- 1. Wallets equal their ledger (expect 0 rows)
