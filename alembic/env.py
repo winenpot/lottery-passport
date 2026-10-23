@@ -1,4 +1,6 @@
+import sys
 from logging.config import fileConfig
+from urllib.parse import urlparse
 
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
@@ -10,8 +12,26 @@ from app.infrastructure.postgres.database import is_pgbouncer_url
 from app.infrastructure.postgres.models import Base
 
 config = context.config
-database_url = get_settings().database_url
+
+# `-x db_url=...` lets you point a one-off migration run at a different
+# database than Settings.database_url (e.g. a throwaway/scratch database for
+# a test), without needing a second .env. Before this, the flag was silently
+# ignored and alembic always used Settings.database_url -- on 2026-10-22 that
+# ran real migrations against a stale remote database a local .env still
+# pointed at, with no warning. `database_url` below is also used by
+# run_async_migrations() for the PgBouncer check, so both paths agree.
+x_args = context.get_x_argument(as_dictionary=True)
+database_url = x_args.get("db_url") or get_settings().database_url
 config.set_main_option("sqlalchemy.url", database_url)
+
+# Always visible, not just when -x is used: whoever runs a migration should
+# see the exact host/database before it happens. Never the credentials.
+_parsed = urlparse(database_url)
+print(
+    f"alembic: migrating {_parsed.hostname}:{_parsed.port or '-'}{_parsed.path} "
+    f"({'from -x db_url' if 'db_url' in x_args else 'from Settings.database_url'})",
+    file=sys.stderr,
+)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
