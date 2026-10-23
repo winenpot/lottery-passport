@@ -177,3 +177,38 @@ Run on D12 (B25) and before every major release.
       budget/alarm set with the provider
 - [ ] `TERMS_REQUIRED` unset or `true` in production (the app refuses `false` there), and the
       real terms/privacy text is published at the URLs the frontend shows
+
+### Run of 23 Oct 2026 (production, play.torshx.com)
+
+The boxes above stay a reusable template; this is one dated run against it. ✅ verified
+today, ◐ partly, ❌ open, – not checked.
+
+- ✅ `/docs`, `/redoc`, `/openapi.json` → 404; `ENVIRONMENT=production`.
+- ◐ Pepper ≥ 32 chars (the app enforces it at startup); second copy exists but only on
+  the owner's laptop (DPAPI), not yet with a second holder; `.env` mode 600 owned by the
+  deploy user `torshx` (not root: the deploy agent reads it).
+- ✅ HSTS, HTTP→HTTPS 301 at ArvanCloud. – TLS versions at the edge not checked.
+  ❌ Origin certificate is the temporary self-signed one (expires 17 Nov 2026): acme.sh
+  DNS-01 pending (needs the Arvan DNS token).
+- ✅ CSP `script-src 'self'` (inline styles allowed, inline scripts not), nosniff,
+  no-referrer, `frame-ancestors 'none'` + `X-Frame-Options: DENY`, minimal
+  Permissions-Policy.
+- – `limit_req` / body size not re-checked today; lounge IP list exists.
+- ◐ `/admin` allow-list: office range + one temporary mobile address (shared VPN exit
+  removed 23 Oct). ❌ TOTP for admins not built (planned).
+- ✅ Only 80/443 (nginx) and SSH publish ports; Postgres and the API have no host port;
+  `lp-firewall` drops 80/443 from anything outside ArvanCloud's ranges (origin can't be
+  reached around the CDN).
+- ◐ SSH keys only, no root login, survives reboot, fail2ban on; the SSH port is open to
+  any source (not restricted to known IPs).
+- ✅ gitleaks 8.30.1 on the full history, all refs (169 commits): no leaks. Working-tree
+  hits only in git-ignored files (`.env.staging`, `.venv/`, graphify cache hashes).
+- ◐ `pip-audit -r requirements.txt`: no known vulnerabilities. – `npm audit` (frontend repo).
+- ◐ Backups: every 6 h, verified, restore drill done 21 Oct; restic repository still on the
+  same VM (off-site copy pending, on-site task).
+- ✅ A day of api + nginx logs (4,271 lines): 0 full mobile numbers, 0 code-shaped tokens,
+  0 OTP-shaped values, 0 request bodies; nginx's log format rewrites `/r/`, `/q/`, `/b/`
+  to `[redacted]`. Caveat: no redemptions or sign-ins happened in that window.
+- ✅ Rate-limit/abuse unit tests pass locally. – Concurrency tests: CI runs them on
+  PostgreSQL 16; production's exact server version not compared.
+- ◐ Admin session secret rotated 23 Oct after it appeared in an agent session transcript.
