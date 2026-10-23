@@ -16,6 +16,7 @@ htmlcov/
 
 # Local configuration and databases
 .env
+.env.staging
 *.db
 
 # Manufacturing exports contain raw, unhashed redemption codes
