@@ -17,6 +17,7 @@ even if this code had a bug).
 
 import hashlib
 import hmac
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
@@ -34,6 +35,8 @@ from app.domain.passports import CAMPAIGN_BY_CITY, ENTRIES_PER_CODE, CityCode
 from app.domain.teams import unlocks_now
 
 FIRST_CODE_BONUS_KEY = "first_code"
+
+logger = logging.getLogger("lottery_passport.redemption")
 
 
 class RedemptionErrorCode(StrEnum):
@@ -242,6 +245,10 @@ class RedemptionService:
                 if error.problem is CodeProblem.MISTYPED
                 else RedemptionErrorCode.MALFORMED
             )
+            logger.info(
+                "redemption_rejected",
+                extra={"user_id": str(user_id), "reason": code.value},
+            )
             raise RedemptionError(code) from error
 
         now = self._clock.now()
@@ -253,6 +260,13 @@ class RedemptionService:
             )
             failures = await self._throttle.count_in_window(user_id, window_start)
             if failures >= self._throttle_settings.max_attempts:
+                logger.warning(
+                    "redemption_rejected",
+                    extra={
+                        "user_id": str(user_id),
+                        "reason": RedemptionErrorCode.ATTEMPTS_LIMITED.value,
+                    },
+                )
                 raise RedemptionError(
                     RedemptionErrorCode.ATTEMPTS_LIMITED,
                     retry_after=self._throttle_settings.window_seconds,
@@ -273,6 +287,10 @@ class RedemptionService:
         except RedemptionError as error:
             if error.code is RedemptionErrorCode.INVALID and self._throttle is not None:
                 await self._throttle.record(user_id, now)
+            logger.warning(
+                "redemption_rejected",
+                extra={"user_id": str(user_id), "reason": error.code.value},
+            )
             raise
 
     async def _apply_claim(
@@ -307,6 +325,18 @@ class RedemptionService:
             )
         balance, bonus = await self._award_first_code_bonus(uow, user_id, balance, now)
         flavor_codes = await uow.teams.count_codes(user_id, claimed.city)
+        logger.info(
+            "code_redeemed",
+            extra={
+                "user_id": str(user_id),
+                "code_id": str(claimed.code_id),
+                "city": claimed.city.value,
+                "entries_added": ENTRIES_PER_CODE,
+                "coins_awarded": claimed.coins_per_code,
+                "bonus_awarded": bonus,
+                "replayed": False,
+            },
+        )
         return RedemptionResult(
             city=claimed.city,
             entries_added=ENTRIES_PER_CODE,
@@ -363,6 +393,17 @@ class RedemptionService:
         progress = await uow.passports.get(user_id, CAMPAIGN_BY_CITY[found.city])
         coins = await uow.ledger.amount_for_key(
             redemption_idempotency_key(found.code_id)
+        )
+        logger.info(
+            "code_redeemed",
+            extra={
+                "user_id": str(user_id),
+                "code_id": str(found.code_id),
+                "city": found.city.value,
+                "entries_added": ENTRIES_PER_CODE,
+                "coins_awarded": coins or 0,
+                "replayed": True,
+            },
         )
         return RedemptionResult(
             city=found.city,
