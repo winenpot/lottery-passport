@@ -107,13 +107,17 @@ class SqlRedemptionCodes:
                 RedemptionCodeModel.id,
                 RedemptionCodeModel.city,
                 CodeBatchModel.coins_per_code,
+                RedemptionCodeModel.batch_id,
             )
         )
         row = (await self._session.execute(statement)).one_or_none()
         if row is None:
             return None
         return ClaimedCode(
-            code_id=row[0], city=CityCode(row[1]), coins_per_code=int(row[2])
+            code_id=row[0],
+            city=CityCode(row[1]),
+            coins_per_code=int(row[2]),
+            batch_id=row[3],
         )
 
     async def lookup(self, code_hash: str) -> CodeLookup | None:
@@ -123,6 +127,7 @@ class SqlRedemptionCodes:
                 RedemptionCodeModel.city,
                 RedemptionCodeModel.redeemed_by_user_id,
                 CodeBatchModel.status,
+                RedemptionCodeModel.batch_id,
             )
             .outerjoin(
                 CodeBatchModel, RedemptionCodeModel.batch_id == CodeBatchModel.id
@@ -137,6 +142,7 @@ class SqlRedemptionCodes:
             city=CityCode(row[1]),
             redeemed_by_user_id=row[2],
             batch_active=row[3] == BatchStatus.ACTIVE.value,
+            batch_id=row[4],
         )
 
     async def count_redeemed_since(self, user_id: UUID, since: datetime) -> int:

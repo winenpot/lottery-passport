@@ -35,6 +35,7 @@ class ClaimedCode:
     code_id: UUID
     city: CityCode
     coins_per_code: int
+    batch_id: UUID
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +46,7 @@ class CodeLookup:
     city: CityCode
     redeemed_by_user_id: UUID | None
     batch_active: bool
+    batch_id: UUID | None
 
 
 class RedemptionCodesInTransaction(Protocol):

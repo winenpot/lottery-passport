@@ -283,7 +283,25 @@ class RedemptionService:
                     )
                 result = await self._apply_claim(uow, claimed, user_id, balance, now)
                 await uow.commit()
-                return result
+            # Logged only once the transaction is durably committed: logging
+            # "redeemed" before commit would say so even if the commit itself
+            # then failed (constraint violation, connection drop) and the
+            # claim rolled back -- the log must never claim more certainty
+            # than the database actually gave us.
+            logger.info(
+                "code_redeemed",
+                extra={
+                    "user_id": str(user_id),
+                    "code_id": str(claimed.code_id),
+                    "batch_id": str(claimed.batch_id),
+                    "city": claimed.city.value,
+                    "entries_added": ENTRIES_PER_CODE,
+                    "coins_awarded": claimed.coins_per_code,
+                    "bonus_awarded": result.bonus_awarded,
+                    "replayed": False,
+                },
+            )
+            return result
         except RedemptionError as error:
             if error.code is RedemptionErrorCode.INVALID and self._throttle is not None:
                 await self._throttle.record(user_id, now)
@@ -325,18 +343,6 @@ class RedemptionService:
             )
         balance, bonus = await self._award_first_code_bonus(uow, user_id, balance, now)
         flavor_codes = await uow.teams.count_codes(user_id, claimed.city)
-        logger.info(
-            "code_redeemed",
-            extra={
-                "user_id": str(user_id),
-                "code_id": str(claimed.code_id),
-                "city": claimed.city.value,
-                "entries_added": ENTRIES_PER_CODE,
-                "coins_awarded": claimed.coins_per_code,
-                "bonus_awarded": bonus,
-                "replayed": False,
-            },
-        )
         return RedemptionResult(
             city=claimed.city,
             entries_added=ENTRIES_PER_CODE,
@@ -399,6 +405,7 @@ class RedemptionService:
             extra={
                 "user_id": str(user_id),
                 "code_id": str(found.code_id),
+                "batch_id": str(found.batch_id) if found.batch_id else None,
                 "city": found.city.value,
                 "entries_added": ENTRIES_PER_CODE,
                 "coins_awarded": coins or 0,
