@@ -936,7 +936,7 @@ these): `GET /api/v1/games` summary/leaderboard view, `game_of_the_day`,
 (`game_coins_per_day`), `my_rank`/`top_score`. Game leaderboards may come later but
 will display bests only — never prizes from a client-reported score.
 
-### `GET /api/v1/leaderboards/mini-games/{mini_game_id}?period=today|week|all` (planned)
+### `GET /api/v1/leaderboards/mini-games/{mini_game_id}?period=today|week|all` (live, L1)
 
 ```json
 {
@@ -947,9 +947,14 @@ will display bests only — never prizes from a client-reported score.
 }
 ```
 
-Each player's best score in the period. Ties go to whoever set the score first. Top 50.
-Cached up to 60 seconds, so show `updated_at`. Not built yet — see "Not shipped yet"
-under [Mini-games](#mini-games).
+Each player's best score in the period (Tap Reflex: lowest `average_reaction_ms`
+wins -- a new mini-game may want the opposite, see `app/domain/leaderboards.py`'s
+`BestScore`). Ties go to whoever set the score first. Top 50, plus `me` even when
+outside it (`rank`/`score` null with no qualifying run yet). `resets_at` is null for
+`period=all`. Cached up to 60 seconds in each API process, so show `updated_at`;
+`me` is never cached. Default period is `week`. `404 NOT_FOUND` for a `mini_game_id`
+with no board definition (not reachable today: there is exactly one mini-game and
+one board).
 
 ### `GET /api/v1/leaderboards/mini-games/{mini_game_id}/winners?week=previous` (planned)
 

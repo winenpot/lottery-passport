@@ -33,6 +33,7 @@ from app.application.avatars import AvatarService
 from app.application.challenges import ChallengeService
 from app.application.coin_adjustments import CoinAdjustmentService
 from app.application.failure_throttle import ThrottleSettings
+from app.application.leaderboards import LeaderboardService
 from app.application.legal import LegalDocumentService
 from app.application.me import MeService
 from app.application.mini_games import MiniGameService
@@ -65,6 +66,7 @@ from app.infrastructure.postgres.repositories import (
     PostgreSQLChallengeRepository,
     PostgreSQLChallengesReader,
     PostgreSQLLastScanReader,
+    PostgreSQLLeaderboardReader,
     PostgreSQLLegalDocuments,
     PostgreSQLPassportRepository,
     PostgreSQLSessionRepository,
@@ -142,6 +144,13 @@ OPENAPI_TAGS = [
             "and server-verified -- not the physical arcade machines at "
             "the lounges. Rewards pay only through /challenges. "
             "See API_CONTRACT.md#mini-games."
+        ),
+    },
+    {
+        "name": "leaderboards",
+        "description": (
+            "Each mini-game's best-score board for today/week/all time, "
+            "cached up to 60 seconds. See API_CONTRACT.md#mini-games."
         ),
     },
     {
@@ -290,6 +299,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         zone=resolved_settings.campaign_zone,
         rejected_review_threshold=resolved_settings.mini_game_rejected_review_threshold,
     )
+    leaderboard_service = LeaderboardService(
+        reader=PostgreSQLLeaderboardReader(database.session_factory),
+        clock=SystemClock(),
+        zone=resolved_settings.campaign_zone,
+    )
     referral_service = ReferralService(
         code_store=PostgreSQLUserRepository(database.session_factory),
         unit_of_work=unit_of_work,
@@ -409,6 +423,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.challenge_service = challenge_service
     application.state.achievement_service = achievement_service
     application.state.mini_game_service = mini_game_service
+    application.state.leaderboard_service = leaderboard_service
     application.state.referral_service = referral_service
     application.state.sms_sender = sms_sender
     application.state.settings = resolved_settings

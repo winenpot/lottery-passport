@@ -272,3 +272,26 @@ own claim history double as the signal.
 skippable or just not installed. Added a `commit-lint` job to
 `.github/workflows/ci.yml` that runs that same script against the PR title
 and each commit subject; `image` now needs it, like `gitleaks`.
+
+## 2026-10-24 — leaderboard architecture: one board registry, Tap Reflex first
+
+TOTP handed off to another session; this one picked up leaderboards instead
+(user: "why not start modeling leaderboards with this mini-game as the
+working example, laying out the architecture will save hours when we wanted
+to add new leaderboards"). Shipped `GET /leaderboards/mini-games/{id}` (L1)
+against `mini_game_runs` (G1), no migration.
+
+- `app/domain/leaderboards.py`: one registry (`MINI_GAME_BOARDS`), each
+  entry a `mini_game_id` + `BestScore` (lowest wins for Tap Reflex's
+  reaction time, highest for a points-based game later). A second
+  leaderboard costs one entry, not a new service.
+- Ranking and the "ties go to whoever set it first" tie-break are both
+  done in SQL (`PostgreSQLLeaderboardReader`): one window function picks
+  each player's best row in the period, a second ranks that set; `top()`
+  and `rank_of()` read the identical subquery so they can't disagree.
+- 60s in-process cache for the shared top-50 list only (the cache policy
+  `docs/ARCHITECTURE.md` already documented but nothing had built yet);
+  `me` (the caller's own rank) is never cached — specific to the caller,
+  and one more indexed query is cheap.
+- `FeatureFlags.leaderboard` stays `False`: off for players until Arman's
+  frontend exists, same as the rest of F1 today.

@@ -14,6 +14,7 @@ from app.application.authentication import (
     SessionRepository,
     UserRepository,
 )
+from app.application.leaderboards import LeaderboardRow
 from app.application.me import RawStats
 from app.application.passports import PassportRepository
 from app.application.profile import NicknameTaken
@@ -22,6 +23,7 @@ from app.domain.achievements import Achievement, AchievementFact, UnlockedAchiev
 from app.domain.authentication import AuthenticatedSession, AuthenticationChallenge
 from app.domain.avatars import Avatar
 from app.domain.challenges import Challenge, ChallengeKind, ChallengePeriod
+from app.domain.leaderboards import BestScore, MiniGameBoard
 from app.domain.ledger import LedgerEntry, LedgerReason, Wallet
 from app.domain.legal import LegalDocument
 from app.domain.mini_games import MiniGameId, MiniGameRunStatus
@@ -945,3 +947,109 @@ class PostgreSQLWalletReader(WalletReader):
                 )
                 for model in models
             ]
+
+
+class PostgreSQLLeaderboardReader:
+    """Each player's best (not every) run in a window, ranked, with the
+    tie-break ("whoever set it first" -- docs/API_CONTRACT.md) resolved in
+    SQL so ``top()`` and ``rank_of()`` can never disagree about where a
+    player actually lands.
+
+    One window function picks each user's best row in the window
+    (``rn == 1``); a second, over that same per-user-best set, assigns the
+    final rank. ``top()`` takes the first N rows of that ranking; ``rank_of``
+    filters it to one user. Both read the identical subquery, so there is
+    only one place the ranking rule could ever drift.
+    """
+
+    def __init__(self, factory: async_sessionmaker[AsyncSession]) -> None:
+        self._factory = factory
+
+    def _ranked_best_runs(self, board: MiniGameBoard, since: datetime | None) -> Any:
+        score_col = MiniGameRunModel.average_reaction_ms
+        direction = (
+            score_col.asc() if board.best is BestScore.LOWEST else score_col.desc()
+        )
+        conditions = [
+            MiniGameRunModel.mini_game_id == board.mini_game_id.value,
+            MiniGameRunModel.status == MiniGameRunStatus.ACCEPTED.value,
+        ]
+        if since is not None:
+            conditions.append(MiniGameRunModel.finished_at >= since)
+        per_user_best = (
+            select(
+                MiniGameRunModel.user_id,
+                score_col.label("score"),
+                MiniGameRunModel.finished_at,
+                func.row_number()
+                .over(
+                    partition_by=MiniGameRunModel.user_id,
+                    order_by=(direction, MiniGameRunModel.finished_at.asc()),
+                )
+                .label("rn"),
+            )
+            .where(*conditions)
+            .subquery()
+        )
+        board_direction = (
+            per_user_best.c.score.asc()
+            if board.best is BestScore.LOWEST
+            else per_user_best.c.score.desc()
+        )
+        return (
+            select(
+                per_user_best.c.user_id,
+                per_user_best.c.score,
+                per_user_best.c.finished_at,
+                func.row_number()
+                .over(order_by=(board_direction, per_user_best.c.finished_at.asc()))
+                .label("rank"),
+            )
+            .where(per_user_best.c.rn == 1)
+            .subquery()
+        )
+
+    async def top(
+        self, board: MiniGameBoard, since: datetime | None, limit: int
+    ) -> list[LeaderboardRow]:
+        async with self._factory() as session:
+            ranked = self._ranked_best_runs(board, since)
+            statement = (
+                select(
+                    ranked.c.rank,
+                    ranked.c.user_id,
+                    UserModel.nickname,
+                    UserModel.avatar_id,
+                    ranked.c.score,
+                )
+                .join(UserModel, UserModel.id == ranked.c.user_id)
+                .order_by(ranked.c.rank)
+                .limit(limit)
+            )
+            rows = (await session.execute(statement)).all()
+            return [
+                LeaderboardRow(
+                    rank=row.rank,
+                    user_id=row.user_id,
+                    nickname=row.nickname,
+                    avatar_id=row.avatar_id,
+                    score=row.score,
+                )
+                for row in rows
+            ]
+
+    async def rank_of(
+        self, board: MiniGameBoard, since: datetime | None, user_id: UUID
+    ) -> tuple[int, float] | None:
+        async with self._factory() as session:
+            ranked = self._ranked_best_runs(board, since)
+            row = (
+                await session.execute(
+                    select(ranked.c.rank, ranked.c.score).where(
+                        ranked.c.user_id == user_id
+                    )
+                )
+            ).one_or_none()
+            if row is None:
+                return None
+            return (row.rank, row.score)
