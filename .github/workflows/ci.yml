@@ -57,6 +57,57 @@ jobs:
         if: github.event_name == 'pull_request'
         run: docker build --tag lottery-passport-api:ci .
 
+  commit-lint:
+    # Enforces the same gitmoji + Conventional Commits subject rule as
+    # .githooks/commit-msg, as a CI check rather than only a local git hook
+    # -- a hook can be skipped with --no-verify, or simply never installed
+    # (core.hooksPath has to be set per clone), so this is the backstop that
+    # applies regardless of who or what is committing. Runs the literal
+    # hook script against every real subject line so there is exactly one
+    # copy of the rule to keep in sync, never a second regex that could
+    # drift from it.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      EVENT_NAME: ${{ github.event_name }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      PUSH_MESSAGE: ${{ github.event.head_commit.message }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check commit subjects
+        run: |
+          set -euo pipefail
+          failed=0
+          check() {
+            # $1/$2 arrive as real shell values (via env above), never
+            # interpolated into this script's text, so an adversarial
+            # subject line ("; rm -rf ... #) can't execute as code.
+            local subject="$1" label="$2"
+            local tmp
+            tmp="$(mktemp)"
+            printf '%s\n' "$subject" >"$tmp"
+            if ! python3 .githooks/commit-msg "$tmp"; then
+              echo "::error::${label}: ${subject}"
+              failed=1
+            fi
+            rm -f "$tmp"
+          }
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            check "$PR_TITLE" "PR title (becomes the squash-merge subject)"
+            while IFS= read -r subject; do
+              check "$subject" "commit subject"
+            done < <(gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}/commits" \
+                        --jq '.[].commit.message | split("\n")[0]')
+          else
+            subject="$(printf '%s\n' "$PUSH_MESSAGE" | head -n1)"
+            check "$subject" "push commit subject"
+          fi
+          exit "$failed"
+
   gitleaks:
     # Continuous version of the SECURITY.md pre-launch checklist item
     # ("gitleaks detect on full history: clean"), added 2026-10-23 after a
@@ -76,7 +127,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   image:
-    needs: [quality, gitleaks]
+    needs: [quality, gitleaks, commit-lint]
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     permissions:

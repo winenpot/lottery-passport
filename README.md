@@ -39,6 +39,7 @@ Requirements: Python 3.13+ and [`uv`](https://docs.astral.sh/uv/); Docker for th
 
 ```bash
 uv sync                           # all groups: dev, lint, test, codes-print
+git config core.hooksPath .githooks  # enforces gitmoji commit messages locally too
 cp .env.example .env              # PowerShell: Copy-Item .env.example .env
 docker compose up -d postgres     # or any local PostgreSQL 16
 uv run alembic upgrade head
