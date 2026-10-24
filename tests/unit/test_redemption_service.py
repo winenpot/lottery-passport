@@ -7,6 +7,7 @@ behind. Concurrency and real constraints are covered by
 """
 
 import copy
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from types import TracebackType
@@ -43,6 +44,7 @@ class StoredCode:
     city: CityCode
     batch_active: bool
     coins_per_code: int
+    batch_id: UUID = field(default_factory=uuid4)
     redeemed_by: UUID | None = None
     redeemed_at: datetime | None = None
 
@@ -68,13 +70,15 @@ class FakeCodes:
         if code is None or code.redeemed_by is not None or not code.batch_active:
             return None
         code.redeemed_by, code.redeemed_at = user_id, now
-        return ClaimedCode(code.id, code.city, code.coins_per_code)
+        return ClaimedCode(code.id, code.city, code.coins_per_code, code.batch_id)
 
     async def lookup(self, code_hash: str) -> CodeLookup | None:
         code = self.store.codes.get(code_hash)
         if code is None:
             return None
-        return CodeLookup(code.id, code.city, code.redeemed_by, code.batch_active)
+        return CodeLookup(
+            code.id, code.city, code.redeemed_by, code.batch_active, code.batch_id
+        )
 
     async def count_redeemed_since(self, user_id: UUID, since: datetime) -> int:
         return sum(
@@ -276,6 +280,105 @@ async def test_redeem_adds_one_entry_and_the_batch_coins() -> None:
     )
     assert store.wallets[user] == 15
     assert len(store.ledger) == 1
+
+
+def _code_redeemed_logs(caplog: pytest.LogCaptureFixture) -> list[dict[str, object]]:
+    """The ``extra={...}`` payload of every ``code_redeemed`` log line.
+
+    ``LogRecord`` doesn't statically declare ``extra`` fields (they're set
+    via ``setattr`` by the logging machinery), so read them back with
+    ``getattr`` -- the same way ``app.core.logging.JsonFormatter`` does.
+    """
+    fields = (
+        "user_id",
+        "code_id",
+        "batch_id",
+        "city",
+        "coins_awarded",
+        "bonus_awarded",
+        "replayed",
+    )
+    return [
+        {field: getattr(r, field, None) for field in fields}
+        for r in caplog.records
+        if r.message == "code_redeemed"
+    ]
+
+
+async def test_redeem_logs_code_redeemed_with_the_batch_id_after_commit(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    service, store, _ = build()
+    user = uuid4()
+    code = add_code(store, coins=15)
+    batch_id = next(iter(store.codes.values())).batch_id
+
+    with caplog.at_level(logging.INFO, logger="lottery_passport.redemption"):
+        result = await service.redeem(user, code.lower())
+
+    logs = _code_redeemed_logs(caplog)
+    assert len(logs) == 1
+    assert logs[0]["batch_id"] == str(batch_id)
+    assert logs[0]["code_id"] is not None
+    assert logs[0]["replayed"] is False
+    assert logs[0]["coins_awarded"] == 15
+    assert logs[0]["bonus_awarded"] == result.bonus_awarded
+
+
+async def test_replay_logs_code_redeemed_with_the_batch_id_too(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    service, store, _ = build()
+    user = uuid4()
+    code = add_code(store, coins=10)
+    batch_id = next(iter(store.codes.values())).batch_id
+    await service.redeem(user, code)
+    caplog.clear()
+
+    with caplog.at_level(logging.INFO, logger="lottery_passport.redemption"):
+        await service.redeem(user, code)
+
+    logs = _code_redeemed_logs(caplog)
+    assert len(logs) == 1
+    assert logs[0]["batch_id"] == str(batch_id)
+    assert logs[0]["replayed"] is True
+
+
+class _CommitFailsUnitOfWork(FakeUnitOfWork):
+    """Commits that always fail, so the transaction never lands."""
+
+    async def commit(self) -> None:
+        raise RuntimeError("simulated commit failure (e.g. a dropped connection)")
+
+
+async def test_a_failed_commit_never_logs_code_redeemed(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Regression test for the 2026-10-22 defect: the success log used to
+    fire from inside ``_apply_claim``, before ``redeem()`` called
+    ``uow.commit()`` -- so a commit that failed afterward (a constraint
+    violation, a dropped connection) still left a ``code_redeemed`` line
+    claiming a redemption that was never actually durable. The log must
+    only ever follow a commit that genuinely succeeded.
+    """
+    store = Store()
+    clock = FakeClock(datetime(2026, 10, 10, 12, 0, tzinfo=UTC))
+    service = RedemptionService(
+        unit_of_work=lambda: _CommitFailsUnitOfWork(store),
+        clock=clock,
+        pepper=PEPPER,
+        daily_limit=20,
+        campaign_zone=TEHRAN,
+    )
+    code = add_code(store, coins=10)
+
+    with (
+        caplog.at_level(logging.INFO, logger="lottery_passport.redemption"),
+        pytest.raises(RuntimeError, match="simulated commit failure"),
+    ):
+        await service.redeem(uuid4(), code)
+
+    assert _code_redeemed_logs(caplog) == []
 
 
 async def test_entries_accumulate_per_city_and_never_cross_cities() -> None:

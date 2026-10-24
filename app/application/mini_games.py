@@ -18,6 +18,7 @@ the cap: finishing a run instantly with junk numbers always allowed an
 immediate new start too. Revisit only if real abuse data says otherwise.
 """
 
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -58,6 +59,9 @@ class RunStarted:
     expires_at: datetime
 
 
+logger = logging.getLogger("lottery_passport.mini_games")
+
+
 @dataclass(frozen=True, slots=True)
 class MiniGameFinishResult:
     run_id: UUID
@@ -94,6 +98,14 @@ class MiniGameService:
             new_run = open_run(user_id, mini_game_id, now, Random())
             await uow.mini_games.open(new_run)
             await uow.commit()
+        logger.info(
+            "mini_game_run_started",
+            extra={
+                "user_id": str(user_id),
+                "mini_game_id": mini_game_id.value,
+                "run_id": str(new_run.id),
+            },
+        )
         return RunStarted(
             run_id=new_run.id,
             mini_game_id=mini_game_id,
@@ -143,6 +155,17 @@ class MiniGameService:
             if status is MiniGameRunStatus.REJECTED:
                 await self._flag_if_abusive(uow, user_id, run.mini_game_id, now)
             await uow.commit()
+        logger.info(
+            "mini_game_run_finished",
+            extra={
+                "user_id": str(user_id),
+                "mini_game_id": run.mini_game_id.value,
+                "run_id": str(run.id),
+                "accepted": assessment.plausible,
+                "average_reaction_ms": assessment.average_reaction_ms,
+                "reason": assessment.reason.value if assessment.reason else None,
+            },
+        )
         return MiniGameFinishResult(
             run_id=run.id,
             accepted=assessment.plausible,
@@ -157,6 +180,14 @@ class MiniGameService:
         rejected_today = await uow.mini_games.count_rejected_since(user_id, since)
         if rejected_today < self._rejected_review_threshold:
             return
+        logger.warning(
+            "mini_game_run_flagged",
+            extra={
+                "user_id": str(user_id),
+                "mini_game_id": mini_game_id.value,
+                "rejected_today": rejected_today,
+            },
+        )
         # The flagged account is also the audit "actor": these are its own
         # runs under suspicion, not an admin-initiated change.
         await uow.audit.record(

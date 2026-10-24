@@ -31,6 +31,21 @@ class JsonFormatter(logging.Formatter):
             "purpose",
             "delivery",
             "user_id",
+            "city",
+            "code_id",
+            "batch_id",
+            "entries_added",
+            "coins_awarded",
+            "bonus_awarded",
+            "replayed",
+            "mini_game_id",
+            "run_id",
+            "accepted",
+            "average_reaction_ms",
+            "rejected_today",
+            "amount",
+            "actor_id",
+            "target_user_id",
         ):
             value = getattr(record, field, None)
             if value is not None:

@@ -17,6 +17,7 @@ even if this code had a bug).
 
 import hashlib
 import hmac
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
@@ -34,6 +35,8 @@ from app.domain.passports import CAMPAIGN_BY_CITY, ENTRIES_PER_CODE, CityCode
 from app.domain.teams import unlocks_now
 
 FIRST_CODE_BONUS_KEY = "first_code"
+
+logger = logging.getLogger("lottery_passport.redemption")
 
 
 class RedemptionErrorCode(StrEnum):
@@ -242,6 +245,10 @@ class RedemptionService:
                 if error.problem is CodeProblem.MISTYPED
                 else RedemptionErrorCode.MALFORMED
             )
+            logger.info(
+                "redemption_rejected",
+                extra={"user_id": str(user_id), "reason": code.value},
+            )
             raise RedemptionError(code) from error
 
         now = self._clock.now()
@@ -253,6 +260,13 @@ class RedemptionService:
             )
             failures = await self._throttle.count_in_window(user_id, window_start)
             if failures >= self._throttle_settings.max_attempts:
+                logger.warning(
+                    "redemption_rejected",
+                    extra={
+                        "user_id": str(user_id),
+                        "reason": RedemptionErrorCode.ATTEMPTS_LIMITED.value,
+                    },
+                )
                 raise RedemptionError(
                     RedemptionErrorCode.ATTEMPTS_LIMITED,
                     retry_after=self._throttle_settings.window_seconds,
@@ -269,10 +283,32 @@ class RedemptionService:
                     )
                 result = await self._apply_claim(uow, claimed, user_id, balance, now)
                 await uow.commit()
-                return result
+            # Logged only once the transaction is durably committed: logging
+            # "redeemed" before commit would say so even if the commit itself
+            # then failed (constraint violation, connection drop) and the
+            # claim rolled back -- the log must never claim more certainty
+            # than the database actually gave us.
+            logger.info(
+                "code_redeemed",
+                extra={
+                    "user_id": str(user_id),
+                    "code_id": str(claimed.code_id),
+                    "batch_id": str(claimed.batch_id),
+                    "city": claimed.city.value,
+                    "entries_added": ENTRIES_PER_CODE,
+                    "coins_awarded": claimed.coins_per_code,
+                    "bonus_awarded": result.bonus_awarded,
+                    "replayed": False,
+                },
+            )
+            return result
         except RedemptionError as error:
             if error.code is RedemptionErrorCode.INVALID and self._throttle is not None:
                 await self._throttle.record(user_id, now)
+            logger.warning(
+                "redemption_rejected",
+                extra={"user_id": str(user_id), "reason": error.code.value},
+            )
             raise
 
     async def _apply_claim(
@@ -363,6 +399,18 @@ class RedemptionService:
         progress = await uow.passports.get(user_id, CAMPAIGN_BY_CITY[found.city])
         coins = await uow.ledger.amount_for_key(
             redemption_idempotency_key(found.code_id)
+        )
+        logger.info(
+            "code_redeemed",
+            extra={
+                "user_id": str(user_id),
+                "code_id": str(found.code_id),
+                "batch_id": str(found.batch_id) if found.batch_id else None,
+                "city": found.city.value,
+                "entries_added": ENTRIES_PER_CODE,
+                "coins_awarded": coins or 0,
+                "replayed": True,
+            },
         )
         return RedemptionResult(
             city=found.city,

@@ -12,6 +12,7 @@ after click); a true server-side guard (a one-time token on the form) is a
 follow-up, not done here.
 """
 
+import logging
 from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID, uuid4
@@ -35,6 +36,9 @@ __all__ = [
 
 class UserNotFoundError(Exception):
     """No player with this phone number."""
+
+
+logger = logging.getLogger("lottery_passport.coin_adjustments")
 
 
 class UserLookup(Protocol):
@@ -118,4 +122,12 @@ class CoinAdjustmentService:
                 )
             )
             await uow.commit()
+        logger.info(
+            "coin_adjustment_applied",
+            extra={
+                "actor_id": str(actor_id),
+                "target_user_id": str(target.id),
+                "amount": amount,
+            },
+        )
         return CoinAdjustmentResult(user_id=target.id, new_balance=new_balance)
