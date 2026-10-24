@@ -27,7 +27,7 @@ Item IDs (B10, B19, ...) refer to [TODO.md](TODO.md).
 | Coin balances and the ledger | Prizes; trust in fairness | PostgreSQL |
 | Player data: mobile numbers, nicknames | Privacy; many players are teenagers | PostgreSQL, backups |
 | Sessions and OTPs | Account takeover | Hashes in PostgreSQL; cookie in the player's browser |
-| Admin accounts | Can approve, adjust, void | `users.role = admin` (phone sign-in), B20 |
+| Admin accounts | Can approve, adjust, void | `users.role = admin` (phone sign-in), B20; TOTP second factor opt-in, ADR-0013 |
 | Backups | Contain all of the above | Off-site encrypted repository |
 
 ## Trust boundaries
@@ -84,7 +84,7 @@ Everything that crosses into the core is validated there, even from staff and ev
 | T10 | **XSS through nicknames or URLs** | Nickname allow-list (below); submission URLs parsed and re-built from an allow-listed pattern; React escaping; strict CSP (no inline scripts); no `dangerouslySetInnerHTML` | B15, B18, A15 |
 | T11 | **Unicode tricks** (right-to-left override, zero-width characters, look-alike letters) in nicknames | Rules in [User-generated text](#user-generated-text) | B15 |
 | T12 | **Reading other players' data** (IDOR) | Player endpoints use the session's user only (`/me/...`); no user IDs in player URLs | ✅ pattern; keep it |
-| T13 | **Admin account compromise** | `admin` role granted only from the command line, fresh SMS code and a separate 1-hour admin cookie for the panel, IP allow-list in nginx, role re-checked per request, audit log; TOTP optional later | B20 |
+| T13 | **Admin account compromise** | `admin` role granted only from the command line, fresh SMS code and a separate 1-hour admin cookie for the panel, IP allow-list in nginx, role re-checked per request, audit log; TOTP second factor, opt-in per admin (ADR-0013) | B20 ✅; TOTP ✅ (ADR-0013) |
 | T14 | **Insider abuse** (coins for friends, fake approvals, tournament results for a cousin) | Every coin movement is a ledger row with the admin's ID and a reason; admin adjustments do not count on leaderboards; daily report of adjustments and approvals by person; public tournament results | Ledger ✅; B20, B21, B26 |
 | T15 | **Collusion and bots on leaderboards** | Rank by coins earned, not balance; human review of the top 20 before prizes; anomaly queries (many accounts sharing a device or a non-lounge IP) | B21, B30 |
 | T16 | **Denial of service / floods** | nginx `limit_req`, request body size limit, timeouts; FastAPI workers bounded; PostgreSQL `statement_timeout`; a domestic CDN/WAF in front if attacked | B25 |
@@ -117,7 +117,7 @@ Submission URLs: parse, accept only `https://instagram.com` or `https://www.inst
 
 - Reachable only from allow-listed IPs (office, VPN, lounge networks) through nginx, at a path not linked from the player app.
 - Admins are players with `role = admin` ([ADR-0008](adr/0008-sqladmin-back-office.md), amended 2026-10-12): made only with `scripts.admins promote`, no API route grants it. More roles (`marketing`, `venue_staff`, `support`) arrive when a second real person needs fewer powers.
-- No passwords. Entering the panel needs a fresh SMS code and issues a separate admin cookie (`Path=/admin`, `SameSite=Strict`, about 1 hour); the role is re-checked on every request. SMS is a weaker factor than TOTP (SIM swap), so keep the admin list short and add TOTP if the owner wants it.
+- No passwords. Entering the panel needs a fresh SMS code and issues a separate admin cookie (`Path=/admin`, `SameSite=Strict`, about 1 hour); the role is re-checked on every request. SMS is a weaker factor than TOTP (SIM swap), so keep the admin list short; TOTP (ADR-0013) closes that gap for any admin who enrolls at `/admin/security/totp`.
 - Every write goes through the same application services as the API and writes an `audit_log` row (who, what, before/after, IP, time).
 - No raw editing of balances, ledger rows, codes or redemptions (read-only views).
 - Built (B20 step 1): `/admin` with phone sign-in (`app/infrastructure/admin/`). The sign-in
@@ -127,8 +127,13 @@ Submission URLs: parse, accept only `https://instagram.com` or `https://www.inst
   player cookie is, ends after 1 hour idle or 8 hours total. Panel forms cannot send
   `X-Requested-With`, so `CsrfMiddleware` instead rejects any `/admin` write whose `Origin`
   is not the panel's own host. Exports are off (they would put phone numbers in files).
-  **Not yet:** the IP allow-list (nginx `site/admin_allow.conf`, live with the server nginx), the audit log
-  (step 2) and write actions (step 3).
+  **Not yet:** the IP allow-list (nginx `site/admin_allow.conf`, live with the server nginx)
+  and the audit log (step 2) and write actions (step 3) are built; TOTP (ADR-0013) is also
+  built, opt-in per admin at `/admin/security/totp` -- an enrolled admin's sign-in then needs
+  a third step, a 6-digit code from their authenticator app, checked by
+  `AuthenticationService.verify_admin_totp`; a lost phone is recovered with
+  `uv run python -m scripts.admins reset-totp <identifier>` (CLI-only, same shape as
+  promote/demote -- never an API route).
 
 ## Secrets inventory
 
@@ -141,6 +146,7 @@ Submission URLs: parse, accept only `https://instagram.com` or `https://www.inst
 | SMS provider API keys | Worker | `.env` | On staff change; immediately if leaked (the key is part of the request URL for some providers, so never log URLs) |
 | Backup repository password | Backup job | Password manager (two holders) | Rarely; losing it loses every backup |
 | `ADMIN_SESSION_SECRET` | API (admin panel cookie) | server `.env` | Any time; every admin signs in again |
+| `ADMIN_TOTP_ENCRYPTION_KEY` | API (admin TOTP secret at rest) | server `.env` | Avoid: rotating it makes every stored TOTP secret unreadable, forcing every enrolled admin to re-enroll via `scripts.admins reset-totp` first |
 
 ## Logging and privacy
 
@@ -159,7 +165,7 @@ Run on D12 (B25) and before every major release.
 - [ ] HTTPS everywhere; HSTS; HTTP redirects to HTTPS; TLS 1.2+
 - [ ] Headers: `Content-Security-Policy` (no `unsafe-inline` for scripts), `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `frame-ancestors 'none'`, `Permissions-Policy` minimal
 - [ ] nginx `limit_req` zones active; lounge IPs allow-listed; `client_max_body_size` small (16k for the API)
-- [ ] Admin reachable only from allow-listed IPs; no default passwords; TOTP on owner/marketing
+- [ ] Admin reachable only from allow-listed IPs; no default passwords; TOTP enrolled for every admin who can (ADR-0013, `/admin/security/totp`)
 - [ ] Postgres not exposed outside the Docker network; only nginx publishes ports (80/443)
 - [ ] SSH: keys only, no root login, firewall allows 22 only from known IPs
 - [ ] `gitleaks detect` on full history: clean

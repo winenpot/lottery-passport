@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     # (admin sessions end on restart); required in staging/production.
     admin_session_secret: SecretStr | None = None
     admin_session_max_age_seconds: int = Field(default=3600, ge=300, le=8 * 3600)
+    # Encrypts the admin TOTP secret at rest (app/infrastructure/crypto.py).
+    # Unset: a random key per process, so any pending/confirmed TOTP secret
+    # becomes unreadable on restart (same trade-off as admin_session_secret);
+    # required in staging/production.
+    admin_totp_encryption_key: SecretStr | None = None
     kavenegar_template_login: str = "login"
     kavenegar_template_signup: str = "signup"
     otp_ttl_seconds: int = Field(default=150, ge=30, le=600)
@@ -110,6 +115,7 @@ class Settings(BaseSettings):
         "redemption_code_pepper",
         "kavenegar_otp_api_key",
         "admin_session_secret",
+        "admin_totp_encryption_key",
         mode="before",
     )
     @classmethod
@@ -208,6 +214,14 @@ class Settings(BaseSettings):
             ):
                 raise ValueError(
                     "ADMIN_SESSION_SECRET must be at least 32 characters in "
+                    "staging/production"
+                )
+            if (
+                self.admin_totp_encryption_key is None
+                or len(self.admin_totp_encryption_key.get_secret_value()) < 32
+            ):
+                raise ValueError(
+                    "ADMIN_TOTP_ENCRYPTION_KEY must be at least 32 characters in "
                     "staging/production"
                 )
         return self

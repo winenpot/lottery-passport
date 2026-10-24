@@ -1,4 +1,5 @@
 import logging
+import secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import timedelta
@@ -57,10 +58,12 @@ from app.infrastructure.authentication import (
     SecureAuthenticationCodeGenerator,
     SystemClock,
 )
+from app.infrastructure.crypto import SecretCipher
 from app.infrastructure.postgres.database import PostgreSQLAdapter
 from app.infrastructure.postgres.failure_throttle import PostgreSQLFailureThrottle
 from app.infrastructure.postgres.repositories import (
     PostgreSQLAchievementsReader,
+    PostgreSQLAdminTotpRepository,
     PostgreSQLAvatarCatalogue,
     PostgreSQLChallengeRepository,
     PostgreSQLChallengesReader,
@@ -189,6 +192,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             # TODO: remove this on production (otp_test_numbers.py).
             test_numbers_enabled=resolved_settings.test_numbers_enabled,
             allowed_phones=resolved_settings.allowed_otp_phones,
+        ),
+        admin_totp=PostgreSQLAdminTotpRepository(
+            database.session_factory,
+            SecretCipher(
+                resolved_settings.admin_totp_encryption_key.get_secret_value()
+                if resolved_settings.admin_totp_encryption_key is not None
+                # Unset (development, demo): a fresh key per process, so any
+                # pending/confirmed secret is unreadable after a restart --
+                # same trade-off as admin_session_secret just below.
+                else secrets.token_urlsafe(48)
+            ),
         ),
     )
     admin_user_service = AdminUserService(

@@ -84,6 +84,7 @@ def staging(**overrides: object) -> Settings:
         "database_url": DB,
         "redemption_code_pepper": "p" * 48,
         "admin_session_secret": "a" * 48,
+        "admin_totp_encryption_key": "k" * 48,
     }
     values.update(overrides)
     return Settings(**values)  # type: ignore[arg-type]

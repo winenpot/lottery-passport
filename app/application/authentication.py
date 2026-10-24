@@ -16,6 +16,7 @@ from app.domain.phone import (
     mask_phone,
     normalize_iranian_mobile,
 )
+from app.domain.totp import TotpSecretError, generate_secret, verify_code
 from app.domain.users import AccountStatus, User, UserRole, VerificationStatus
 
 
@@ -55,6 +56,20 @@ class PhoneNotAllowedError(AuthenticationError):
     A public test server that texts any number is an SMS relay that burns
     credit; production never sets the list (config validator).
     """
+
+
+class AdminTotpAlreadyEnrolledError(AuthenticationError):
+    """The admin already has a confirmed TOTP secret.
+
+    Re-enrolling over an active secret would let a hijacked admin session
+    silently swap the second factor to one the real admin doesn't hold;
+    recovery (lost phone) goes through ``scripts.admins reset-totp``
+    instead, a deliberate CLI action, not a panel click.
+    """
+
+
+class AdminTotpNotPendingError(AuthenticationError):
+    """No enrollment is in progress to confirm."""
 
 
 class PhoneUnusualError(AuthenticationError):
@@ -135,6 +150,25 @@ class SmsSender(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class AdminTotpRecord:
+    secret: str
+    confirmed_at: datetime | None
+
+
+class AdminTotpRepository(Protocol):
+    """Plaintext in, plaintext out: encryption at rest is an infrastructure
+    detail (app/infrastructure/crypto.py), invisible here."""
+
+    async def get(self, user_id: UUID) -> AdminTotpRecord | None: ...
+
+    async def save_pending(self, user_id: UUID, secret: str, now: datetime) -> None: ...
+
+    async def confirm(self, user_id: UUID, now: datetime) -> None: ...
+
+    async def clear(self, user_id: UUID) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
 class AuthenticationSettings:
     challenge_ttl: timedelta
     session_ttl: timedelta
@@ -175,6 +209,7 @@ class AuthenticationService:
         clock: Clock,
         sms_sender: SmsSender,
         settings: AuthenticationSettings,
+        admin_totp: AdminTotpRepository,
     ) -> None:
         self._users = users
         self._challenges = challenges
@@ -183,6 +218,7 @@ class AuthenticationService:
         self._clock = clock
         self._sms_sender = sms_sender
         self._settings = settings
+        self._admin_totp = admin_totp
 
     async def request_challenge(self, identifier: str) -> RequestChallengeResult:
         try:
@@ -345,6 +381,79 @@ class AuthenticationService:
         """The admin behind an admin-panel session, re-checked on every request."""
         user = await self._users.get_by_id(user_id)
         return user if _is_active_admin(user) else None
+
+    async def has_confirmed_admin_totp(self, user_id: UUID) -> bool:
+        """True once this admin has confirmed a TOTP secret -- the signal the
+        sign-in flow uses to decide whether a third (TOTP) step is required.
+        Not enrolled is not an error: TOTP is opt-in per admin until the
+        owner decides otherwise (docs/SECURITY.md T13)."""
+        record = await self._admin_totp.get(user_id)
+        return record is not None and record.confirmed_at is not None
+
+    async def begin_admin_totp_enrollment(self, user_id: UUID) -> str:
+        """Start (or resume) enrollment. Returns the base32 secret to show
+        for manual entry in an authenticator app. Reusing a still-pending
+        secret across reloads (rather than minting a new one each time)
+        means scanning twice during one setup session doesn't desync."""
+        user = await self._users.get_by_id(user_id)
+        if not _is_active_admin(user):
+            raise AuthenticationError("authentication required")
+        existing = await self._admin_totp.get(user_id)
+        if existing is not None and existing.confirmed_at is not None:
+            raise AdminTotpAlreadyEnrolledError(
+                "already enrolled; use scripts.admins reset-totp to start over"
+            )
+        if existing is not None:
+            return existing.secret
+        secret = generate_secret()
+        await self._admin_totp.save_pending(user_id, secret, self._clock.now())
+        logger.info("admin_totp_enrollment_started", extra={"user_id": str(user_id)})
+        return secret
+
+    async def confirm_admin_totp_enrollment(self, user_id: UUID, code: str) -> None:
+        """Check one real code against the pending secret, and only then
+        turn TOTP on for this admin. Raises on anything wrong; the pending
+        secret is left untouched on a bad code so the admin can retry."""
+        record = await self._admin_totp.get(user_id)
+        if record is None or record.confirmed_at is not None:
+            raise AdminTotpNotPendingError("no enrollment is in progress")
+        try:
+            matches = verify_code(record.secret, code)
+        except TotpSecretError as error:
+            raise AuthenticationError("invalid authentication challenge") from error
+        if not matches:
+            logger.warning(
+                "admin_totp_enrollment_failed", extra={"user_id": str(user_id)}
+            )
+            raise AuthenticationError("invalid authentication challenge")
+        await self._admin_totp.confirm(user_id, self._clock.now())
+        logger.info("admin_totp_enrollment_confirmed", extra={"user_id": str(user_id)})
+
+    async def verify_admin_totp(self, user_id: UUID, code: str) -> None:
+        """Check a code for an already-confirmed secret (the sign-in gate).
+        Raises on anything wrong; callers throttle repeated failures
+        themselves (the admin session's own attempt counter), since this
+        call has no challenge row of its own to rate-limit against."""
+        record = await self._admin_totp.get(user_id)
+        if record is None or record.confirmed_at is None:
+            raise AuthenticationError("invalid authentication challenge")
+        try:
+            matches = verify_code(record.secret, code)
+        except TotpSecretError as error:
+            raise AuthenticationError("invalid authentication challenge") from error
+        if not matches:
+            logger.warning("admin_totp_verify_failed", extra={"user_id": str(user_id)})
+            raise AuthenticationError("invalid authentication challenge")
+        logger.info("admin_totp_verify_succeeded", extra={"user_id": str(user_id)})
+
+    async def reset_admin_totp(self, identifier: str) -> bool:
+        """CLI-only recovery (``scripts.admins reset-totp``) for a lost
+        phone. Returns False if no such user exists."""
+        user = await self._users.get_by_identifier(identifier)
+        if user is None:
+            return False
+        await self._admin_totp.clear(user.id)
+        return True
 
     async def verify_challenge(self, identifier: str, code: str) -> VerificationResult:
         user, now, masked = await self._consume_code(identifier, code)
