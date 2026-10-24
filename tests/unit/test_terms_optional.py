@@ -89,6 +89,7 @@ def test_staging_may_switch_terms_off() -> None:
         database_url=DB,
         redemption_code_pepper="p" * 48,
         admin_session_secret="a" * 48,
+        admin_totp_encryption_key="k" * 48,
         terms_required=False,
     )
 

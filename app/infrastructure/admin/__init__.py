@@ -62,6 +62,10 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 # Even an active admin signs in again after this, whatever the idle timeout.
 ABSOLUTE_SESSION_SECONDS = 8 * 3600
+# Wrong TOTP codes before the whole sign-in attempt (phone step included)
+# must restart: a human mistypes at most a couple of times; past that it
+# looks like guessing against a 6-digit, 90-second-window space.
+MAX_TOTP_ATTEMPTS_PER_SIGN_IN = 5
 
 
 class PhoneSignInBackend(AuthenticationBackend):
@@ -97,8 +101,11 @@ class PhoneSignInBackend(AuthenticationBackend):
 
     async def login(self, request: Request) -> Response | bool:
         form = await request.form()
-        if form.get("action") == "verify":
+        action = form.get("action")
+        if action == "verify":
             return await self._verify(request, str(form.get("code") or "").strip())
+        if action == "verify_totp":
+            return await self._verify_totp(request, str(form.get("code") or "").strip())
         return await self._send(request, str(form.get("phone") or "").strip())
 
     async def _send(self, request: Request, phone: str) -> Response:
@@ -128,9 +135,35 @@ class PhoneSignInBackend(AuthenticationBackend):
             user = await self.service.verify_admin_challenge(phone, code)
         except AuthenticationError:
             return _to_login(request, step="code", m="bad")
-        # A new session for the signed-in admin; nothing from before survives.
+        if await self.service.has_confirmed_admin_totp(user.id):
+            # Not signed in yet: only a pending marker, no `uid`/`iat`, so
+            # `authenticate()` still refuses this session until the TOTP
+            # step below also succeeds.
+            request.session.clear()
+            request.session["totp_pending_uid"] = str(user.id)
+            request.session["totp_attempts"] = 0
+            return _to_login(request, step="totp")
+        # No second factor enrolled: unchanged, single-factor sign-in.
         request.session.clear()
         request.session["uid"] = str(user.id)
+        request.session["iat"] = int(time.time())
+        return True
+
+    async def _verify_totp(self, request: Request, code: str) -> Response | bool:
+        pending_uid = request.session.get("totp_pending_uid")
+        if not pending_uid:
+            return _to_login(request)
+        try:
+            await self.service.verify_admin_totp(UUID(pending_uid), code)
+        except (AuthenticationError, ValueError):
+            attempts = int(request.session.get("totp_attempts", 0)) + 1
+            if attempts >= MAX_TOTP_ATTEMPTS_PER_SIGN_IN:
+                request.session.clear()
+                return _to_login(request, m="totp_locked")
+            request.session["totp_attempts"] = attempts
+            return _to_login(request, step="totp", m="totp_bad")
+        request.session.clear()
+        request.session["uid"] = pending_uid
         request.session["iat"] = int(time.time())
         return True
 
@@ -648,6 +681,60 @@ class CoinAdjustmentView(BaseView):
             )
 
 
+class AdminTotpSetupView(BaseView):
+    """Self-service enrollment for the admin TOTP second factor (docs/
+    launch-reports/2026-10-23-handoff.md decision 8).
+
+    GET shows the current state: no secret yet starts enrollment and shows
+    it for scanning/manual entry; a pending secret is shown again unchanged
+    (AuthenticationService.begin_admin_totp_enrollment reuses it); once
+    confirmed there is nothing left to do here -- a lost phone goes through
+    ``scripts.admins reset-totp``, a deliberate CLI action, not a click an
+    already-hijacked session could make.
+    """
+
+    name = "Two-factor (TOTP)"
+    identity = "admin-totp-setup"
+    icon = "fa-solid fa-key"
+    service: ClassVar[AuthenticationService]
+
+    @expose("/security/totp", methods=["GET", "POST"], identity="admin-totp-setup")
+    async def form(self, request: Request) -> Response:
+        admin_id = request.session.get("uid")
+        if not admin_id:
+            return RedirectResponse(request.url_for("admin:login"), status_code=303)
+        if request.method == "POST":
+            await self._confirm(request, UUID(admin_id))
+            return RedirectResponse(
+                request.url_for("admin:view-admin-totp-setup"), status_code=303
+            )
+        return await self._render(request, UUID(admin_id))
+
+    async def _render(self, request: Request, admin_id: UUID) -> Response:
+        if await self.service.has_confirmed_admin_totp(admin_id):
+            return await self.templates.TemplateResponse(
+                request, "sqladmin/totp_setup.html", {"enrolled": True}
+            )
+        secret = await self.service.begin_admin_totp_enrollment(admin_id)
+        return await self.templates.TemplateResponse(
+            request,
+            "sqladmin/totp_setup.html",
+            {"enrolled": False, "secret": secret},
+        )
+
+    async def _confirm(self, request: Request, admin_id: UUID) -> None:
+        data = await request.form()
+        code = str(data.get("code") or "").strip()
+        try:
+            await self.service.confirm_admin_totp_enrollment(admin_id, code)
+        except AuthenticationError:
+            Flash.error(request, "Wrong or expired code. Scan again and retry.")
+        else:
+            Flash.success(
+                request, "Two-factor sign-in is now required for your account."
+            )
+
+
 def mount_admin(
     app: Starlette,
     engine: AsyncEngine,
@@ -683,4 +770,6 @@ def mount_admin(
         admin.add_view(view)
     CoinAdjustmentView.service = coin_adjustment_service
     admin.add_view(CoinAdjustmentView)
+    AdminTotpSetupView.service = service
+    admin.add_view(AdminTotpSetupView)
     return admin

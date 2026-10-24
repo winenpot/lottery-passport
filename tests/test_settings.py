@@ -50,6 +50,7 @@ def test_production_accepts_compose_service_database() -> None:
         database_url="postgresql+asyncpg://app:secret@postgres:5432/lottery_passport",
         redemption_code_pepper="p" * 48,
         admin_session_secret="a" * 48,
+        admin_totp_encryption_key="k" * 48,
         _env_file=None,
     )
 
@@ -87,6 +88,7 @@ def _deployed(**overrides: object) -> Settings:
         environment="staging",
         redemption_code_pepper=_PEPPER,
         admin_session_secret="a" * 48,
+        admin_totp_encryption_key="k" * 48,
         database_url=_EXTERNAL_DB,
         _env_file=None,
         **overrides,  # type: ignore[arg-type]
@@ -182,3 +184,29 @@ def test_demo_runs_without_an_admin_session_secret() -> None:
     )
 
     assert settings.admin_session_secret is None
+
+
+def test_staging_and_production_need_an_admin_totp_encryption_key() -> None:
+    for environment in ("staging", "production"):
+        for key in (None, "short"):
+            with pytest.raises(ValueError, match="ADMIN_TOTP_ENCRYPTION_KEY"):
+                Settings(
+                    environment=environment,
+                    database_url=_EXTERNAL_DB,
+                    redemption_code_pepper=_PEPPER,
+                    admin_session_secret="a" * 48,
+                    admin_totp_encryption_key=key,
+                    cors_origins="https://play.example",
+                    _env_file=None,
+                )
+
+
+def test_demo_runs_without_an_admin_totp_encryption_key() -> None:
+    settings = Settings(
+        environment="demo",
+        database_url=_EXTERNAL_DB,
+        redemption_code_pepper=_PEPPER,
+        _env_file=None,
+    )
+
+    assert settings.admin_totp_encryption_key is None

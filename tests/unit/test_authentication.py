@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from app.application.authentication import (
+    AdminTotpRecord,
     AuthenticationError,
     AuthenticationService,
     AuthenticationSettings,
@@ -15,6 +16,7 @@ from app.application.authentication import (
     ResendCooldownError,
 )
 from app.domain.authentication import AuthenticatedSession, AuthenticationChallenge
+from app.domain.totp import generate_code
 from app.domain.users import AccountStatus, User, UserRole, VerificationStatus
 from app.infrastructure.authentication import SecureAuthenticationCodeGenerator
 
@@ -182,6 +184,28 @@ class FakeSms:
         self.purpose = purpose
 
 
+class FakeAdminTotp:
+    """In-memory stand-in for AdminTotpRepository: plaintext, no crypto --
+    encryption at rest is an infrastructure concern (app/infrastructure/
+    crypto.py), irrelevant to AuthenticationService's own behavior."""
+
+    def __init__(self) -> None:
+        self.items: dict[UUID, AdminTotpRecord] = {}
+
+    async def get(self, user_id: UUID) -> AdminTotpRecord | None:
+        return self.items.get(user_id)
+
+    async def save_pending(self, user_id: UUID, secret: str, now: datetime) -> None:
+        self.items[user_id] = AdminTotpRecord(secret=secret, confirmed_at=None)
+
+    async def confirm(self, user_id: UUID, now: datetime) -> None:
+        record = self.items[user_id]
+        self.items[user_id] = AdminTotpRecord(secret=record.secret, confirmed_at=now)
+
+    async def clear(self, user_id: UUID) -> None:
+        self.items.pop(user_id, None)
+
+
 def build_service(
     *,
     daily_limit: int = 5,
@@ -208,6 +232,7 @@ def build_service(
             test_numbers_enabled=test_numbers_enabled,
             allowed_phones=allowed_phones,
         ),
+        admin_totp=FakeAdminTotp(),
     )
     return service, clock, sms, users
 
@@ -367,6 +392,7 @@ async def test_a_delivery_failure_does_not_start_the_cooldown() -> None:
             resend_cooldown=timedelta(seconds=60),
             daily_limit=5,
         ),
+        admin_totp=FakeAdminTotp(),
     )
 
     with pytest.raises(AuthenticationError):
@@ -451,3 +477,90 @@ async def test_a_non_reserved_display_name_is_still_accepted() -> None:
     updated = await service.update_display_name(user.id, "Phase Two")
 
     assert updated.display_name == "Phase Two"
+
+
+async def _admin_user(service: AuthenticationService, users: FakeUsers) -> User:
+    admin = await users.create(PHONE, datetime(2026, 1, 1, tzinfo=UTC))
+    admin.role = UserRole.ADMIN
+    return admin
+
+
+@pytest.mark.asyncio
+async def test_enrollment_confirms_with_a_real_code_and_then_gates_sign_in() -> None:
+    service, _, _, users = build_service()
+    admin = await _admin_user(service, users)
+
+    secret = await service.begin_admin_totp_enrollment(admin.id)
+    assert not await service.has_confirmed_admin_totp(admin.id)
+
+    await service.confirm_admin_totp_enrollment(admin.id, generate_code(secret))
+
+    assert await service.has_confirmed_admin_totp(admin.id)
+    # And the same secret now gates sign-in verification too.
+    await service.verify_admin_totp(admin.id, generate_code(secret))
+
+
+@pytest.mark.asyncio
+async def test_a_wrong_code_does_not_confirm_enrollment() -> None:
+    service, _, _, users = build_service()
+    admin = await _admin_user(service, users)
+    await service.begin_admin_totp_enrollment(admin.id)
+
+    with pytest.raises(AuthenticationError):
+        await service.confirm_admin_totp_enrollment(admin.id, "000000")
+
+    assert not await service.has_confirmed_admin_totp(admin.id)
+
+
+@pytest.mark.asyncio
+async def test_reloading_mid_enrollment_returns_the_same_pending_secret() -> None:
+    service, _, _, users = build_service()
+    admin = await _admin_user(service, users)
+
+    first = await service.begin_admin_totp_enrollment(admin.id)
+    second = await service.begin_admin_totp_enrollment(admin.id)
+
+    assert first == second
+
+
+@pytest.mark.asyncio
+async def test_cannot_re_enroll_once_confirmed() -> None:
+    from app.application.authentication import AdminTotpAlreadyEnrolledError
+
+    service, _, _, users = build_service()
+    admin = await _admin_user(service, users)
+    secret = await service.begin_admin_totp_enrollment(admin.id)
+    await service.confirm_admin_totp_enrollment(admin.id, generate_code(secret))
+
+    with pytest.raises(AdminTotpAlreadyEnrolledError):
+        await service.begin_admin_totp_enrollment(admin.id)
+
+
+@pytest.mark.asyncio
+async def test_verify_admin_totp_rejects_an_admin_who_never_enrolled() -> None:
+    service, _, _, users = build_service()
+    admin = await _admin_user(service, users)
+
+    with pytest.raises(AuthenticationError):
+        await service.verify_admin_totp(admin.id, "123456")
+
+
+@pytest.mark.asyncio
+async def test_reset_admin_totp_clears_an_enrolled_secret() -> None:
+    service, _, _, users = build_service()
+    admin = await _admin_user(service, users)
+    secret = await service.begin_admin_totp_enrollment(admin.id)
+    await service.confirm_admin_totp_enrollment(admin.id, generate_code(secret))
+
+    assert await service.reset_admin_totp(PHONE)
+
+    assert not await service.has_confirmed_admin_totp(admin.id)
+    # And enrollment can start fresh afterwards.
+    await service.begin_admin_totp_enrollment(admin.id)
+
+
+@pytest.mark.asyncio
+async def test_reset_admin_totp_on_an_unknown_identifier_returns_false() -> None:
+    service, _, _, _ = build_service()
+
+    assert not await service.reset_admin_totp("+989000000000")

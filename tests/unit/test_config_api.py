@@ -73,6 +73,7 @@ def test_terms_url_must_be_https_outside_development() -> None:
             database_url="postgresql+asyncpg://u:p@db.example.com/lp",
             redemption_code_pepper="x" * 32,
             admin_session_secret="y" * 32,
+            admin_totp_encryption_key="z" * 32,
             cors_origins='["https://staging.torshx.com"]',
         )
 

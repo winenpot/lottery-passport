@@ -1,10 +1,12 @@
-"""Promote or demote a user between the ``player`` and ``admin`` roles.
+"""Promote or demote a user between the ``player`` and ``admin`` roles, or
+clear an admin's TOTP secret after a lost phone.
 
 Usage::
 
     uv run python -m scripts.admins list
     uv run python -m scripts.admins promote <identifier>
     uv run python -m scripts.admins demote <identifier>
+    uv run python -m scripts.admins reset-totp <identifier>
 
 This is the superuser bootstrap: there is no "first admin" API route (a
 player can never promote themselves), so the very first admin, and every
@@ -13,7 +15,9 @@ scripts/code_batches.py. ``identifier`` is whatever the user signed up with
 (today: an email; once phone OTP ships, an E.164 phone number).
 
 The user must already exist (sign up first, then promote); this script does
-not create accounts.
+not create accounts. ``reset-totp`` is the same kind of CLI-only action, for
+the admin TOTP second factor (ADR-0013): it exists because a hijacked admin
+session must never be able to clear or swap its own second factor.
 """
 
 import argparse
@@ -57,6 +61,25 @@ async def set_role(
         return result.scalar_one_or_none() is not None
 
 
+async def reset_totp(
+    factory: async_sessionmaker[AsyncSession], identifier: str
+) -> bool:
+    """Clear ``identifier``'s TOTP secret (lost phone recovery; ADR-0013).
+
+    Direct database access, same reason as promote/demote: there is no API
+    route for this, and there must not be one -- a hijacked admin session
+    must never be able to swap or clear its own second factor. Returns
+    False if no such user exists."""
+    async with factory() as session, session.begin():
+        result = await session.execute(
+            update(UserModel)
+            .where(UserModel.identifier == identifier)
+            .values(totp_secret_encrypted=None, totp_confirmed_at=None)
+            .returning(UserModel.id)
+        )
+        return result.scalar_one_or_none() is not None
+
+
 async def main_async(arguments: argparse.Namespace) -> int:
     database = PostgreSQLAdapter(get_settings())
     try:
@@ -67,6 +90,20 @@ async def main_async(arguments: argparse.Namespace) -> int:
                 return 0
             for line in lines:
                 print(line)
+            return 0
+        if arguments.command == "reset-totp":
+            cleared = await reset_totp(database.session_factory, arguments.identifier)
+            if not cleared:
+                print(
+                    f"no user with identifier {arguments.identifier!r}",
+                    file=sys.stderr,
+                )
+                return 1
+            print(
+                f"{arguments.identifier}'s TOTP secret was cleared; "
+                "they can enroll again from /admin/security/totp",
+                file=sys.stderr,
+            )
             return 0
         role = UserRole.ADMIN if arguments.command == "promote" else UserRole.PLAYER
         changed = await set_role(database.session_factory, arguments.identifier, role)
@@ -87,7 +124,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("list")
-    for name in ("promote", "demote"):
+    for name in ("promote", "demote", "reset-totp"):
         command = commands.add_parser(name)
         command.add_argument("identifier")
     raise SystemExit(asyncio.run(main_async(parser.parse_args())))

@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.application.admin_users import UserCursor
 from app.application.authentication import (
+    AdminTotpRecord,
+    AdminTotpRepository,
     AuthenticationChallengeRepository,
     SessionRepository,
     UserRepository,
@@ -32,6 +34,7 @@ from app.domain.passports import Campaign, CityCode, PassportProgress
 from app.domain.teams import TeamMembership
 from app.domain.users import AccountStatus, User, UserRole, VerificationStatus
 from app.domain.venues import Venue
+from app.infrastructure.crypto import SecretCipher
 from app.infrastructure.postgres.models import (
     AchievementModel,
     AuthenticationChallengeModel,
@@ -895,6 +898,63 @@ class PostgreSQLSessionRepository(SessionRepository):
                         SessionModel.revoked_at.is_(None),
                     )
                     .values(revoked_at=now)
+                )
+
+
+class PostgreSQLAdminTotpRepository(AdminTotpRepository):
+    """Implements ``AdminTotpRepository``: encrypts on write, decrypts on
+    read, so the application layer only ever sees plaintext secrets."""
+
+    def __init__(
+        self, factory: async_sessionmaker[AsyncSession], cipher: SecretCipher
+    ) -> None:
+        self._factory = factory
+        self._cipher = cipher
+
+    async def get(self, user_id: UUID) -> AdminTotpRecord | None:
+        async with self._factory() as session:
+            row = await session.execute(
+                select(
+                    UserModel.totp_secret_encrypted, UserModel.totp_confirmed_at
+                ).where(UserModel.id == user_id)
+            )
+            result = row.one_or_none()
+        if result is None or result.totp_secret_encrypted is None:
+            return None
+        return AdminTotpRecord(
+            secret=self._cipher.decrypt(result.totp_secret_encrypted),
+            confirmed_at=result.totp_confirmed_at,
+        )
+
+    async def save_pending(self, user_id: UUID, secret: str, now: datetime) -> None:
+        async with self._factory() as session:
+            async with session.begin():
+                await session.execute(
+                    update(UserModel)
+                    .where(UserModel.id == user_id)
+                    .values(
+                        totp_secret_encrypted=self._cipher.encrypt(secret),
+                        totp_confirmed_at=None,
+                        updated_at=now,
+                    )
+                )
+
+    async def confirm(self, user_id: UUID, now: datetime) -> None:
+        async with self._factory() as session:
+            async with session.begin():
+                await session.execute(
+                    update(UserModel)
+                    .where(UserModel.id == user_id)
+                    .values(totp_confirmed_at=now, updated_at=now)
+                )
+
+    async def clear(self, user_id: UUID) -> None:
+        async with self._factory() as session:
+            async with session.begin():
+                await session.execute(
+                    update(UserModel)
+                    .where(UserModel.id == user_id)
+                    .values(totp_secret_encrypted=None, totp_confirmed_at=None)
                 )
 
 

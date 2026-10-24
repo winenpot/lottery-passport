@@ -15,7 +15,7 @@ postgres|running|healthy|Up 2 hours (healthy)
 /health 200 {"status":"ok"}
 /ready 200 {"status":"ok"}
 @@alembic
-0021_mini_game_challenges
+0022_admin_totp
 @@terms
 2026-10-20|3
 @@sshboot

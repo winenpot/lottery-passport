@@ -78,8 +78,26 @@ class UserModel(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
+    # Admin second factor (docs/launch-reports/2026-10-23-handoff.md decision
+    # 8; docs/SECURITY.md T13). NULL until an admin starts enrolling; set but
+    # unconfirmed while they are mid-setup; `totp_confirmed_at` only moves
+    # from NULL once they have proven they can generate a real code, so a
+    # mistyped secret can never lock an admin out. Encrypted at rest
+    # (app/infrastructure/crypto.py) -- unlike an OTP code hash, this secret
+    # is long-lived, so a database dump alone must not be enough to forge
+    # codes forever.
+    totp_secret_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    totp_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
-    __table_args__ = (Index("ix_users_identifier", "identifier"),)
+    __table_args__ = (
+        Index("ix_users_identifier", "identifier"),
+        CheckConstraint(
+            "totp_confirmed_at IS NULL OR totp_secret_encrypted IS NOT NULL",
+            name="ck_users_totp_confirmed_requires_secret",
+        ),
+    )
 
 
 class VenueModel(Base):

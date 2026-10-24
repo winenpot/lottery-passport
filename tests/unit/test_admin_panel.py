@@ -21,11 +21,14 @@ ADMIN_ID = uuid4()
 
 
 class FakeAdminAuth:
-    """Stands in for AuthenticationService's three admin methods."""
+    """Stands in for AuthenticationService's admin-facing methods."""
 
     def __init__(self) -> None:
         self.admin_active = True
         self.requested: list[str] = []
+        self.totp_enrolled = False
+        self.totp_code: str | None = None
+        self.totp_verified: list[UUID] = []
 
     async def request_admin_challenge(self, identifier: str) -> RequestChallengeResult:
         self.requested.append(identifier)
@@ -38,6 +41,14 @@ class FakeAdminAuth:
 
     async def get_active_admin(self, user_id: UUID) -> User | None:
         return _admin() if self.admin_active and user_id == ADMIN_ID else None
+
+    async def has_confirmed_admin_totp(self, user_id: UUID) -> bool:
+        return self.totp_enrolled and user_id == ADMIN_ID
+
+    async def verify_admin_totp(self, user_id: UUID, code: str) -> None:
+        if not self.totp_enrolled or code != self.totp_code:
+            raise AuthenticationError("invalid authentication challenge")
+        self.totp_verified.append(user_id)
 
 
 def _admin() -> User:
@@ -175,3 +186,79 @@ def test_player_api_writes_still_need_the_csrf_header() -> None:
 
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "CSRF_REJECTED"
+
+
+def test_an_admin_without_totp_signs_in_after_the_sms_code_alone() -> None:
+    client, fake = panel()
+
+    sign_in(client)
+
+    assert client.get("/admin/").status_code == 200
+    assert fake.totp_verified == []
+
+
+def test_an_enrolled_admin_is_asked_for_a_totp_code_next() -> None:
+    client, fake = panel()
+    fake.totp_enrolled = True
+    fake.totp_code = "654321"
+    client.post("/admin/login", data={"action": "send", "phone": "09121112233"})
+
+    response = client.post("/admin/login", data={"action": "verify", "code": "123456"})
+
+    assert response.status_code == 303
+    assert "step=totp" in response.headers["location"]
+    # Not signed in yet: no admin cookie finalized, the panel still redirects.
+    assert client.get("/admin/").status_code in {302, 303, 307}
+
+
+def test_the_right_totp_code_finishes_sign_in() -> None:
+    client, fake = panel()
+    fake.totp_enrolled = True
+    fake.totp_code = "654321"
+    client.post("/admin/login", data={"action": "send", "phone": "09121112233"})
+    client.post("/admin/login", data={"action": "verify", "code": "123456"})
+
+    response = client.post(
+        "/admin/login", data={"action": "verify_totp", "code": "654321"}
+    )
+
+    assert response.status_code == 302
+    assert client.get("/admin/").status_code == 200
+    assert fake.totp_verified == [ADMIN_ID]
+
+
+def test_a_wrong_totp_code_stays_on_the_totp_step() -> None:
+    client, fake = panel()
+    fake.totp_enrolled = True
+    fake.totp_code = "654321"
+    client.post("/admin/login", data={"action": "send", "phone": "09121112233"})
+    client.post("/admin/login", data={"action": "verify", "code": "123456"})
+
+    response = client.post(
+        "/admin/login", data={"action": "verify_totp", "code": "000000"}
+    )
+
+    assert response.status_code == 303
+    assert "step=totp" in response.headers["location"]
+    assert "m=totp_bad" in response.headers["location"]
+
+
+def test_repeated_wrong_totp_codes_lock_the_sign_in_attempt() -> None:
+    client, fake = panel()
+    fake.totp_enrolled = True
+    fake.totp_code = "654321"
+    client.post("/admin/login", data={"action": "send", "phone": "09121112233"})
+    client.post("/admin/login", data={"action": "verify", "code": "123456"})
+
+    for _ in range(5):
+        response = client.post(
+            "/admin/login", data={"action": "verify_totp", "code": "000000"}
+        )
+
+    assert "m=totp_locked" in response.headers["location"]
+    # The attempt restarted from scratch: no pending phone/TOTP state left.
+    final = client.post(
+        "/admin/login", data={"action": "verify_totp", "code": "654321"}
+    )
+    assert final.status_code == 303
+    assert "step=totp" not in final.headers["location"]
