@@ -9,6 +9,7 @@ from app.application.challenges import (
     ChallengeClaimResult,
     ChallengeProgress,
 )
+from app.application.leaderboards import Leaderboard, LeaderboardEntry, LeaderboardSelf
 from app.application.me import UserStats
 from app.application.mini_games import MiniGameFinishResult, RunStarted
 from app.application.redemption_codes import RedemptionResult
@@ -618,4 +619,73 @@ class ReferralStatusResponse(BaseModel):
             qualified_count=status.qualified_count,
             pending_count=status.pending_count,
             coins_earned=status.coins_earned,
+        )
+
+
+class LeaderboardEntryResponse(BaseModel):
+    rank: int
+    nickname: str | None
+    avatar_id: str | None
+    score: int = Field(
+        description=(
+            "Rounded to the nearest whole unit for display; the board's own "
+            "ordering already used the unrounded value."
+        )
+    )
+    is_me: bool
+
+    @classmethod
+    def from_domain(
+        cls, entry: LeaderboardEntry, *, current_user_id: UUID
+    ) -> "LeaderboardEntryResponse":
+        return cls(
+            rank=entry.rank,
+            nickname=entry.nickname,
+            avatar_id=entry.avatar_id,
+            score=round(entry.score),
+            is_me=entry.user_id == current_user_id,
+        )
+
+
+class LeaderboardSelfResponse(BaseModel):
+    rank: int | None = Field(
+        default=None, description="Null when the caller has no qualifying run yet."
+    )
+    score: int | None = None
+
+    @classmethod
+    def from_domain(cls, me: LeaderboardSelf) -> "LeaderboardSelfResponse":
+        return cls(
+            rank=me.rank, score=round(me.score) if me.score is not None else None
+        )
+
+
+class LeaderboardResponse(BaseModel):
+    mini_game_id: str
+    period: str
+    resets_at: datetime | None = Field(
+        default=None, description="Null for period=all, which never resets."
+    )
+    updated_at: datetime = Field(
+        description="When the (top 50) list below was last computed, cached up to 60s."
+    )
+    entries: list[LeaderboardEntryResponse]
+    me: LeaderboardSelfResponse
+
+    @classmethod
+    def from_domain(
+        cls, board: Leaderboard, *, current_user_id: UUID
+    ) -> "LeaderboardResponse":
+        return cls(
+            mini_game_id=board.mini_game_id.value,
+            period=board.period.value,
+            resets_at=board.resets_at,
+            updated_at=board.updated_at,
+            entries=[
+                LeaderboardEntryResponse.from_domain(
+                    entry, current_user_id=current_user_id
+                )
+                for entry in board.entries
+            ],
+            me=LeaderboardSelfResponse.from_domain(board.me),
         )

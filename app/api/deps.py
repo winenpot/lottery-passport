@@ -10,6 +10,7 @@ from app.application.app_config import AppConfigService
 from app.application.authentication import AuthenticationError, AuthenticationService
 from app.application.avatars import AvatarService
 from app.application.challenges import ChallengeService
+from app.application.leaderboards import LeaderboardService
 from app.application.legal import LegalDocumentService
 from app.application.me import MeService
 from app.application.mini_games import MiniGameService
@@ -107,6 +108,10 @@ def get_achievement_service(request: Request) -> AchievementService:
 
 def get_mini_game_service(request: Request) -> MiniGameService:
     return cast(MiniGameService, request.app.state.mini_game_service)
+
+
+def get_leaderboard_service(request: Request) -> LeaderboardService:
+    return cast(LeaderboardService, request.app.state.leaderboard_service)
 
 
 def get_me_service(request: Request) -> MeService:
