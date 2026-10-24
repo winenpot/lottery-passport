@@ -99,7 +99,11 @@ uv run python -m scripts.export_openapi     # refresh docs/openapi.json after ro
 ```
 
 Run the first four before every commit; CI fails on ruff errors. Commit messages
-need a gitmoji, a type and a description, e.g. `✨ feat(auth): add login`.
+need a gitmoji, a type and a description, e.g. `✨ feat(auth): add login` --
+enforced locally by `.githooks/commit-msg` (`git config core.hooksPath
+.githooks`, one-time per clone) and, since that can be skipped or never
+installed, by CI's `commit-lint` job on every PR title and commit subject
+(`.github/workflows/ci.yml`).
 
 ## Staging smoke test (before telling the frontend a change is live)
 

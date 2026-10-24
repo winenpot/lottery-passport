@@ -265,3 +265,10 @@ own claim history double as the signal.
   gate — F1 does not exist yet either, same ungated state as teams/challenges today.
   `GET /me/achievements` lists only unlocked achievements (no "locked, X/Y progress"
   view yet).
+
+## 2026-10-24 — commit-msg rule gets a CI backstop
+
+`.githooks/commit-msg` (since 2026-07-10) was never wired into CI, so it was
+skippable or just not installed. Added a `commit-lint` job to
+`.github/workflows/ci.yml` that runs that same script against the PR title
+and each commit subject; `image` now needs it, like `gitleaks`.
