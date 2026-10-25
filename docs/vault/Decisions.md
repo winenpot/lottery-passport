@@ -266,6 +266,43 @@ own claim history double as the signal.
   `GET /me/achievements` lists only unlocked achievements (no "locked, X/Y progress"
   view yet).
 
+## 2026-10-19 — DNS split confirmed live: apex/play → production, www/staging → atpg
+
+Per the 2026-10-18 CI/CD plan's decision (apex `torshx.com` routes to the monitored
+production server so the QR path is on hardware someone watches; `www`/`staging` stay on
+atpg), the owner set the Arvan DNS records and fixed two drift issues found while
+reviewing them: `@` was pointed at atpg (should be the production IP), and `www`'s value
+was a stray third IP matching neither server (repointed to atpg). `staging` was missing
+entirely and was added. Record of the day's corrected state in `app/core/config.py` terms
+(not server-config, but the thing that made it legible): `@`/`play` → the production
+server's IP, port 443; `www`/`staging` → atpg's IP, ports 8090/8098 respectively.
+
+Two real bugs found and fixed verifying it, not just DNS data entry:
+
+1. **Release `v2026.10.18-2` had been sitting in GitHub's `production` environment
+   approval queue since the prior session** (required reviewer: the owner) — approved via
+   `gh api .../pending_deployments` once the owner confirmed. This is the commit
+   (`326f150`) that makes production's nginx split `torshx.com` into "`/b`,`/q` → play,
+   everything else → www"; without it, apex and play would have resolved correctly in DNS
+   but served the wrong routing.
+2. **`play.torshx.com` failed through Arvan with "plain HTTP request sent to HTTPS
+   port"** even though the identical origin (same IP:port as the working apex) answered
+   fine when queried directly with the correct SNI. Diagnosis: Arvan's edge→origin
+   protocol is a per-subdomain "Origin Connection" setting, independent of the DNS A
+   record — `play` and `torshx.com` can point at the same origin and still negotiate
+   different protocols with it. Root cause isolated by testing origin-direct first
+   (`curl --resolve ... -k https://play.torshx.com/health` from the production box
+   itself, bypassing Arvan) before touching anything in the CDN panel — confirmed the
+   origin was fine, so the bug had to be the edge↔origin leg. Fix is pending in Arvan's
+   panel (owner to open Origin Connection for `play` and set protocol to HTTPS,
+   matching the apex's working config); the acme.sh origin-cert item from the CI/CD plan
+   is still open, so origin TLS stays self-signed/unverified by Arvan for now.
+
+Update 2026-10-25: the Origin Connection fix is done (play.torshx.com is served
+through Arvan over HTTPS). Still open: a renewable origin certificate (acme.sh with the
+Arvan DNS token); the current one expires 17 Nov, see `docs/TODO.md`. The server IPs
+live in the `torshx`/`atpg` ssh aliases, not in this public repo.
+
 ## 2026-10-24 — commit-msg rule gets a CI backstop
 
 `.githooks/commit-msg` (since 2026-07-10) was never wired into CI, so it was
