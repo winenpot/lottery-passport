@@ -30,19 +30,25 @@ Target: 40,000 registered users, 10,000 active at a spike.
 
 ### [ ] Step 1 — Server inventory (fill in after running the commands)
 
-Date measured: ___
+Date measured: 2026-10-18 (DB server, read-only; app server column still open)
 
 | | App server | DB server |
 |---|---|---|
-| Hostname / provider | | |
-| vCPU / model | | |
-| RAM | | |
-| Disk type / size / free | | |
-| Hypervisor (VM or bare metal) | | |
-| Other projects sharing it | | |
-| Private link + latency (ping -c 20) | | |
+| Hostname / provider | | own VMware VM (Ubuntu 24.04 desktop install) |
+| vCPU / model | | 8 × Xeon E5-2680 v4 (2016) |
+| RAM | | 15.6 GiB, 4 GiB swap file on the fast disk |
+| Disk type / size / free | | sda 100 GB, 69 GB free, write await 0.5 ms; sdb 500 GB `/storage`, 373 GB free, daily avg await 119–180 ms (max 455 ms), holds Mongo + Postgres data |
+| Hypervisor (VM or bare metal) | | VMware |
+| Other projects sharing it | | MongoDB 8.2 for ~10 Flask apps (22 DBs, ~93 GB, 70 GB of it GridFS photos), empty Postgres 17, Portainer |
+| Private link + latency (ping -c 20) | | none; same public segment as atpg, 0.34 ms |
 
-Verdict: ___
+Verdict: CPU and RAM idle (CPU peak 10 %, ≥ 9.1 GB available every day,
+no OOM kills). The bottleneck is sdb latency: Mongo's slow-op log over ~6 days
+holds 20,418 ops > 100 ms, led by GridFS photo chunk INSERTS (9,227, median
+160 ms) and log inserts (7,427, median 185 ms). Every write waits for a journal
+fsync on sdb (default write concern `majority` on a replica set). Memory limits
+or restarts cannot fix it; moving sdb to a faster datastore can. Detail and plan:
+`.hermes/plans/2026-10-18_1450-db-server-audit.md` (gitignored).
 
 ### [ ] Step 2 — Disk benchmarks (fio, off-hours)
 
@@ -319,7 +325,48 @@ Findings:
 - torshx disk (`pg_test_fsync` in the postgres container, L0'): fdatasync 4,695 ops/s,
   213 us per 8 kB sync, SSD-class, no action.
 
-## Placeholders (fill in as investigations happen)
+## Launch week, Tue 20 Oct 2026
+
+### Frontend auto-deploy: main never carries the real artifact (ADR-0012 investigation)
+
+- Confirms the 19 Oct release note above (`tree identical to merge commit`, "build
+  reuse") with the actual mechanism: a main-push run of Arman's "Frontend CI" produces
+  only `release-plan.json` (his own schema: `risk`, `scopes`, `reasons`,
+  `source.commit`/`source.tree`, `baseCommit`, `changedPaths`), not `frontend-normal`.
+  Checked 4 consecutive main pushes (01c4a916, 419e728, 45a80f4, 640555e): zero carried
+  the bundle. It flags nearly any real change `risk: critical` / `"...: fail closed"`
+  (e.g. `AGENTS.md`, `vite.config.ts`, `src/v2/api.ts`). The buildable artifact exists
+  only on the originating PR's own `pull_request`-event run.
+- Blocks turning on `lp-frontend-deploy.timer` (staging-only CD, ADR-0012): the agent
+  is written and dry-run tested against the real API (correctly finds the newest run,
+  fails safe when nothing to deploy), but doesn't yet know how to resolve a main commit
+  to the PR run that built it. Asked Arman what `release-plan.json`'s contract is
+  (`.hermes/plans/2026-10-20_messages.md`, 11:05 delta).
+- → fed into: ADR-0012 "Open question".
+- → answered later by Arman's `resolved-build` receipt (his
+  `docs/RESOLVED-BUILD-CONTRACT.md`), which names the accepted artifact of each green
+  main run; the 25 Oct check of production's `5d4bd5c` used it.
+
+### L4: staging test codes for Arman (3 flavors x 8) + smoke batch (5)
+
+- First attempt lost all plaintext: `compose.sh run --rm api ...` (no volume) writes the
+  CSV into the throwaway container's own filesystem, gone the instant `--rm` removes it.
+  The DB rows (hashes only) survived, so those 4 batches became permanently unredeemable
+  by anyone — voided (no leak: HMAC only, nothing plaintext ever left).
+- `docs/OPERATIONS.md`'s documented command (`--user 0 -v $PWD/var:/out`) is the one that
+  actually works: the api image runs as uid 999, and `/root` itself isn't traversable by
+  it, so `/root/batches` fails on permission even with the bind-mounted subdir owned
+  correctly — the parent directory, not the mount point, was the blocker.
+- End-to-end verified on the origin (disposable 0969 account, real `/api/v1/redemptions`
+  call, not just `check_code`): redeeming one smoke-batch code → `200 coins_awarded=100
+  bonus_awarded=50 replayed=false`; redeeming the same code again on the same account →
+  `200 replayed=true coins_awarded=100` (no second entry). Matches exactly what was
+  described to Arman this morning.
+- Live batches: `fcd7f40c` (PR, 5, smoke), `a2c820ae` (PR, 8), `8822caf6` (TO, 8, one
+  code spent by this verification), `8ce6972f` (MO, 8). CSVs on atpg:
+  `/home/data/lottery-passport/var/{smoke,arman-paris,arman-tokyo,arman-moscow}-20261020.csv`.
+
+
 
 ### [ ] SMS gateway selection and pricing
 
