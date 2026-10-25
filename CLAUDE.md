@@ -75,3 +75,25 @@ changing behavior; update them (and any diagram) in the same commit.
   `docs/frontend/code-test-vectors.json` together.
 - Use Alembic for every schema change. Never migrate automatically on app
   startup.
+
+## Two machines
+
+This project is worked on from two machines (office and laptop), each with its
+own Hermes memory, skills and `.hermes/plans/` (git-ignored, so they never
+travel). The repository is the only shared state.
+
+- Start with `git fetch` and `git status -sb`; finish by pushing (or opening a
+  PR for) every commit. An unpushed commit is invisible to the other machine
+  (W10 sat unpushed from 21 to 25 Oct while the laptop built on top of it).
+- Whatever the other machine must know goes into the repo: decisions in `docs/`,
+  the handoff in `docs/launch-reports/<date>-*.md` (public: no secrets, IPs or
+  phone numbers).
+- One alembic head: if origin gained a migration on the same parent as an
+  unpushed one, renumber yours on top of it before pushing.
+- Staging runs master; production runs approved `v*` tags only. Never move a
+  server's `<base>/repo` checkout by hand, and never publish a frontend build to
+  production that staging has not served first.
+- Once per clone: `git config core.hooksPath .githooks` (gitmoji commit
+  messages) and a `git config user.email` linked to the GitHub account.
+- `CHANGELOG.md`, `docs/TODO.md` and `docs/ARCHITECTURE.md` change in the same
+  PR as the behavior they describe, whichever machine wrote it.
