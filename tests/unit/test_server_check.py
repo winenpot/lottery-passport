@@ -1,6 +1,11 @@
-from scripts.server_check import Report, analyse, split_sections
+from scripts.server_check import Report, analyse, local_alembic_head, split_sections
 
-HEALTHY = """\
+# The server's alembic revision is compared with the repo's own head, so the
+# healthy fixture uses that head instead of a literal: a literal broke this
+# test on every new migration (0023_media_assets was the first to hit it).
+HEAD_REVISION = local_alembic_head()
+
+HEALTHY = f"""\
 @@host
 hostname=play-vm
 @@env
@@ -12,10 +17,10 @@ api|running|healthy|Up 2 hours (healthy)
 nginx|running||Up 2 hours
 postgres|running|healthy|Up 2 hours (healthy)
 @@health
-/health 200 {"status":"ok"}
-/ready 200 {"status":"ok"}
+/health 200 {{"status":"ok"}}
+/ready 200 {{"status":"ok"}}
 @@alembic
-0022_admin_totp
+{HEAD_REVISION}
 @@terms
 2026-10-20|3
 @@sshboot
@@ -63,6 +68,13 @@ def test_terms_version_without_a_document_row_fails() -> None:
 def test_test_otp_numbers_in_production_fail() -> None:
     output = HEALTHY.replace("OTP_TEST_NUMBERS=false", "OTP_TEST_NUMBERS=true")
     assert "env" in levels(output)["FAIL"]
+
+
+def test_a_server_behind_the_repo_head_warns() -> None:
+    # The normal state between a merged migration and its release.
+    behind = "@@alembic\n0001_initial\n"
+    output = HEALTHY.replace(f"@@alembic\n{HEAD_REVISION}\n", behind)
+    assert "alembic" in levels(output)["WARN"]
 
 
 def test_a_cut_short_run_warns() -> None:
