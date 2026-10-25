@@ -11,8 +11,10 @@ Usage::
 This is the superuser bootstrap: there is no "first admin" API route (a
 player can never promote themselves), so the very first admin, and every
 later one, is made the same way -- direct database access, same as
-scripts/code_batches.py. ``identifier`` is whatever the user signed up with
-(today: an email; once phone OTP ships, an E.164 phone number).
+scripts/code_batches.py. ``identifier`` is the account's phone number, typed
+any usual way (``0912 345 6789``, ``+98912...``): it is matched in the stored
+``+989XXXXXXXXX`` form. Anything that is not an Iranian mobile number is
+matched exactly as typed.
 
 The user must already exist (sign up first, then promote); this script does
 not create accounts. ``reset-totp`` is the same kind of CLI-only action, for
@@ -28,9 +30,20 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import get_settings
+from app.domain.phone import PhoneNumberError, normalize_iranian_mobile
 from app.domain.users import UserRole
 from app.infrastructure.postgres.database import PostgreSQLAdapter
 from app.infrastructure.postgres.models import UserModel
+
+
+def resolve_identifier(raw: str) -> str:
+    """The stored form of ``raw``: accounts are saved as ``+989XXXXXXXXX``,
+    so a number typed as ``0912...`` would otherwise match nobody and the
+    operator would read 'no user' during a lost-phone reset."""
+    try:
+        return normalize_iranian_mobile(raw)
+    except PhoneNumberError:
+        return raw.strip()
 
 
 async def list_admins(factory: async_sessionmaker[AsyncSession]) -> list[str]:
@@ -81,6 +94,7 @@ async def reset_totp(
 
 
 async def main_async(arguments: argparse.Namespace) -> int:
+    identifier = resolve_identifier(getattr(arguments, "identifier", ""))
     database = PostgreSQLAdapter(get_settings())
     try:
         if arguments.command == "list":
@@ -92,31 +106,30 @@ async def main_async(arguments: argparse.Namespace) -> int:
                 print(line)
             return 0
         if arguments.command == "reset-totp":
-            cleared = await reset_totp(database.session_factory, arguments.identifier)
+            cleared = await reset_totp(database.session_factory, identifier)
             if not cleared:
                 print(
-                    f"no user with identifier {arguments.identifier!r}",
+                    f"no user with identifier {identifier!r}",
                     file=sys.stderr,
                 )
                 return 1
             print(
-                f"{arguments.identifier}'s TOTP secret was cleared; "
+                f"{identifier}'s TOTP secret was cleared; "
                 "they can enroll again from /admin/security/totp",
                 file=sys.stderr,
             )
             return 0
         role = UserRole.ADMIN if arguments.command == "promote" else UserRole.PLAYER
-        changed = await set_role(database.session_factory, arguments.identifier, role)
+        changed = await set_role(database.session_factory, identifier, role)
     finally:
         await database.dispose()
     if not changed:
         print(
-            f"no user with identifier {arguments.identifier!r}; they must sign up "
-            "first",
+            f"no user with identifier {identifier!r}; they must sign up first",
             file=sys.stderr,
         )
         return 1
-    print(f"{arguments.identifier} is now {role.value}", file=sys.stderr)
+    print(f"{identifier} is now {role.value}", file=sys.stderr)
     return 0
 
 
