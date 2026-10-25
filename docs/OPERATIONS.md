@@ -312,12 +312,19 @@ Sign up normally (so the account exists), then promote it directly on the databa
 <base>/repo/deploy/compose.sh run --rm api python -m scripts.admins promote <identifier>
 <base>/repo/deploy/compose.sh run --rm api python -m scripts.admins list
 <base>/repo/deploy/compose.sh run --rm api python -m scripts.admins demote <identifier>
+<base>/repo/deploy/compose.sh run --rm api python -m scripts.admins reset-totp <identifier>
 ```
 
-`<identifier>` is whatever the account signed up with (an E.164 phone number, e.g.
-`+989123456789`). The admin then signs in at `/admin` with that number (SMS code;
-on staging a 0969 test number shows the code on the page). `app/api/deps.require_admin`
-guards admin-only API routes.
+`<identifier>` is the account's phone number, typed any usual way (`0912…`, `+98912…`);
+it is matched in the stored `+989…` form. The admin then signs in at `/admin` with that
+number (SMS code; on staging a 0969 test number shows the code on the page).
+`app/api/deps.require_admin` guards admin-only API routes.
+
+Two-factor (TOTP, ADR-0013): each admin turns it on at **/admin → Two-factor (TOTP)**
+(`/admin/security/totp`). There is no QR code: in the authenticator app choose "Enter a
+setup key", paste the key, type "Time based", then confirm with the 6-digit code. From the
+next sign-in on, the SMS code is followed by the app's code (5 wrong codes restart the
+sign-in). Lost phone: `reset-totp` above clears it, and the admin sets it up again.
 
 ## Terms and privacy text
 

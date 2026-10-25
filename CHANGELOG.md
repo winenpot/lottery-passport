@@ -140,6 +140,11 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ### Fixed
 
+- `scripts.admins` (25 Oct) matches a phone number typed as `0912…` (or any usual form)
+  against the stored `+989…` identifier; before, `promote`/`demote`/`reset-totp` answered
+  "no user" unless the operator typed the `+98` form, a trap during a lost-phone reset.
+  The TOTP setup page no longer says "Scan this" (there is no QR code) and shows the
+  server command for a reset.
 - nginx (25 Oct): only `/admin/login` POSTs count against an OTP-sized zone
   (`admin_login`, 6/min per IP); the rest of `/admin` gets the API's limits. PR #9 had put
   the player OTP zones on the whole panel, which refused its own CSS/JS (production log:

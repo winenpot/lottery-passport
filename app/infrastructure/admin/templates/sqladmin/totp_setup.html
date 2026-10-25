@@ -11,12 +11,12 @@
       <p>Two-factor sign-in is already required for your account.</p>
       <p class="text-secondary">
         Lost your phone? Ask someone with server access to run
-        <code>uv run python -m scripts.admins reset-totp &lt;your phone number&gt;</code>,
-        then set it up again here.
+        <code>deploy/compose.sh run --rm api python -m scripts.admins reset-totp &lt;your phone number&gt;</code>
+        (docs/OPERATIONS.md, "Staff accounts"), then set it up again here.
       </p>
       {% else %}
-      <p>Scan this with Google Authenticator (or any TOTP app), or enter the key manually
-        ("Enter a setup key"), account name "TorshX admin":</p>
+      <p>In Google Authenticator (or any TOTP app) choose "Enter a setup key": account
+        name "TorshX admin", the key below, type "Time based". There is no QR code to scan.</p>
       <p><code style="font-size: 1.1em; letter-spacing: 0.05em;">{{ secret }}</code></p>
       <form method="POST" action="{{ url_for('admin:view-admin-totp-setup') }}"
         onsubmit="this.querySelector('[type=submit]').disabled = true;">
