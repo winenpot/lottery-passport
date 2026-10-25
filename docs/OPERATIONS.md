@@ -158,7 +158,10 @@ Arvan, API docs on; `nginx-production.conf`: TLS, docs 404, unknown hosts droppe
    (`<base>/site/lounge_ips.conf`) get 300/s and 120/min because a whole lounge shares one
    public IP. Over the limit: `429` with the standard JSON error.
 5. **Privacy and admin**: `/b/<code>` is logged as `/b/[redacted]` and `/q/...` as
-   `/q/[redacted]`; `/admin` only from IPs in `<base>/site/admin_allow.conf`.
+   `/q/[redacted]`; `/admin` answers the IPs in `<base>/site/admin_allow.conf` (`allow all;`
+   on both hosts since 24 Oct, ADR-0013). Its sign-in POSTs (`/admin/login`) count against
+   their own 6/min per-IP zone (`admin_login`); the rest of the panel, `/admin/statics`
+   included, gets the API's limits.
 
 Config changes ship like code: commit, CI, and `deploy.sh` runs `nginx -t` before reloading
 (an invalid config fails the deploy and is never loaded).
@@ -190,6 +193,10 @@ Config changes ship like code: commit, CI, and `deploy.sh` runs `nginx -t` befor
 about two minutes. `GET https://staging.torshx.com/health` shows `commit`.
 
 **Production**: release tags are `vYYYY.MM.DD-N` on a commit that staging already runs.
+Never move a server's checkout by hand (`git checkout` or `git pull` in `<base>/repo`):
+`deploy.sh` checks out the released commit, and a hand move ships `deploy/` changes (nginx,
+compose) that no release approved. On 24 Oct production's checkout was moved to an
+untagged master commit to ship an nginx change; the next release puts it back on a tag.
 
 ```bash
 git tag v2026.10.20-1 <commit> && git push origin v2026.10.20-1
@@ -260,12 +267,13 @@ The script refuses a non-`api` build or an existing release id, copies only `ind
 strictly needed: Compose mounts the parent directory `<base>/web`, so nginx resolves
 `current` on every request. Check afterwards: `index.html` sha256 equals the artifact's, an
 unknown `/assets/x.js` answers 404 (not HTML), `/scan` answers the app, `/health` is the API.
-Releases in use: staging `29ad3f0-20261022` and production `29ad3f0-20261022`
-(22 Oct 11:38 UTC: Arman's PR #17 merge commit `29ad3f0`, "Add game result
-actions and exact Home challenge navigation", artifact 12421845936, 457/457
-files digest-verified against `metadata.json`; previous was staging
-`4e8f3fe-20261020` / production `f780f84-20261022`, PR15). There is no
-automatic frontend CD yet on atpg (production never has one, by design).
+Releases in use (checked 25 Oct): production `5d4bd5c-20261025` (Arman's PR #25, tested
+commit `962b702`, artifact 12573057751: `index.html` and all 49 JS/CSS files equal the
+artifact, and every `/api/v1` path the bundle calls exists on the production API); staging
+still `29ad3f0-20261022` (PR #17). Production went `29ad3f0` -> `313f05b` -> `6d853f1`
+(24 Oct) -> `5d4bd5c` (25 Oct) with none of them on staging first. The order is staging,
+smoke, then production. There is no automatic frontend CD yet on atpg (production never
+has one, by design).
 
 ## Code batches in production
 
@@ -585,7 +593,7 @@ redeem, or data integrity is in doubt; **SEV2** = degraded; **SEV3** = cosmetic.
 - [ ] Load test done at 5x expected peak ([TESTING.md](TESTING.md#load-test))
 - [ ] SMS: both providers tested from production on Android and iPhone; credit for at least 2 weeks
 - [ ] Batches for launch generated, printed, QC-checked; still `generated` (not active)
-- [ ] Lounge IPs in `<base>/site/lounge_ips.conf`; admin IPs in `<base>/site/admin_allow.conf`
+- [ ] Lounge IPs in `<base>/site/lounge_ips.conf`; admin IPs in `<base>/site/admin_allow.conf` (or `allow all;` once every admin has TOTP)
 - [ ] Alerts tested end to end (each one reached a phone)
 - [ ] Mehdi and lounge staff trained; support channel staffed
 - [ ] Rollback plan: previous tag noted here: `________`

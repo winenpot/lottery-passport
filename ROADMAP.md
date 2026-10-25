@@ -64,6 +64,15 @@ Launch on D15 requires every one of these to be true:
 activate at 23:59 that night. The D13-D15 rows here and below are the original plan, kept
 for history; the backlog status is in [docs/TODO.md](docs/TODO.md).
 
+**Status 2026-10-25 (D19):** live since Thu 23 Oct by the owner's decision; production runs
+`v2026.10.24-1`. Against the six launch conditions above: (1) not yet proven on real phones
+(no device walk on the current frontend build); (2) ✅ Mehdi's sheet codes are active, the
+bottle print run is generated but not yet with the printer; (3) ✅ a restore was drilled on
+21 Oct, but the backups still sit on the same VM; (4) ❌ alerts are not installed; (5) ✅ the
+draw is postponed; (6) ❌ submissions and tournaments are not built. We are in Phase 2's
+window (D16 to about D30). Open items, owners and order:
+[docs/launch-reports/2026-10-25-office-reply.md](docs/launch-reports/2026-10-25-office-reply.md).
+
 Assumptions (change the plan if any is wrong):
 
 - Saturday to Wednesday working week, Thursday half day, Friday off. That gives **11 full and 2 half working days**, not 15.

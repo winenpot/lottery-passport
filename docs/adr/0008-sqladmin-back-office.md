@@ -89,3 +89,12 @@ and audit log are the point, not the forms.
    [ ] Submission/approval actions remain (B18, once social submissions exist).
    nginx IP allow-list is still open (infra, not code).
 4. [ ] Train Mehdi and lounge staff (B30).
+
+## Update 2026-10-25
+
+The nginx IP allow-list became `allow all;` on both hosts on 24 Oct (owner's decision,
+ADR-0013), so the panel answers every IP. The trade-off above ("SMS is a weaker second
+factor ... the allow-list carries the weight") therefore rests on TOTP now, and TOTP
+protects only the admins who enrolled: 0 of 3 on production on 25 Oct. Until every admin
+has enrolled, or enrollment is enforced (ADR-0013 option B), keep an allow-list. This
+supersedes item 3's "nginx IP allow-list is still open".

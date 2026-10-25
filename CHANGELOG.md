@@ -7,8 +7,25 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ### Added
 
+- Mini-game leaderboard (L1, B49, PR #7): `GET /api/v1/leaderboards/mini-games/{mini_game_id}?period=today|week|all`,
+  Tap Reflex first. A board registry in `app/domain/leaderboards.py`, one ranking query
+  with the first-to-set tie-break, a 60 s cache for the top 50. No migration;
+  `features.leaderboard` stays off until the frontend screen exists.
+- Admin TOTP second factor (B50, ADR-0013, PR #8, migration `0022_admin_totp`): opt-in
+  per admin at `/admin/security/totp`, the secret Fernet-encrypted at rest
+  (`ADMIN_TOTP_ENCRYPTION_KEY`; new production dependency `cryptography`), CLI-only reset
+  `scripts.admins reset-totp`.
+- Structured log events (B51, PR #5): `code_redeemed` (after the commit),
+  `redemption_rejected`, mini-game run and coin-adjustment events.
+- CI: gitleaks on every push and PR (PR #2) and a `commit-lint` job that runs
+  `.githooks/commit-msg` on PR titles and commit subjects (PR #6); the image and the
+  staging deploy wait for both.
+- Operations scripts (22-23 Oct): `scripts/server_check.py` (read-only health report of a
+  server over SSH), `scripts/backup_pull.py` (pg_dump over SSH to another machine,
+  restore-verified), `scripts/reset_test_users.py` (retired for production on 23 Oct),
+  `deploy/alert_check.sh` (SMS alerts; not installed yet), a fail2ban jail for sshd.
 - `GET /media/{sha256}.{ext}` + admin "Images" page (B45/W10): content-addressed
-  image upload (`media_assets` table, sha256 key, PNG/JPEG/WebP only by magic bytes,
+  image upload (`media_assets` table, migration 0023, sha256 key, PNG/JPEG/WebP only by magic bytes,
   max 512 KB, SVG refused), immutable caching. No file field on the Avatar form itself
   (scope cut, documented) -- upload on the Images page, paste the URL into `image_url`.
 - Weighted print runs (PC, decision 2026-10-21): `scripts/print_run.py` issues
@@ -91,6 +108,14 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ### Changed
 
+- `/admin` answers every IP (24 Oct, owner's decision, PR #9): `site/admin_allow.conf` is
+  `allow all;` on both hosts; the gate is identity (an SMS code only active admins
+  receive, TOTP once enrolled).
+- `alembic -x db_url=...` is honoured, and the target host is printed before migrating
+  (PR #3).
+- `docker-compose.yml` publishes the development Postgres on port 5432 (PR #4).
+- W10's migration is `0023_media_assets`: written as 0022 on 21 Oct and never pushed, it was
+  renumbered on 25 Oct to follow `0022_admin_totp` (one alembic head again).
 - Deploys (ADR 0011): CI builds one image per master commit and pushes it to GHCR; staging
   (atpg, `staging.torshx.com`) deploys it automatically through a pull-based agent
   (`deploy/deploy.sh` + `lp-deploy.timer`) with migrations, `/ready` gate and automatic
@@ -115,6 +140,14 @@ releases are git tags `vYYYY.MM.DD-N` ([docs/OPERATIONS.md](docs/OPERATIONS.md#d
 
 ### Fixed
 
+- nginx (25 Oct): only `/admin/login` POSTs count against an OTP-sized zone
+  (`admin_login`, 6/min per IP); the rest of `/admin` gets the API's limits. PR #9 had put
+  the player OTP zones on the whole panel, which refused its own CSS/JS (production log:
+  18 of 21 static requests answered 429) and spent the player OTP budget of the admin's IP.
+- nginx (25 Oct): the `/media` location regex is quoted; unquoted, its `{64}` failed
+  `nginx -t`, so the deploy would have refused W10.
+- `tests/unit/test_server_check.py` compares against the repo's alembic head instead of a
+  hard-coded revision, which broke on every new migration.
 - Admin panel: no catalogue row could be created from /admin. SQLAdmin leaves primary-key
   columns out of forms unless a view sets `form_include_pk`, so the avatar, challenge,
   achievement and reward-rule create forms had no `id`/`key` field; and their NOT NULL

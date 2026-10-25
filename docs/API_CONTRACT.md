@@ -15,7 +15,14 @@ Parked features (not in the MVP contract): the city passport. See
 ## Changelog
 
 Newest first. **Breaking** means a call that worked before needs a change on your side.
-Check `GET /health` → `commit` to see which backend commit is deployed on the demo.
+Check `GET /health` → `commit` to see which backend commit is deployed on staging and production.
+
+**2026-10-24 (L1: mini-game leaderboard)**
+
+- Added: `GET /api/v1/leaderboards/mini-games/{mini_game_id}?period=today|week|all` (in
+  `v2026.10.24-1`): each player's best Tap Reflex run in the period, the top 50 plus your
+  own `me` row; see [Mini-games](#mini-games). `features.leaderboard` stays `false` until
+  the frontend screen exists. Nothing existing changed.
 
 **2026-10-21 (W10: admin image upload)**
 
