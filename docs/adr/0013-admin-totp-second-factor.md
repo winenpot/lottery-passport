@@ -94,3 +94,17 @@ allow-list, 1-hour session, audit log, small admin count) because SMS alone is
 weaker than password + TOTP. This ADR adds the missing second factor without
 touching any of those controls, and without inventing new infrastructure beyond one
 small, auditable crypto wrapper.
+
+## Status update 2026-10-25
+
+Shipped 24 Oct (PR #8, release `v2026.10.24-1`). The same night `/admin` was opened to every
+IP (PR #9, `site/admin_allow.conf` = `allow all;`), which removed the compensating control
+the trade-off above keeps ("without touching any of those controls"). With opt-in
+enrollment, an admin who has not enrolled signs in with SMS alone, now from anywhere: 0 of
+3 production admins had enrolled on 25 Oct. Owner's choice: every admin enrolls now (no
+code), and the forced-setup redirect of option B follows as a small task; or the
+allow-list comes back until then.
+
+PR #9 also put the player OTP rate-limit zones on all of `/admin`, which refused the
+panel's own CSS/JS. Fixed 25 Oct: only `/admin/login` POSTs count (zone `admin_login`,
+6/min per IP).

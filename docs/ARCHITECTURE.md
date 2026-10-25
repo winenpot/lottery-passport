@@ -111,6 +111,8 @@ app/
     avatars.py         avatar catalogue entry                                 (done, P1)
     legal.py           terms/privacy document per version                     (done, LG1')
     media.py           image sniff/size-limit/naming (admin upload)           (done, B45/W10)
+    totp.py            RFC 6238 codes, standard library only (admin 2FA)      (done, ADR-0013)
+    leaderboards.py    board registry: metric, best = lowest/highest          (done, L1)
     teams.py           flavor team unlock/choose/lock rule                    (done, P1)
     users.py, authentication.py
     phones.py          Iranian mobile normalization                          (B10)
@@ -123,13 +125,15 @@ app/
     media.py           MediaService: GET /media/{sha256}.{ext}, admin upload (done, B45/W10)
     teams.py           TeamService: GET/POST /me/team                        (done, P1)
     me.py              composes /me's team + last_scanned_flavor             (done, P1)
-    authentication.py  phone OTP sign-in                                     (B10)
+    authentication.py  phone OTP sign-in; admin TOTP enroll/verify/reset      (B10; ADR-0013)
     jobs.py            enqueue/claim/complete jobs                           (B11)
     challenges.py      ChallengeService: GET/POST /challenges (5 kinds)      (done, C1 + W12)
     achievements.py    AchievementService: GET /achievements + /me/achievements (done, AC1 + W13)
-    submissions.py, leaderboards.py, tournaments.py                          (B18-B22)
+    leaderboards.py    LeaderboardService: GET /leaderboards/mini-games/{id}  (done, L1)
+    submissions.py, tournaments.py                                           (B18, B22)
   infrastructure/
     postgres/          models, read repositories, unit_of_work.py (writes)
+    crypto.py          Fernet for the admin TOTP secret at rest               (done, ADR-0013)
     sms/               provider adapters + console adapter for development   (B11)
   api/                 FastAPI routers, schemas, error envelope, dependencies
   admin/               SQLAdmin views, admin auth, audit hooks               (B20)
@@ -176,6 +180,7 @@ erDiagram
     venues ||--o{ tournaments : hosts
     tournaments ||--o{ tournament_results : has
     users ||--o{ tournament_results : places
+    users ||--o{ media_assets : uploads
 
     users {
         uuid id PK
@@ -186,6 +191,14 @@ erDiagram
         string referral_code UK "RF1, done: 8 Crockford Base32 chars, created on first read"
         string location_city "P1, done: real home city, not a flavor"
         string avatar_id FK "P1, done"
+        string totp_secret_encrypted "ADR-0013: Fernet; null = admin not enrolled"
+        timestamptz totp_confirmed_at "ADR-0013: set when the first code checks"
+    }
+    media_assets {
+        string sha256 PK "content address (B45)"
+        string content_type "png, jpeg or webp (CHECK)"
+        bytea bytes "at most 512 KB (CHECK)"
+        uuid created_by_user_id FK "uploading admin; SET NULL on delete"
     }
     code_batches {
         uuid id PK
